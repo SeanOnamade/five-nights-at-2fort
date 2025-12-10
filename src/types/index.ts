@@ -235,9 +235,9 @@ export const GAME_CONSTANTS = {
   // Demoman settings - NIGHT 2
   DEMOMAN_DORMANT_MIN: 20000,     // Min time head stays dormant (20 sec)
   DEMOMAN_DORMANT_MAX: 40000,     // Max time head stays dormant (40 sec)
-  DEMOMAN_CHARGE_SPEED: 600,      // Speed per node during charge (0.6 sec/node)
+  DEMOMAN_CHARGE_SPEED: 500,      // Speed per node during charge (0.5 sec/node)
   DEMOMAN_CHARGE_WARNING: 3000,   // Eye glow warning before charge (3 sec)
-  DEMOMAN_CHARGE_ATTACK_DELAY: 1500, // Time at door before attacking (1.5 sec to react)
+  DEMOMAN_CHARGE_ATTACK_DELAY: 1000, // Time at door before attacking (1 sec to react)
   DEMOMAN_HEAD_TELEPORT_DELAY: 3000, // Time before head teleports after deterred
   DEMOMAN_WATCH_DETER_TIME: 3000,   // (unused now - watching freezes dormant only)
   

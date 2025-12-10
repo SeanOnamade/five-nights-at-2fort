@@ -31,6 +31,9 @@ export class BootScene extends Phaser.Scene {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
     
+    // Reset selected night to 1 when returning to menu
+    this.selectedNight = 1;
+    
     // Clear loading text
     this.children.removeAll();
     

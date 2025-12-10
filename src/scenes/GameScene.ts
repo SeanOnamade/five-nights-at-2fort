@@ -66,6 +66,29 @@ export class GameScene extends Phaser.Scene {
   // Pause state
   private isPaused: boolean = false;
   private pauseMenu!: Phaser.GameObjects.Container;
+  private pauseHintText!: Phaser.GameObjects.Text;
+  
+  // Hints for pause menu
+  private readonly pauseHints: string[] = [
+    // User-provided hints
+    "Demoman can be stalled by watching his head!",
+    "Only Scout, Soldier, Demoman, and Sniper show up in the light. Heavy does not!",
+    "Scout is the fastest of the mercs.",
+    "Sniper moves at random!",
+    "Spy can disguise as any other enemy! When disguised, he will not sap your sentry!",
+    "Deterring Demoman's charge at the last second provides bonus metal! Test your luck!",
+    "Heavy's footsteps get louder the closer he is to the intel room!",
+    "Press Space twice to remove a Sapper!",
+    "Spy and Demoman's head will not attack you when teleported.",
+    "If you don't have the metal to defend yourself, unwrangle your Sentry before an enemy attacks to save yourself!",
+    // Additional hints
+    "The Wrangler lets you manually aim your sentry at either doorway.",
+    "Use cameras to track enemy positions across the map.",
+    "Lures can distract enemies, buying you precious time!",
+    "Metal regenerates over time - manage it wisely!",
+    "Sniper requires 2 shots to repel, regardless of sentry level.",
+    "When Heavy reaches the intel room, you have very little time to react!",
+  ];
   
   // Input state for hold-to-aim (using native DOM events for reliability)
   private keyADown: boolean = false;
@@ -1957,48 +1980,24 @@ export class GameScene extends Phaser.Scene {
     this.roomViewUI.add(tipText);
     
     // Escape warning overlay - positioned below the doorway, centered
-    this.escapeWarning = this.add.container(640, 530);
+    this.escapeWarning = this.add.container(640, 580);
     this.escapeWarning.setVisible(false);
     this.escapeWarning.setDepth(50);
     
-    // Sleek warning panel background
-    const warningBg = this.add.graphics();
-    warningBg.fillStyle(0x110000, 0.92);
-    warningBg.fillRoundedRect(-160, -28, 320, 56, 8);
-    warningBg.lineStyle(2, 0xff3333, 1);
-    warningBg.strokeRoundedRect(-160, -28, 320, 56, 8);
+    // Bar background (dark, full width)
+    const barBg = this.add.rectangle(0, 0, 320, 20, 0x220000);
+    barBg.setStrokeStyle(2, 0x440000);
     
-    // Animated danger bar at top
-    const dangerBar = this.add.rectangle(0, -24, 300, 3, 0xff0000);
+    // Progress bar that shrinks (starts full, shrinks to 0)
+    const progressBar = this.add.rectangle(-155, 0, 310, 14, 0xff0000);
+    progressBar.setOrigin(0, 0.5);
     
-    // Warning title - cleaner look
-    const warningTitle = this.add.text(0, -8, 'ENEMY APPROACHING', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#ff6666',
-    }).setOrigin(0.5);
+    // Inner glow effect
+    const innerGlow = this.add.rectangle(-155, 0, 310, 8, 0xff4444);
+    innerGlow.setOrigin(0, 0.5);
     
-    // Timer display - larger and more prominent  
-    const escapeText = this.add.text(0, 12, 'ESCAPE: 5s', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '20px',
-      color: '#ffffff',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    
-    this.escapeWarning.add([warningBg, dangerBar, warningTitle, escapeText]);
+    this.escapeWarning.add([barBg, progressBar, innerGlow]);
     this.roomViewUI.add(this.escapeWarning);
-    
-    // Pulsing animation for warning bar
-    this.tweens.add({
-      targets: dangerBar,
-      scaleX: 0.85,
-      alpha: 0.5,
-      duration: 250,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
   }
   
   /**
@@ -2020,10 +2019,6 @@ export class GameScene extends Phaser.Scene {
     const heavyThere = this.isHeavyEnabled() && this.heavy.isAtNode(node);
     const sniperThere = this.isSniperEnabled() && this.sniper.isAtNode(node);
     
-    // Debug: show Heavy's actual position
-    if (this.isHeavyEnabled()) {
-      console.log(`[DEBUG] Heavy at ${this.heavy.currentNode}, state=${this.heavy.state}, checking for ${node}`);
-    }
     console.log(`Teleporting to ${node}. Enemies: Scout=${scoutThere}, Soldier=${soldierThere}, DemoBody=${demomanBodyThere}, Heavy=${heavyThere}, Sniper=${sniperThere}`);
     
     // Check each enemy type and show appropriate jumpscare
@@ -2054,6 +2049,24 @@ export class GameScene extends Phaser.Scene {
       this.currentRoom = node;
       this.teleportEscapeTimer = 0;
       this.enemyApproachingRoom = false;
+      
+      // Immediately check for approaching enemies
+      const adjacent = ROOM_ADJACENCY[this.currentRoom] || [];
+      
+      const enemyApproaching = 
+        (this.isHeavyEnabled() && this.heavy.isActive() && adjacent.includes(this.heavy.currentNode)) ||
+        (this.isSniperEnabled() && this.sniper.isActive() && adjacent.includes(this.sniper.currentNode)) ||
+        (this.isScoutEnabled() && this.scout.isActive() && adjacent.includes(this.scout.currentNode)) ||
+        (this.isSoldierEnabled() && this.soldier.isActive() && adjacent.includes(this.soldier.currentNode));
+      
+      if (enemyApproaching) {
+        this.enemyApproachingRoom = true;
+        this.teleportEscapeTimer = GAME_CONSTANTS.TELEPORT_ESCAPE_TIME;
+        this.showAlert('A nearby enemy heard you!', 0xff0000);
+        this.escapeWarning.setVisible(true);
+        this.roomDoorwayEyes.setVisible(true);
+        this.playEnemyApproachSound();
+      }
       
       // Hide camera UI, show room view
       this.cameraUI.setVisible(false);
@@ -4264,6 +4277,22 @@ export class GameScene extends Phaser.Scene {
       color: '#8888ff',
     }).setOrigin(0.5);
     this.pauseMenu.add(menuText);
+    
+    // Hint background
+    const hintBg = this.add.rectangle(640, 600, 500, 60, 0x0a0a14, 0.95);
+    hintBg.setStrokeStyle(1, 0x333344);
+    this.pauseMenu.add(hintBg);
+    
+    // Hint text (random hint shown each pause)
+    this.pauseHintText = this.add.text(640, 600, '', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '18px',
+      color: '#cccccc',
+      fontStyle: 'italic',
+      wordWrap: { width: 470 },
+      align: 'center',
+    }).setOrigin(0.5);
+    this.pauseMenu.add(this.pauseHintText);
   }
   
   /**
@@ -4277,6 +4306,10 @@ export class GameScene extends Phaser.Scene {
       // Pause the game
       this.stopDetectionSound();
       this.physics?.pause();
+      
+      // Show a random hint
+      const randomHint = this.pauseHints[Math.floor(Math.random() * this.pauseHints.length)];
+      this.pauseHintText.setText(randomHint);
     } else {
       // Resume
       this.physics?.resume();
@@ -4812,9 +4845,8 @@ export class GameScene extends Phaser.Scene {
         const fullyRepelled = this.sniper.wardOff(this.sentry.level);
         if (fullyRepelled) {
           this.showAlert('SNIPER DRIVEN AWAY!', 0x00ff00);
-        } else {
-          this.showAlert(`SNIPER HIT! ${this.sniper.getShotsRemaining()} more shot(s) needed!`, 0xffaa00);
         }
+        // No alert for partial hits - the sniper aiming UI already shows shots remaining
         hitEnemy = true;
       }
     } else if (this.sentry.aimedDoor === 'RIGHT') {
@@ -4845,13 +4877,12 @@ export class GameScene extends Phaser.Scene {
         const fullyRepelled = this.sniper.wardOff(this.sentry.level);
         if (fullyRepelled) {
           this.showAlert('SNIPER DRIVEN AWAY!', 0x00ff00);
-        } else {
-          this.showAlert(`SNIPER HIT! ${this.sniper.getShotsRemaining()} more shot(s) needed!`, 0xffaa00);
         }
+        // No alert for partial hits - the sniper aiming UI already shows shots remaining
         hitEnemy = true;
       }
     }
-    
+
     // If we missed, show feedback
     if (!hitEnemy) {
       this.showAlert('FIRED! (-50 metal)', 0xffaa00);
@@ -6016,7 +6047,7 @@ export class GameScene extends Phaser.Scene {
     const isDemoman = reasonLower.includes('demoman');
     const isHeavy = reasonLower.includes('heavy');
     const isSoldier = reasonLower.includes('soldier') || reasonLower.includes('breached');
-    const isSniper = reasonLower.includes('snipe');
+    const isSniper = reasonLower.includes('snipe') || reasonLower.includes('sniper');
     
     // Create jumpscare container
     this.endScreen.removeAll(true);
@@ -6368,10 +6399,13 @@ export class GameScene extends Phaser.Scene {
       }
     }
     
-    // Update Heavy and Sniper (if enabled)
+    // Update Heavy, Sniper, Spy (if enabled)
     if (this.isHeavyEnabled() || this.isSniperEnabled() || this.isSpyEnabled()) {
       this.updateHeavyAndSniper(delta);
     }
+    
+    // Update teleport danger check (always runs, regardless of which enemies are enabled)
+    this.updateTeleportDanger(delta);
   }
   
   /**
@@ -6548,20 +6582,38 @@ export class GameScene extends Phaser.Scene {
         state.destroyedBy = null;
       }
     });
-    
-    // Check if enemy is approaching Engineer's room (when teleported)
+  }
+  
+  /**
+   * Update teleport danger check - runs every frame regardless of which enemies are enabled
+   */
+  private updateTeleportDanger(delta: number): void {
+    // Check if enemy is IN the Engineer's room or approaching
     if (this.isTeleported && this.currentRoom !== 'INTEL') {
+      // Check if any enemy is IN the same room as engineer (very dangerous!)
+      const scoutInRoom = this.isScoutEnabled() && this.scout.currentNode === this.currentRoom && this.scout.isActive();
+      const soldierInRoom = this.isSoldierEnabled() && this.soldier.currentNode === this.currentRoom && this.soldier.isActive();
+      const heavyInRoom = this.isHeavyEnabled() && this.heavy.currentNode === this.currentRoom && this.heavy.isActive();
+      const sniperInRoom = this.isSniperEnabled() && this.sniper.currentNode === this.currentRoom && this.sniper.isActive();
+      const demomanInRoom = this.isDemomanEnabled() && this.demoman.isCharging() && this.demoman.currentNode === this.currentRoom;
+      
+      const enemyInRoom = scoutInRoom || soldierInRoom || heavyInRoom || sniperInRoom || demomanInRoom;
+      
       const adjacent = ROOM_ADJACENCY[this.currentRoom] || [];
-      const enemyApproaching = 
-        (this.isHeavyEnabled() && adjacent.includes(this.heavy.currentNode)) ||
-        (this.isSniperEnabled() && adjacent.includes(this.sniper.currentNode)) ||
-        (this.isScoutEnabled() && adjacent.includes(this.scout.currentNode)) ||
-        (this.isSoldierEnabled() && adjacent.includes(this.soldier.currentNode));
+      
+      const enemyAdjacent = 
+        (this.isHeavyEnabled() && this.heavy.isActive() && adjacent.includes(this.heavy.currentNode)) ||
+        (this.isSniperEnabled() && this.sniper.isActive() && adjacent.includes(this.sniper.currentNode)) ||
+        (this.isScoutEnabled() && this.scout.isActive() && adjacent.includes(this.scout.currentNode)) ||
+        (this.isSoldierEnabled() && this.soldier.isActive() && adjacent.includes(this.soldier.currentNode));
+      
+      // Enemy in room OR adjacent triggers warning
+      const enemyApproaching = enemyInRoom || enemyAdjacent;
       
       if (enemyApproaching && !this.enemyApproachingRoom) {
         this.enemyApproachingRoom = true;
         this.teleportEscapeTimer = GAME_CONSTANTS.TELEPORT_ESCAPE_TIME;
-        this.showAlert('Enemy approaching! ESCAPE!', 0xff0000);
+        this.showAlert('A nearby enemy heard you!', 0xff0000);
         this.escapeWarning.setVisible(true);
         this.roomDoorwayEyes.setVisible(true);
         this.playEnemyApproachSound();
@@ -6575,10 +6627,18 @@ export class GameScene extends Phaser.Scene {
       if (this.enemyApproachingRoom) {
         this.teleportEscapeTimer -= delta;
         
-        // Update countdown display in warning (index 3 is the timer text)
-        const countdownText = Math.ceil(this.teleportEscapeTimer / 1000);
-        const escapeText = this.escapeWarning.list[3] as Phaser.GameObjects.Text;
-        escapeText.setText(`ESCAPE: ${countdownText}s`);
+        // Update progress bar (shrinks from full to empty)
+        const progress = Math.max(0, this.teleportEscapeTimer / GAME_CONSTANTS.TELEPORT_ESCAPE_TIME);
+        const progressBar = this.escapeWarning.list[1] as Phaser.GameObjects.Rectangle;
+        const innerGlow = this.escapeWarning.list[2] as Phaser.GameObjects.Rectangle;
+        
+        // Use displayWidth instead of scale for proper visual shrinking
+        progressBar.displayWidth = 310 * progress;
+        innerGlow.displayWidth = 310 * progress;
+        
+        // Shake effect - gets more intense as time runs out
+        const shakeIntensity = (1 - progress) * 8;
+        this.escapeWarning.setPosition(640 + (Math.random() - 0.5) * shakeIntensity, 580);
         
         // Pulse the red eyes
         const eyesAlpha = 0.6 + Math.sin(Date.now() / 150) * 0.4;
@@ -6588,9 +6648,27 @@ export class GameScene extends Phaser.Scene {
         this.updateApproachGrowl(this.teleportEscapeTimer);
         
         if (this.teleportEscapeTimer <= 0) {
-          // Too late - player dies
+          // Too late - player dies. Determine which enemy caught them.
           this.stopApproachGrowl();
-          this.gameOver('Caught outside Intel room!');
+          
+          // Priority: enemy IN room > enemy adjacent
+          let killer = 'an enemy';
+          if (scoutInRoom) killer = 'Scout';
+          else if (soldierInRoom) killer = 'Soldier';
+          else if (demomanInRoom) killer = 'Demoman';
+          else if (heavyInRoom) killer = 'Heavy';
+          else if (sniperInRoom) killer = 'Sniper';
+          else {
+            // Check adjacent enemies
+            const adj = ROOM_ADJACENCY[this.currentRoom] || [];
+            if (this.isScoutEnabled() && this.scout.isActive() && adj.includes(this.scout.currentNode)) killer = 'Scout';
+            else if (this.isSoldierEnabled() && this.soldier.isActive() && adj.includes(this.soldier.currentNode)) killer = 'Soldier';
+            else if (this.isDemomanEnabled() && this.demoman.isCharging() && adj.includes(this.demoman.currentNode)) killer = 'Demoman';
+            else if (this.isHeavyEnabled() && this.heavy.isActive() && adj.includes(this.heavy.currentNode)) killer = 'Heavy';
+            else if (this.isSniperEnabled() && this.sniper.isActive() && adj.includes(this.sniper.currentNode)) killer = 'Sniper';
+          }
+          
+          this.gameOver(`${killer} caught you!`);
           return;
         }
       }
@@ -6780,11 +6858,11 @@ export class GameScene extends Phaser.Scene {
     // Get attack progress (0 to 1 over 1.5 seconds)
     const progress = this.demoman.getAttackProgress();
     
-    // First 1.25s (83.3%): approaching glow | Last 0.25s (16.7%): body visible
-    if (progress < 0.833) {
-      // First phase (0-1.25s): Show approaching green glow, getting brighter
-      // Progress 0-0.833 maps to glow intensity 0.1-0.6
-      const phaseProgress = progress / 0.833; // Normalize to 0-1 for this phase
+    // First 0.75s (75%): approaching glow | Last 0.25s (25%): body visible
+    if (progress < 0.75) {
+      // First phase (0-0.75s): Show approaching green glow, getting brighter
+      // Progress 0-0.75 maps to glow intensity 0.1-0.6
+      const phaseProgress = progress / 0.75; // Normalize to 0-1 for this phase
       const glowIntensity = 0.1 + phaseProgress * 0.5;
       const glowSize = 20 + phaseProgress * 60; // 20 to 80 pixels
       
@@ -6804,7 +6882,7 @@ export class GameScene extends Phaser.Scene {
       this.demomanApproachGlow.fillStyle(0x00ff44, glowIntensity * 0.8);
       this.demomanApproachGlow.fillRect(doorX - 3, 360 - glowSize, 6, glowSize * 2);
     } else {
-      // Second phase (1.25-1.5s): Show full body - only 0.25s to react!
+      // Second phase (0.75-1.0s): Show full body - only 0.25s to react!
       this.demomanInDoorway.setVisible(true);
     }
   }
