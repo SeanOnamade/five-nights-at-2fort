@@ -557,82 +557,90 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
-   * Create sniper laser sight visuals (Night 4+)
-   * These are visible even without the wrangler aimed at the door!
+   * Create sniper visor glow visuals (Night 4+)
+   * Bright blue visor-shaped glow at eye level in the doorway with large light radius
    */
   private createSniperLasers(): void {
-    const height = 720;
+    // Eye level position (where sniper's visor would be)
+    const eyeLevelY = 280;
     
-    // Left door laser (Sniper in LEFT_HALL)
-    this.sniperLaserLeft = this.add.container(180, height / 2);
+    // Left door - Sniper visor glow centered in doorway
+    const leftDoorX = 120; // Centered in left doorway
+    this.sniperLaserLeft = this.add.container(leftDoorX, eyeLevelY);
     
-    // Laser beam from doorway
-    const laserBeamLeft = this.add.graphics();
-    laserBeamLeft.lineStyle(2, 0xff0000, 0.8);
-    laserBeamLeft.lineBetween(0, 0, 460, 0); // Beam extends into room
-    laserBeamLeft.lineStyle(1, 0xff0000, 0.3);
-    laserBeamLeft.lineBetween(0, -2, 460, -2);
-    laserBeamLeft.lineBetween(0, 2, 460, 2);
-    
-    // Laser dot at source (doorway)
-    const laserDotLeft = this.add.graphics();
-    laserDotLeft.fillStyle(0xff0000, 1);
-    laserDotLeft.fillCircle(0, 0, 6);
-    laserDotLeft.fillStyle(0xff0000, 0.4);
-    laserDotLeft.fillCircle(0, 0, 12);
-    
-    // Ambient glow around laser source
+    // Large atmospheric light radius - BRIGHT and BIG
     const glowLeft = this.add.graphics();
-    glowLeft.fillStyle(0xff0000, 0.15);
-    glowLeft.fillCircle(0, 0, 30);
+    // Very large outer glow - massive light radius
+    glowLeft.fillStyle(0x0055aa, 0.08);
+    glowLeft.fillCircle(0, 0, 220);
+    glowLeft.fillStyle(0x0066cc, 0.12);
+    glowLeft.fillCircle(0, 0, 160);
+    glowLeft.fillStyle(0x0077dd, 0.18);
+    glowLeft.fillCircle(0, 0, 100);
+    glowLeft.fillStyle(0x0088ee, 0.25);
+    glowLeft.fillCircle(0, 0, 60);
+    // Medium glow - starting to get visor shaped
+    glowLeft.fillStyle(0x00aaff, 0.35);
+    glowLeft.fillEllipse(0, 0, 90, 40);
+    // Inner bright glow - visor shape
+    glowLeft.fillStyle(0x44ddff, 0.5);
+    glowLeft.fillEllipse(0, 0, 65, 20);
+    // Bright core - the visor itself
+    glowLeft.fillStyle(0x66eeff, 0.9);
+    glowLeft.fillRoundedRect(-35, -8, 70, 16, 8);
+    // White-hot center line
+    glowLeft.fillStyle(0xffffff, 1);
+    glowLeft.fillRoundedRect(-25, -4, 50, 8, 4);
     
-    this.sniperLaserLeft.add([glowLeft, laserBeamLeft, laserDotLeft]);
+    this.sniperLaserLeft.add([glowLeft]);
     this.sniperLaserLeft.setVisible(false);
     this.sniperLaserLeft.setDepth(12);
     
-    // Pulsing animation for left laser
+    // Pulsing animation for left visor glow
     this.tweens.add({
-      targets: laserDotLeft,
-      alpha: 0.5,
-      duration: 200,
+      targets: glowLeft,
+      alpha: 0.6,
+      duration: 400,
       yoyo: true,
       repeat: -1,
+      ease: 'Sine.easeInOut',
     });
     
-    // Right door laser (Sniper in RIGHT_HALL)
-    this.sniperLaserRight = this.add.container(1280 - 180, height / 2);
+    // Right door - Sniper visor glow centered in doorway
+    const rightDoorX = 1280 - 120; // Centered in right doorway
+    this.sniperLaserRight = this.add.container(rightDoorX, eyeLevelY);
     
-    // Laser beam from doorway
-    const laserBeamRight = this.add.graphics();
-    laserBeamRight.lineStyle(2, 0xff0000, 0.8);
-    laserBeamRight.lineBetween(0, 0, -460, 0); // Beam extends into room
-    laserBeamRight.lineStyle(1, 0xff0000, 0.3);
-    laserBeamRight.lineBetween(0, -2, -460, -2);
-    laserBeamRight.lineBetween(0, 2, -460, 2);
-    
-    // Laser dot at source
-    const laserDotRight = this.add.graphics();
-    laserDotRight.fillStyle(0xff0000, 1);
-    laserDotRight.fillCircle(0, 0, 6);
-    laserDotRight.fillStyle(0xff0000, 0.4);
-    laserDotRight.fillCircle(0, 0, 12);
-    
-    // Ambient glow
+    // Large atmospheric light radius - BRIGHT and BIG
     const glowRight = this.add.graphics();
-    glowRight.fillStyle(0xff0000, 0.15);
-    glowRight.fillCircle(0, 0, 30);
+    glowRight.fillStyle(0x0055aa, 0.08);
+    glowRight.fillCircle(0, 0, 220);
+    glowRight.fillStyle(0x0066cc, 0.12);
+    glowRight.fillCircle(0, 0, 160);
+    glowRight.fillStyle(0x0077dd, 0.18);
+    glowRight.fillCircle(0, 0, 100);
+    glowRight.fillStyle(0x0088ee, 0.25);
+    glowRight.fillCircle(0, 0, 60);
+    glowRight.fillStyle(0x00aaff, 0.35);
+    glowRight.fillEllipse(0, 0, 90, 40);
+    glowRight.fillStyle(0x44ddff, 0.5);
+    glowRight.fillEllipse(0, 0, 65, 20);
+    glowRight.fillStyle(0x66eeff, 0.9);
+    glowRight.fillRoundedRect(-35, -8, 70, 16, 8);
+    glowRight.fillStyle(0xffffff, 1);
+    glowRight.fillRoundedRect(-25, -4, 50, 8, 4);
     
-    this.sniperLaserRight.add([glowRight, laserBeamRight, laserDotRight]);
+    this.sniperLaserRight.add([glowRight]);
     this.sniperLaserRight.setVisible(false);
     this.sniperLaserRight.setDepth(12);
     
-    // Pulsing animation for right laser
+    // Pulsing animation for right visor glow
     this.tweens.add({
-      targets: laserDotRight,
-      alpha: 0.5,
-      duration: 200,
+      targets: glowRight,
+      alpha: 0.6,
+      duration: 400,
       yoyo: true,
       repeat: -1,
+      ease: 'Sine.easeInOut',
     });
     
     // Charge countdown text (appears when sniper is charging)
@@ -843,12 +851,13 @@ export class GameScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5, 0);
     
-    // Metal display (top left)
+    // Metal display (top left) - always visible on top
     this.metalText = this.add.text(padding, padding, 'METAL: 0/200', {
       fontFamily: 'Courier New, monospace',
       fontSize: '24px',
-      color: '#ffcc00',
+      color: '#aabbcc',
     });
+    this.metalText.setDepth(200); // Always on top, even in camera/teleport views
     
     // Sentry status (top left, below metal)
     this.sentryText = this.add.text(padding, padding + 35, 'SENTRY: L3 | HP: 216/216', {
@@ -2051,6 +2060,9 @@ export class GameScene extends Phaser.Scene {
       this.isCameraMode = false;
       this.roomViewUI.setVisible(true);
       
+      // Move metal text below room header when teleported (aligned with header at x=40)
+      this.metalText.setPosition(40, 60);
+      
       // Update room view header
       this.roomViewHeader.setText(`ROOM: ${node.replace('_', ' ')}`);
       
@@ -2087,6 +2099,9 @@ export class GameScene extends Phaser.Scene {
       this.roomDoorwayEyes.setVisible(false);
       this.enemyApproachingRoom = false;
       this.teleportEscapeTimer = 0;
+      
+      // Restore metal text to original position
+      this.metalText.setPosition(20, 20);
       
       console.log('Engineer returned to Intel room');
       
@@ -3222,18 +3237,22 @@ export class GameScene extends Phaser.Scene {
     graphics.fillStyle(0x3a2a1a, 1);
     graphics.fillRect(-2, -88, 16, 6);
     
-    // Aviator sunglasses
-    graphics.fillStyle(0x111111, 1);
-    graphics.fillRoundedRect(-10, -64, 14, 12, 3);
-    graphics.fillRoundedRect(8, -64, 14, 12, 3);
-    graphics.fillStyle(0x333333, 1);
-    graphics.fillRect(4, -60, 4, 4);
-    // One eye through scope - glowing
-    graphics.fillStyle(isLured ? 0xffcc00 : 0x4488ff, 0.9);
-    graphics.fillCircle(-4, -58, 5);
-    // Other eye darker
-    graphics.fillStyle(0x222244, 1);
-    graphics.fillCircle(14, -58, 4);
+    // Blue visor (glowing) - spans across both eyes
+    const visorColor = isLured ? 0xffcc00 : 0x00aaff;
+    // Visor frame
+    graphics.fillStyle(0x222222, 1);
+    graphics.fillRoundedRect(-14, -66, 40, 14, 4);
+    // Visor glass - glowing blue
+    graphics.fillStyle(visorColor, 0.3);
+    graphics.fillRoundedRect(-12, -64, 36, 10, 3);
+    graphics.fillStyle(visorColor, 0.7);
+    graphics.fillRoundedRect(-10, -62, 32, 6, 2);
+    // Bright center glow
+    graphics.fillStyle(visorColor, 1);
+    graphics.fillRoundedRect(-6, -61, 24, 4, 2);
+    // Outer glow effect
+    graphics.fillStyle(visorColor, 0.2);
+    graphics.fillRoundedRect(-16, -68, 44, 18, 5);
     
     // SNIPER RIFLE - aimed at viewer (foreshortened)
     graphics.fillStyle(0x3a3a3a, 1);
@@ -4431,12 +4450,10 @@ export class GameScene extends Phaser.Scene {
     if ((sniperInLeftHall || sniperInRightHall) && !this.isCameraMode) {
       const progress = this.sniper.getChargeProgress();
       const timeRemaining = Math.ceil((1 - progress) * GAME_CONSTANTS.SNIPER_CHARGE_TIME / 1000);
-      const currentShots = this.sniper.getShotsRemaining();
+      const shotsRemaining = this.sniper.getShotsRemaining();
       
-      // Calculate effective shots based on sentry level
-      // L2+ sentry does 2 damage per shot, so it one-shots if shotsRemaining <= 2
-      const effectiveShots = this.sentry.level >= 2 ? Math.ceil(currentShots / 2) : currentShots;
-      const shotText = effectiveShots === 1 ? '1 shot to repel' : `${effectiveShots} shots to repel`;
+      // Sniper ALWAYS requires 2 shots to repel (regardless of sentry level)
+      const shotText = shotsRemaining === 1 ? '1 shot to repel' : `${shotsRemaining} shots to repel`;
       
       this.sniperChargeText.setText(`⚠ SNIPER AIMING! ${timeRemaining}s (${shotText})`);
       this.sniperChargeText.setVisible(true);
@@ -4788,7 +4805,7 @@ export class GameScene extends Phaser.Scene {
         this.demoman.deter();
         hitEnemy = true;
       }
-      // Check Sniper at left door (Night 4+) - L3 sentry = 1 shot, L1/2 = 2 shots
+      // Check Sniper at left door (Night 4+) - ALWAYS requires 2 shots to repel
       // Only hit Sniper if he's actually AIMING (not if lured and just passing through)
       if (this.isSniperEnabled() && this.sniper.currentNode === 'LEFT_HALL' && 
           this.sniper.isActive() && !this.sniper.isCurrentlyLured()) {
@@ -4821,7 +4838,7 @@ export class GameScene extends Phaser.Scene {
         this.demoman.deter();
         hitEnemy = true;
       }
-      // Check Sniper at right door (if enabled) - L2/L3 sentry = 1 shot, L1 = 2 shots
+      // Check Sniper at right door (if enabled) - ALWAYS requires 2 shots to repel
       // Only hit Sniper if he's actually AIMING (not if lured and just passing through)
       if (this.isSniperEnabled() && this.sniper.currentNode === 'RIGHT_HALL' && 
           this.sniper.isActive() && !this.sniper.isCurrentlyLured()) {

@@ -114,14 +114,14 @@ export class BootScene extends Phaser.Scene {
     const buttonStartX = (width - totalWidth) / 2 + 40;
     const buttonY = 285;
     
-    // Custom night enemy toggles
+    // Custom night enemy toggles (all OFF by default for QoL)
     const customNightEnemies = {
-      scout: true,
-      soldier: true,
-      demoman: true,
-      heavy: true,
-      sniper: true,
-      spy: true,
+      scout: false,
+      soldier: false,
+      demoman: false,
+      heavy: false,
+      sniper: false,
+      spy: false,
     };
     
     // Custom night UI container (created later, shown when N6 selected)
@@ -204,15 +204,17 @@ export class BootScene extends Phaser.Scene {
             
             if (nights[i] <= 6) {
               if (i === index) {
-                bg.setFillStyle(isThisCustom ? 0x2a2011 : 0x1a2a1a);
-                bg.setStrokeStyle(3, isThisCustom ? 0xffaa00 : 0x44ff44);
-                glow.setFillStyle(isThisCustom ? 0xffaa00 : 0x44ff44, 0.08);
-                num.setColor(isThisCustom ? '#ffcc44' : '#66ff66');
+                // All buttons use green when selected (including custom)
+                bg.setFillStyle(0x1a2a1a);
+                bg.setStrokeStyle(3, 0x44ff44);
+                glow.setFillStyle(0x44ff44, 0.08);
+                num.setColor('#66ff66');
               } else {
-                bg.setFillStyle(isThisCustom ? 0x1a1511 : 0x112211);
-                bg.setStrokeStyle(2, isThisCustom ? 0x886633 : 0x336633);
-                glow.setFillStyle(isThisCustom ? 0xffaa00 : 0x44ff44, 0);
-                num.setColor(isThisCustom ? '#ffaa44' : '#44aa44');
+                // All buttons use green when not selected
+                bg.setFillStyle(0x112211);
+                bg.setStrokeStyle(2, 0x336633);
+                glow.setFillStyle(0x44ff44, 0);
+                num.setColor('#44aa44');
               }
             }
           });
@@ -305,9 +307,9 @@ export class BootScene extends Phaser.Scene {
       const ex = -225 + i * 85;
       const ey = 5;
       
-      // Toggle button with better styling
-      const toggleBg = this.add.rectangle(ex, ey, 72, 58, enemyColors[enemy], 0.8);
-      toggleBg.setStrokeStyle(2, 0x44ff44);
+      // Toggle button with better styling - starts OFF by default
+      const toggleBg = this.add.rectangle(ex, ey, 72, 58, enemyColors[enemy], 0.4);
+      toggleBg.setStrokeStyle(2, 0x333333);
       toggleBg.setInteractive({ useHandCursor: true });
       
       const toggleLabel = this.add.text(ex, ey - 14, enemyLabels[enemy], {
@@ -317,10 +319,10 @@ export class BootScene extends Phaser.Scene {
         fontStyle: 'bold',
       }).setOrigin(0.5);
       
-      const toggleStatus = this.add.text(ex, ey + 14, 'ON', {
+      const toggleStatus = this.add.text(ex, ey + 14, 'OFF', {
         fontFamily: 'Courier New, monospace',
         fontSize: '15px',
-        color: '#00ff44',
+        color: '#666666',
         fontStyle: 'bold',
       }).setOrigin(0.5);
       
@@ -1457,19 +1459,21 @@ export class BootScene extends Phaser.Scene {
         graphics.fillStyle(0x3a2a1a, 1);
         graphics.fillRect(x - 3, y - 78, 16, 6);
         
-        // Aviator sunglasses
-        graphics.fillStyle(0x111111, 1);
-        graphics.fillRoundedRect(x - 10, y - 56, 14, 11, 3);
-        graphics.fillRoundedRect(x + 6, y - 56, 14, 11, 3);
-        // Glasses bridge
-        graphics.fillStyle(0x333333, 1);
-        graphics.fillRect(x + 2, y - 53, 4, 3);
-        // ONE EYE looking through scope - eerie blue glint
-        graphics.fillStyle(0x4488ff, 0.9);
-        graphics.fillCircle(x - 4, y - 51, 5);
-        // Other eye darker (closed for aim)
-        graphics.fillStyle(0x222244, 1);
-        graphics.fillCircle(x + 12, y - 51, 4);
+        // Blue visor (glowing) - spans across both eyes
+        // Visor frame
+        graphics.fillStyle(0x222222, 1);
+        graphics.fillRoundedRect(x - 14, y - 58, 38, 14, 4);
+        // Visor glass - glowing blue
+        graphics.fillStyle(0x00aaff, 0.3);
+        graphics.fillRoundedRect(x - 12, y - 56, 34, 10, 3);
+        graphics.fillStyle(0x00aaff, 0.7);
+        graphics.fillRoundedRect(x - 10, y - 54, 30, 6, 2);
+        // Bright center glow
+        graphics.fillStyle(0x00aaff, 1);
+        graphics.fillRoundedRect(x - 6, y - 53, 22, 4, 2);
+        // Outer glow effect
+        graphics.fillStyle(0x00aaff, 0.2);
+        graphics.fillRoundedRect(x - 16, y - 60, 42, 18, 5);
         
         // Slight focused expression
         graphics.fillStyle(0x8a6a5a, 1);

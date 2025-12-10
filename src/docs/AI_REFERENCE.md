@@ -153,16 +153,16 @@ Silent, long-range threat with laser sight.
 | Sentry Level | Shots Needed |
 |--------------|--------------|
 | L1 | **2 shots** |
-| L2 | **1 shot** |
-| L3 | **1 shot** |
+| L2 | **2 shots** |
+| L3 | **2 shots** |
 
 **Never spawns in hallways** (safe spawn: Lobby, Grate, Staircase, Spiral, Bridge)
 
 **In Hallway:**
-- Red laser visible **without wrangler!**
+- Bright **blue scope glow** at eye level, visible **without wrangler!**
 - 4 sec to charge headshot
-- First shot (L1): Resets charge, **stays in hallway**
-- Second shot (L1) or first shot (L2/L3): Driven away
+- First shot: Resets charge, **stays in hallway**
+- Second shot: Driven away (ALL sentry levels require 2 shots)
 
 **Lure interaction:**
 - Attracted from anywhere like Heavy
@@ -202,8 +202,8 @@ Non-lethal saboteur. **Two modes (not both at once!):**
 | Level | HP | Upgrade Cost | Sniper Repel |
 |-------|-----|--------------|--------------|
 | L1 | 150 | — | 2 shots |
-| L2 | 180 | 200 | **1 shot** |
-| L3 | 216 | 200 | **1 shot** |
+| L2 | 180 | 200 | 2 shots |
+| L3 | 216 | 200 | 2 shots |
 
 - Build: 100 metal
 - Repair: 1 metal = 1 HP (only what's needed)
@@ -225,7 +225,7 @@ Non-lethal saboteur. **Two modes (not both at once!):**
 | Soldier | Sentry dies, repels | 1 shot | 1 shot | — |
 | Demoman | Sentry dies, repels | 1 shot | 1 shot | — |
 | Heavy | **NO EFFECT** | **NO EFFECT** | **NO EFFECT** | ✓ Redirects |
-| Sniper | **NO EFFECT** | **2 shots** | **1 shot** | ✓ Stops charge |
+| Sniper | **NO EFFECT** | **2 shots** | **2 shots** | ✓ Stops charge |
 
 ---
 

@@ -397,18 +397,17 @@ export class SniperEnemy extends EnemyBase {
 
   /**
    * Ward off Sniper with wrangler shot
-   * Level 2/3 sentry = 1 shot to repel, Level 1 = 2 shots
+   * ALWAYS requires 2 shots to repel (regardless of sentry level)
    * Sniper STAYS IN THE SAME HALLWAY after first hit - must shoot again quickly!
    * Returns true if Sniper is fully driven away, false if more shots needed
    */
-  public wardOff(sentryLevel: number = 1): boolean {
-    // Level 2+ sentry does double damage (instant repel)
-    const damage = sentryLevel >= 2 ? 2 : 1;
-    this.shotsRemaining -= damage;
+  public wardOff(_sentryLevel: number = 1): boolean {
+    // Always 1 damage per shot - Sniper ALWAYS requires 2 shots to repel
+    this.shotsRemaining -= 1;
     this.chargeTimer = 0; // Reset charge on any hit - gives player another 4 seconds
     this.isCharging = false;
     
-    console.log(`Sniper hit! (L${sentryLevel} sentry, -${damage}) ${this.shotsRemaining} shot(s) remaining`);
+    console.log(`Sniper hit! ${this.shotsRemaining} shot(s) remaining`);
     
     if (this.shotsRemaining <= 0) {
       // Fully driven away - NOW he teleports away
