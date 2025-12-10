@@ -42,7 +42,7 @@ export class DemomanEnemy {
   private chargeTimer: number = 0; // Movement timer during charge
   private attackTimer: number = 0; // Time at door before attacking
   private teleportTimer: number = 0; // Time before head teleports after deter
-  private watchTimer: number = 0; // Time being watched on camera
+  private _watchTimer: number = 0; // Time being watched on camera (unused but kept for future)
   
   // Flags
   private hasEmittedDoorEvent: boolean = false;
@@ -62,7 +62,7 @@ export class DemomanEnemy {
     this.pathIndex = 0;
     this.hasEmittedDoorEvent = false;
     this.isBeingWatched = false;
-    this.watchTimer = 0;
+    this._watchTimer = 0;
     this.chargeWarningTimer = 0;
     this.chargeTimer = 0;
     this.attackTimer = 0;
@@ -105,7 +105,7 @@ export class DemomanEnemy {
   public setBeingWatched(watched: boolean): void {
     this.isBeingWatched = watched;
     if (!watched) {
-      this.watchTimer = 0;
+      this._watchTimer = 0;
     }
   }
   

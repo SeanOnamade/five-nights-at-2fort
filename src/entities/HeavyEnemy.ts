@@ -25,7 +25,7 @@ export class HeavyEnemy extends EnemyBase {
   // Camera watching tracking
   private watchTimer: number = 0;
   private isBeingWatched: boolean = false;
-  private destroyingCamera: boolean = false;
+  private _destroyingCamera: boolean = false;
   private destroyCameraCallback: ((cameraNode: NodeId) => void) | null = null;
 
   // Lure tracking
@@ -34,7 +34,7 @@ export class HeavyEnemy extends EnemyBase {
   private isLured: boolean = false;
 
   // Footstep timing
-  private footstepTimer: number = 0;
+  private _footstepTimer: number = 0; // Reserved for future footstep timing
   private footstepCallback: ((volume: number) => void) | null = null;
 
   constructor(scene: Phaser.Scene) {
@@ -86,7 +86,7 @@ export class HeavyEnemy extends EnemyBase {
       this.watchTimer += delta * this.watchMultiplier;
       if (this.watchTimer >= GAME_CONSTANTS.CAMERA_WATCH_DESTROY_TIME) {
         // Heavy destroys the camera in rage!
-        this.destroyingCamera = true;
+        this._destroyingCamera = true;
         result.destroyedCamera = true;
         if (this.destroyCameraCallback) {
           this.destroyCameraCallback(this.currentNode);
@@ -147,7 +147,7 @@ export class HeavyEnemy extends EnemyBase {
         // Brief pause while destroying camera, then continue
         this.waitTimer += delta;
         if (this.waitTimer >= 1000) {
-          this.destroyingCamera = false;
+          this._destroyingCamera = false;
           this.state = this.isLured ? 'LURED' : 'PATROLLING';
           this.waitTimer = 0;
         }

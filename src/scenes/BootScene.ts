@@ -68,14 +68,14 @@ export class BootScene extends Phaser.Scene {
     
     // ===== TITLE =====
     // Title glow
-    const titleGlow = this.add.text(width / 2, 110, 'TWOFORT NIGHTS', {
+    this.add.text(width / 2, 110, 'TWOFORT NIGHTS', {
       fontFamily: 'Courier New, monospace',
       fontSize: '64px',
       color: '#ff4400',
       fontStyle: 'bold',
     }).setOrigin(0.5).setAlpha(0.25).setScale(1.03);
     
-    const title = this.add.text(width / 2, 110, 'TWOFORT NIGHTS', {
+    this.add.text(width / 2, 110, 'TWOFORT NIGHTS', {
       fontFamily: 'Courier New, monospace',
       fontSize: '64px',
       color: '#ff6600',
@@ -619,7 +619,7 @@ export class BootScene extends Phaser.Scene {
     this.tutorialContainer.add(actionText);
   }
   
-  private addSection(x: number, y: number, title: string, color: number, lines: string[]): void {
+  private _addSection(x: number, y: number, title: string, color: number, lines: string[]): void {
     this.addHeader(x, y, title, color);
     
     lines.forEach((line, i) => {
@@ -776,7 +776,7 @@ export class BootScene extends Phaser.Scene {
     this.extrasContainer.add(nightBadge);
   }
   
-  private drawCharacterSilhouette(graphics: Phaser.GameObjects.Graphics, x: number, y: number, name: string, color: number): void {
+  private drawCharacterSilhouette(graphics: Phaser.GameObjects.Graphics, x: number, y: number, name: string, _color: number): void {
     graphics.clear();
     
     switch (name) {

@@ -8,7 +8,7 @@
  * Spy never kills the player - pure psychological/mechanical sabotage.
  */
 
-import { NodeId, SpyState, SpyDisguise, GAME_CONSTANTS, CAMERAS } from '../types';
+import { NodeId, SpyState, SpyDisguise, GAME_CONSTANTS } from '../types';
 
 export class SpyEnemy {
   // Current state

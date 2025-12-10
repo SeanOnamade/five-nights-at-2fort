@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import { 
   SentryState, 
   SentryLevel, 
-  DoorSide, 
   GameStatus, 
   NodeId,
   SENTRY_MAX_HP, 
@@ -71,8 +70,8 @@ export class GameScene extends Phaser.Scene {
   // Input state for hold-to-aim (using native DOM events for reliability)
   private keyADown: boolean = false;
   private keyDDown: boolean = false;
-  private keyA!: Phaser.Input.Keyboard.Key;
-  private keyD!: Phaser.Input.Keyboard.Key;
+  private _keyA!: Phaser.Input.Keyboard.Key;
+  private _keyD!: Phaser.Input.Keyboard.Key;
   
   // Enemies
   private scout!: ScoutEnemy;
@@ -115,18 +114,18 @@ export class GameScene extends Phaser.Scene {
   
   // Sniper charge visual
   private sniperChargeOverlay!: Phaser.GameObjects.Rectangle;
-  private sniperChargeTimer: number = 0;
+  private _sniperChargeTimer: number = 0; // Reserved for future use
   
   // ============================================
   // GRAPHICS OBJECTS
   // ============================================
   
   // Main room
-  private roomBackground!: Phaser.GameObjects.Rectangle;
+  private _roomBackground!: Phaser.GameObjects.Rectangle;
   private leftDoor!: Phaser.GameObjects.Rectangle;
   private rightDoor!: Phaser.GameObjects.Rectangle;
-  private leftDoorFrame!: Phaser.GameObjects.Rectangle;
-  private rightDoorFrame!: Phaser.GameObjects.Rectangle;
+  private _leftDoorFrame!: Phaser.GameObjects.Rectangle;
+  private _rightDoorFrame!: Phaser.GameObjects.Rectangle;
   
   // Enemy visuals in doorways (shown when light/wrangler aimed at door)
   private scoutInDoorway!: Phaser.GameObjects.Container;
@@ -157,7 +156,7 @@ export class GameScene extends Phaser.Scene {
   private metalText!: Phaser.GameObjects.Text;
   private sentryText!: Phaser.GameObjects.Text;
   private wranglerText!: Phaser.GameObjects.Text;
-  private controlsText!: Phaser.GameObjects.Text;
+  private _controlsText!: Phaser.GameObjects.Text;
   private alertText!: Phaser.GameObjects.Text;
   private alertContainer!: Phaser.GameObjects.Container;
   private alertBg!: Phaser.GameObjects.Rectangle;
@@ -436,7 +435,7 @@ export class GameScene extends Phaser.Scene {
     const height = 720;
     
     // Dark room background
-    this.roomBackground = this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
+    this._roomBackground = this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
     
     // Floor
     this.add.rectangle(width / 2, height - 80, width, 160, 0x2d2d44);
@@ -449,14 +448,14 @@ export class GameScene extends Phaser.Scene {
     }
     
     // Intel briefcase (center back)
-    const intel = this.add.rectangle(width / 2, height - 200, 60, 40, 0xcc5500);
+    this.add.rectangle(width / 2, height - 200, 60, 40, 0xcc5500);
     this.add.text(width / 2, height - 200, 'INTEL', {
       fontSize: '12px',
       color: '#ffffff',
     }).setOrigin(0.5);
     
     // Left doorway
-    this.leftDoorFrame = this.add.rectangle(120, height / 2 - 50, 140, 280, 0x0d0d1a);
+    this._leftDoorFrame = this.add.rectangle(120, height / 2 - 50, 140, 280, 0x0d0d1a);
     this.leftDoor = this.add.rectangle(120, height / 2 - 50, 120, 260, 0x000000);
     this.add.text(120, height / 2 - 180, 'LEFT DOOR', {
       fontSize: '14px',
@@ -464,7 +463,7 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     
     // Right doorway
-    this.rightDoorFrame = this.add.rectangle(width - 120, height / 2 - 50, 140, 280, 0x0d0d1a);
+    this._rightDoorFrame = this.add.rectangle(width - 120, height / 2 - 50, 140, 280, 0x0d0d1a);
     this.rightDoor = this.add.rectangle(width - 120, height / 2 - 50, 120, 260, 0x000000);
     this.add.text(width - 120, height / 2 - 180, 'RIGHT DOOR', {
       fontSize: '14px',
@@ -866,7 +865,7 @@ export class GameScene extends Phaser.Scene {
     });
     
     // Controls hint (bottom)
-    this.controlsText = this.add.text(640, 700, 
+    this._controlsText = this.add.text(640, 700, 
       'F: Wrangler | HOLD A/D: Aim Left/Right | SPACE: Fire | TAB: Cameras | R: Build/Repair/Upgrade', {
       fontFamily: 'Courier New, monospace',
       fontSize: '14px',
@@ -2272,7 +2271,7 @@ export class GameScene extends Phaser.Scene {
   /**
    * Pick up lure from current room
    */
-  private pickupLure(): void {
+  private _pickupLure(): void {
     if (this.activeLure && this.activeLure.node === this.currentRoom) {
       this.activeLure = null;
       this.showAlert('Lure picked up', 0xffff00);
@@ -4042,8 +4041,8 @@ export class GameScene extends Phaser.Scene {
     if (!keyboard) return;
     
     // Store key references for hold-to-aim (Phaser keys as backup)
-    this.keyA = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
-    this.keyD = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    this._keyA = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+    this._keyD = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
     
     // Use native DOM events for A/D keys - more reliable with browser extensions
     // This fixes issues where Phaser doesn't receive keyup events
@@ -5330,11 +5329,13 @@ export class GameScene extends Phaser.Scene {
     }
     
     const containers = [this.cameraFeedEnemy, this.cameraFeedEnemy2, this.cameraFeedEnemy3];
-    const basePositions = [
+    // Base positions for reference (used in dynamic positioning below)
+    const _basePositions = [
       { x: 300, y: 370 },  // Slot 1 (left)
       { x: 420, y: 370 },  // Slot 2 (center)
       { x: 530, y: 380 },  // Slot 3 (right, slightly back)
     ];
+    void _basePositions; // Kept for reference
     
     // Hide all enemy containers first
     containers.forEach(c => c.setVisible(false));
@@ -5501,17 +5502,19 @@ export class GameScene extends Phaser.Scene {
   
   /**
    * Draw a small Heavy silhouette for multi-enemy display
+   * @deprecated Handled by main draw function with scaling
    */
-  private drawHeavySilhouetteSmall(isLured: boolean): void {
+  private _drawHeavySilhouetteSmall(_isLured: boolean): void {
     // This is handled by the main draw function with scaling
   }
   
   /**
    * Update secondary enemy displays when multiple enemies in room
+   * @deprecated Future: could add more container slots for rendering multiple silhouettes
    */
-  private updateSecondaryEnemyDisplays(
-    additionalEnemies: Array<{ type: string; label: string; color: string }>,
-    startX: number,
+  private _updateSecondaryEnemyDisplays(
+    _additionalEnemies: Array<{ type: string; label: string; color: string }>,
+    _startX: number,
     _demomanHeadPresent: boolean
   ): void {
     // For now, the label shows all enemies - we show the primary in the main slot
@@ -6646,7 +6649,7 @@ export class GameScene extends Phaser.Scene {
     
     // Update camera repair timers
     const now = Date.now();
-    this.cameraStates.forEach((state, camId) => {
+    this.cameraStates.forEach((state, _camId) => {
       if (state.destroyed && state.destroyedUntil <= now) {
         state.destroyed = false;
         state.destroyedBy = null;
@@ -6773,8 +6776,9 @@ export class GameScene extends Phaser.Scene {
   
   /**
    * Update sniper charge visual overlay
+   * @deprecated Visual handled inline in update loop
    */
-  private updateSniperChargeVisual(): void {
+  private _updateSniperChargeVisual(): void {
     if (!this.sniperChargeOverlay) return;
     
     if (this.sniper.isChargingHeadshot() && !this.isCameraMode && !this.isTeleported) {

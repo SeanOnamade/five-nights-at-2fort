@@ -371,7 +371,7 @@ export class SniperEnemy extends EnemyBase {
   /**
    * Respawn Sniper at a safe room (not halls)
    */
-  protected respawn(): void {
+  public respawn(): void {
     // Pick random SAFE spawn room (not halls - prevents unfair instant death)
     this.currentNode = SniperEnemy.SPAWN_ROOMS[
       Math.floor(Math.random() * SniperEnemy.SPAWN_ROOMS.length)
