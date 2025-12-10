@@ -66,56 +66,95 @@ export class BootScene extends Phaser.Scene {
     corners.lineBetween(width - 30, height - 30, width - 30, height - 80);
     corners.lineBetween(width - 30, height - 30, width - 80, height - 30);
     
-    // ===== TITLE =====
+    // ===== TITLE (top) =====
     // Title glow
-    this.add.text(width / 2, 110, 'TWOFORT NIGHTS', {
+    this.add.text(width / 2, 100, 'FIVE NIGHTS AT 2FORT', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '64px',
+      fontSize: '56px',
       color: '#ff4400',
       fontStyle: 'bold',
-    }).setOrigin(0.5).setAlpha(0.25).setScale(1.03);
+    }).setOrigin(0.5).setAlpha(0.2).setScale(1.02);
     
-    this.add.text(width / 2, 110, 'TWOFORT NIGHTS', {
+    this.add.text(width / 2, 100, 'FIVE NIGHTS AT 2FORT', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '64px',
+      fontSize: '56px',
       color: '#ff6600',
       fontStyle: 'bold',
     }).setOrigin(0.5);
     
     // Subtitle
-    this.add.text(width / 2, 165, 'A TF2-Inspired FNAF Experience', {
+    this.add.text(width / 2, 155, 'A TF2-Inspired FNAF Experience', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#666688',
-    }).setOrigin(0.5);
-    
-    // Decorative line under title
-    const titleLine = this.add.graphics();
-    titleLine.lineStyle(2, 0xff6600, 0.5);
-    titleLine.lineBetween(width / 2 - 200, 185, width / 2 + 200, 185);
-    titleLine.fillStyle(0xff6600, 0.8);
-    titleLine.fillCircle(width / 2, 185, 4);
-    
-    // ===== NIGHT SELECTION =====
-    this.add.text(width / 2, 220, 'SELECT NIGHT', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#66aa66',
-      fontStyle: 'bold',
+      fontSize: '13px',
+      color: '#555566',
     }).setOrigin(0.5);
     
     // Start button text (declared early so night buttons can reference it)
     let startText: Phaser.GameObjects.Text;
     
-    // Night buttons (1-5 regular, 6 is custom night) - centered
+    // ===== CONTROLS LEGEND (left side with background) =====
+    const controlsX = 115;
+    const controlsY = 350;
+    
+    // Background panel for controls
+    const controlsBg = this.add.rectangle(controlsX, controlsY, 150, 170, 0x0a0f15, 0.9);
+    controlsBg.setStrokeStyle(1, 0x2a3545);
+    
+    this.add.text(controlsX, controlsY - 65, 'CONTROLS', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '12px',
+      color: '#5588aa',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    
+    const controlsList = [
+      ['F', 'Wrangler'],
+      ['A/D', 'Aim'],
+      ['SPACE', 'Fire'],
+      ['TAB', 'Cameras'],
+      ['R', 'Build'],
+    ];
+    
+    controlsList.forEach((ctrl, i) => {
+      const cy = controlsY - 35 + i * 26;
+      // Key
+      const keyBg = this.add.rectangle(controlsX - 35, cy, 40, 20, 0x152535);
+      keyBg.setStrokeStyle(1, 0x3a4a5a);
+      this.add.text(controlsX - 35, cy, ctrl[0], {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '11px',
+        color: '#7799bb',
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+      // Action
+      this.add.text(controlsX + 5, cy, ctrl[1], {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '11px',
+        color: '#556677',
+      }).setOrigin(0, 0.5);
+    });
+    
+    // ===== NIGHT SELECTION (bottom area) =====
+    const nightSelY = 580;
+    
+    this.add.text(width / 2, nightSelY - 50, 'SELECT NIGHT', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '14px',
+      color: '#446644',
+    }).setOrigin(0.5);
+    
+    // Night buttons - compact row at bottom
     const nightButtons: Phaser.GameObjects.Container[] = [];
     const nights = [1, 2, 3, 4, 5, 6];
-    const totalWidth = nights.length * 92 - 12;
-    const buttonStartX = (width - totalWidth) / 2 + 40;
-    const buttonY = 285;
+    const nightBtnWidth = 60;
+    const nightBtnGap = 12;
+    const totalNightWidth = nights.length * nightBtnWidth + (nights.length - 1) * nightBtnGap;
+    const buttonStartX = (width - totalNightWidth) / 2 + nightBtnWidth / 2;
+    const buttonY = nightSelY;
     
-    // Custom night enemy toggles (all OFF by default for QoL)
-    const customNightEnemies = {
+    // Custom night enemy toggles - load from localStorage or default to OFF
+    const savedSettings = localStorage.getItem('customNightEnemies');
+    const customNightEnemies = savedSettings ? JSON.parse(savedSettings) : {
       scout: false,
       soldier: false,
       demoman: false,
@@ -128,39 +167,34 @@ export class BootScene extends Phaser.Scene {
     let customNightUI: Phaser.GameObjects.Container | null = null;
     
     nights.forEach((night, index) => {
-      const x = buttonStartX + index * 92;
+      const x = buttonStartX + index * (nightBtnWidth + nightBtnGap);
       const isCustomNight = night === 6;
       const isUnlocked = night <= 6;
       
-      // All nights use same green color scheme
+      // Compact green color scheme
       const glowColor = 0x44ff44;
-      const bgColor = 0x112211;
+      const bgColor = 0x0f1a0f;
       const strokeColor = 0x336633;
       const textColor = '#44aa44';
       
       // Button glow (for selected)
-      const btnGlow = this.add.rectangle(x, buttonY, 85, 70, glowColor, 0);
+      const btnGlow = this.add.rectangle(x, buttonY, nightBtnWidth + 4, 44, glowColor, 0);
       
-      // Button background
-      const btnBg = this.add.rectangle(x, buttonY, 80, 65, isUnlocked ? bgColor : 0x111111);
+      // Button background - compact
+      const btnBg = this.add.rectangle(x, buttonY, nightBtnWidth, 40, isUnlocked ? bgColor : 0x111111);
       btnBg.setStrokeStyle(2, isUnlocked ? strokeColor : 0x222222);
       
       // Night number or "C" for custom
-      const nightNum = this.add.text(x, buttonY - 8, isCustomNight ? 'C' : `${night}`, {
+      const nightNum = this.add.text(x, buttonY, isCustomNight ? 'C' : `${night}`, {
         fontFamily: 'Courier New, monospace',
-        fontSize: '32px',
+        fontSize: '22px',
         color: isUnlocked ? textColor : '#333333',
         fontStyle: 'bold',
       }).setOrigin(0.5);
       
-      // Label
-      const label = this.add.text(x, buttonY + 22, isCustomNight ? 'CUSTOM' : 'NIGHT', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '10px',
-        color: isUnlocked ? '#336633' : '#222222',
-      }).setOrigin(0.5);
+      // No label - just the number/letter
       
-      const container = this.add.container(0, 0, [btnGlow, btnBg, nightNum, label]);
+      const container = this.add.container(0, 0, [btnGlow, btnBg, nightNum]);
       nightButtons.push(container);
       
       if (isUnlocked) {
@@ -230,130 +264,94 @@ export class BootScene extends Phaser.Scene {
       }
     });
     
-    // ===== QUICK CONTROLS =====
-    const controlsBg = this.add.rectangle(width / 2, 400, 550, 90, 0x0a0a15, 0.9);
-    controlsBg.setStrokeStyle(1, 0x333355);
-    
-    const controls = [
-      ['F', 'Wrangler', 'A/D', 'Aim', 'SPACE', 'Fire'],
-      ['TAB', 'Cameras', 'R', 'Build/Repair', 'ESC', 'Pause'],
-    ];
-    
-    controls.forEach((row, rowIndex) => {
-      for (let i = 0; i < row.length; i += 2) {
-        const x = width / 2 - 220 + (i / 2) * 150;
-        const y = 375 + rowIndex * 28;
-        
-        // Key
-        const keyBg = this.add.rectangle(x, y, 40, 20, 0x1a1a2a);
-        keyBg.setStrokeStyle(1, 0x444466);
-        this.add.text(x, y, row[i], {
-          fontFamily: 'Courier New, monospace',
-          fontSize: '11px',
-          color: '#88aacc',
-          fontStyle: 'bold',
-        }).setOrigin(0.5);
-        
-        // Action
-        this.add.text(x + 55, y, row[i + 1], {
-          fontFamily: 'Courier New, monospace',
-          fontSize: '11px',
-          color: '#667788',
-        }).setOrigin(0, 0.5);
-      }
-    });
-    
-    // ===== CUSTOM NIGHT UI =====
-    customNightUI = this.add.container(width / 2, 460);
+    // ===== CUSTOM NIGHT UI (shown when C is selected - ABOVE night selection) =====
+    customNightUI = this.add.container(width / 2, nightSelY - 75);
     customNightUI.setVisible(false);
     
-    // Sleek panel
-    const customBg = this.add.rectangle(0, 0, 540, 105, 0x0a0f0a, 0.95);
-    customBg.setStrokeStyle(3, 0x44aa44);
+    // Brighter panel for custom night
+    const customBg = this.add.rectangle(0, 0, 460, 60, 0x101815, 0.98);
+    customBg.setStrokeStyle(2, 0x44aa44);
     customNightUI.add(customBg);
     
-    // Inner border for depth
-    const customInner = this.add.rectangle(0, 0, 530, 95, 0x000000, 0);
-    customInner.setStrokeStyle(1, 0x336633);
-    customNightUI.add(customInner);
-    
-    const customTitle = this.add.text(0, -42, '◆ CONFIGURE THREATS ◆', {
+    const customTitle = this.add.text(0, -24, 'ENABLE THREATS:', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '13px',
-      color: '#66ff66',
+      fontSize: '11px',
+      color: '#66cc66',
       fontStyle: 'bold',
     }).setOrigin(0.5);
     customNightUI.add(customTitle);
     
     const enemyTypes = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy'] as const;
     const enemyColors: Record<string, number> = {
-      scout: 0x3366aa,
-      soldier: 0x224488,
-      demoman: 0x00aa33,
-      heavy: 0x883333,
-      sniper: 0x4488cc,
-      spy: 0x444466,
+      scout: 0x7755aa,   // Purple for scout
+      soldier: 0x6688aa,
+      demoman: 0x44aa55,
+      heavy: 0xaa6644,
+      sniper: 0x5599cc,
+      spy: 0x666677,
     };
     const enemyLabels: Record<string, string> = {
-      scout: 'SCOUT',
-      soldier: 'SOLDIER',
-      demoman: 'DEMO',
-      heavy: 'HEAVY',
-      sniper: 'SNIPER',
+      scout: 'SCT',
+      soldier: 'SOL',
+      demoman: 'DEM',
+      heavy: 'HVY',
+      sniper: 'SNP',
       spy: 'SPY',
     };
     
     enemyTypes.forEach((enemy, i) => {
-      const ex = -225 + i * 85;
-      const ey = 5;
+      const ex = -182 + i * 73;
+      const ey = 10;
       
-      // Toggle button with better styling - starts OFF by default
-      const toggleBg = this.add.rectangle(ex, ey, 72, 58, enemyColors[enemy], 0.4);
-      toggleBg.setStrokeStyle(2, 0x333333);
+      // Brighter toggle button - starts OFF by default
+      const toggleBg = this.add.rectangle(ex, ey, 60, 30, enemyColors[enemy], 0.5);
+      toggleBg.setStrokeStyle(1, 0x555555);
       toggleBg.setInteractive({ useHandCursor: true });
       
-      const toggleLabel = this.add.text(ex, ey - 14, enemyLabels[enemy], {
+      const toggleLabel = this.add.text(ex, ey, enemyLabels[enemy], {
         fontFamily: 'Courier New, monospace',
-        fontSize: '11px',
-        color: '#ffffff',
-        fontStyle: 'bold',
-      }).setOrigin(0.5);
-      
-      const toggleStatus = this.add.text(ex, ey + 14, 'OFF', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '15px',
-        color: '#666666',
+        fontSize: '12px',
+        color: '#888888',
         fontStyle: 'bold',
       }).setOrigin(0.5);
       
       toggleBg.on('pointerdown', () => {
         customNightEnemies[enemy] = !customNightEnemies[enemy];
+        // Save to localStorage
+        localStorage.setItem('customNightEnemies', JSON.stringify(customNightEnemies));
+        
         if (customNightEnemies[enemy]) {
-          toggleBg.setStrokeStyle(2, 0x44ff44);
+          toggleBg.setStrokeStyle(2, 0x66ff66);
           toggleBg.setAlpha(1);
-          toggleStatus.setText('ON');
-          toggleStatus.setColor('#44ff44');
+          toggleLabel.setColor('#ffffff');
         } else {
-          toggleBg.setStrokeStyle(2, 0x333333);
-          toggleBg.setAlpha(0.4);
-          toggleStatus.setText('OFF');
-          toggleStatus.setColor('#666666');
+          toggleBg.setStrokeStyle(1, 0x555555);
+          toggleBg.setAlpha(0.5);
+          toggleLabel.setColor('#888888');
         }
       });
       
-      customNightUI!.add([toggleBg, toggleLabel, toggleStatus]);
+      // Initialize visual state based on saved settings
+      if (customNightEnemies[enemy]) {
+        toggleBg.setStrokeStyle(2, 0x66ff66);
+        toggleBg.setAlpha(1);
+        toggleLabel.setColor('#ffffff');
+      }
+      
+      customNightUI!.add([toggleBg, toggleLabel]);
     });
     
-    // ===== START BUTTON =====
-    const startBtnGlow = this.add.rectangle(width / 2, 530, 295, 60, 0x44ff44, 0.1);
-    const startBtnBg = this.add.rectangle(width / 2, 530, 280, 55, 0x1a331a);
+    // ===== START BUTTON (center of screen - prominent) =====
+    const startBtnY = 320;
+    const startBtnGlow = this.add.rectangle(width / 2, startBtnY, 340, 70, 0x44ff44, 0.08);
+    const startBtnBg = this.add.rectangle(width / 2, startBtnY, 320, 60, 0x0f1f0f);
     startBtnBg.setStrokeStyle(3, 0x44aa44);
     startBtnBg.setInteractive({ useHandCursor: true });
     
-    startText = this.add.text(width / 2, 530, '▶ START NIGHT 1', {
+    startText = this.add.text(width / 2, startBtnY, '▶ START NIGHT 1', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#66ff66',
+      fontSize: '26px',
+      color: '#55dd55',
       fontStyle: 'bold',
     }).setOrigin(0.5);
     
@@ -406,29 +404,54 @@ export class BootScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-SPACE', startGame);
     this.input.keyboard?.on('keydown-ENTER', startGame);
     
-    // ===== HOW TO PLAY =====
-    const tutorialBtn = this.add.text(width / 2 - 100, 580, '[ ? ]  HOW TO PLAY', {
+    // ===== SIDE MENU BUTTONS (right side - with button backgrounds) =====
+    const menuX = width - 115;
+    
+    // How to Play button
+    const tutorialBtnBg = this.add.rectangle(menuX, 330, 130, 32, 0x0a1520);
+    tutorialBtnBg.setStrokeStyle(1, 0x334455);
+    tutorialBtnBg.setInteractive({ useHandCursor: true });
+    const tutorialBtnText = this.add.text(menuX, 330, '? HOW TO PLAY', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#557799',
+      fontSize: '11px',
+      color: '#5588aa',
+      fontStyle: 'bold',
     }).setOrigin(0.5);
-    tutorialBtn.setInteractive({ useHandCursor: true });
     
-    tutorialBtn.on('pointerover', () => tutorialBtn.setColor('#88bbdd'));
-    tutorialBtn.on('pointerout', () => tutorialBtn.setColor('#557799'));
-    tutorialBtn.on('pointerdown', () => this.showTutorial());
+    tutorialBtnBg.on('pointerover', () => {
+      tutorialBtnBg.setFillStyle(0x152535);
+      tutorialBtnBg.setStrokeStyle(1, 0x5588aa);
+      tutorialBtnText.setColor('#88bbdd');
+    });
+    tutorialBtnBg.on('pointerout', () => {
+      tutorialBtnBg.setFillStyle(0x0a1520);
+      tutorialBtnBg.setStrokeStyle(1, 0x334455);
+      tutorialBtnText.setColor('#5588aa');
+    });
+    tutorialBtnBg.on('pointerdown', () => this.showTutorial());
     
-    // ===== EXTRAS =====
-    const extrasBtn = this.add.text(width / 2 + 100, 580, '[ ★ ]  EXTRAS', {
+    // Gallery button
+    const extrasBtnBg = this.add.rectangle(menuX, 375, 130, 32, 0x1a1510);
+    extrasBtnBg.setStrokeStyle(1, 0x554433);
+    extrasBtnBg.setInteractive({ useHandCursor: true });
+    const extrasBtnText = this.add.text(menuX, 375, '★ GALLERY', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#997755',
+      fontSize: '11px',
+      color: '#aa8855',
+      fontStyle: 'bold',
     }).setOrigin(0.5);
-    extrasBtn.setInteractive({ useHandCursor: true });
     
-    extrasBtn.on('pointerover', () => extrasBtn.setColor('#ddaa88'));
-    extrasBtn.on('pointerout', () => extrasBtn.setColor('#997755'));
-    extrasBtn.on('pointerdown', () => this.showExtras());
+    extrasBtnBg.on('pointerover', () => {
+      extrasBtnBg.setFillStyle(0x2a2520);
+      extrasBtnBg.setStrokeStyle(1, 0xaa8855);
+      extrasBtnText.setColor('#ddaa77');
+    });
+    extrasBtnBg.on('pointerout', () => {
+      extrasBtnBg.setFillStyle(0x1a1510);
+      extrasBtnBg.setStrokeStyle(1, 0x554433);
+      extrasBtnText.setColor('#aa8855');
+    });
+    extrasBtnBg.on('pointerdown', () => this.showExtras());
     
     // Create tutorial overlay
     this.createTutorialOverlay();
@@ -457,9 +480,9 @@ export class BootScene extends Phaser.Scene {
     overlay.setInteractive();
     this.tutorialContainer.add(overlay);
     
-    // Main panel
-    const panelWidth = 680;
-    const panelHeight = 440;
+    // Main panel - wider to fit content
+    const panelWidth = 780;
+    const panelHeight = 460;
     const panelX = width / 2;
     const panelY = height / 2;
     
@@ -481,9 +504,9 @@ export class BootScene extends Phaser.Scene {
     const divider = this.add.rectangle(panelX, panelY - panelHeight/2 + 45, panelWidth - 40, 1, 0x334455);
     this.tutorialContainer.add(divider);
     
-    // Layout
-    const leftX = panelX - 165;
-    const rightX = panelX + 170;
+    // Layout - wider spacing
+    const leftX = panelX - 180;
+    const rightX = panelX + 200;
     const contentY = panelY - panelHeight/2 + 60;
     
     // ===== LEFT COLUMN =====
@@ -536,40 +559,40 @@ export class BootScene extends Phaser.Scene {
     y += 22;
     
     const enemies = [
-      { name: 'SCOUT', color: '#4488ff', info: 'Fast · Left door' },
+      { name: 'SCOUT', color: '#9966cc', info: 'Fast · Left door' },  // Purple
       { name: 'SOLDIER', color: '#886644', info: 'Rockets · Right door' },
       { name: 'DEMO', color: '#44ff44', info: 'N2+ Eye = incoming!' },
       { name: 'HEAVY', color: '#ff4444', info: 'N3+ Lure only!' },
-      { name: 'SNIPER', color: '#4477ff', info: 'N4+ Lure or 2 shots' },
+      { name: 'SNIPER', color: '#4488cc', info: 'N4+ Lure or 2 shots' },
       { name: 'SPY', color: '#aa6644', info: 'N5+ See below' },
     ];
     
     enemies.forEach(enemy => {
-      const dot = this.add.circle(rightX - 140, y + 5, 4, parseInt(enemy.color.slice(1), 16));
+      const dot = this.add.circle(rightX - 155, y + 5, 4, parseInt(enemy.color.slice(1), 16));
       this.tutorialContainer.add(dot);
-      this.addLine(rightX - 128, y, enemy.name, enemy.color, true);
-      this.addLine(rightX - 55, y, enemy.info, '#777788');
+      this.addLine(rightX - 143, y, enemy.name, enemy.color, true);
+      this.addLine(rightX - 65, y, enemy.info, '#777788');
       y += 18;
     });
     y += 12;
     
     // NIGHT 3+ box
-    const n3Box = this.add.rectangle(rightX, y + 28, 290, 48, 0x101018);
+    const n3Box = this.add.rectangle(rightX - 5, y + 28, 320, 48, 0x101018);
     n3Box.setStrokeStyle(1, 0x6644aa);
     this.tutorialContainer.add(n3Box);
-    this.addLine(rightX - 135, y + 12, '> N3+ TELEPORTER', '#aa88cc', true);
-    this.addLine(rightX - 135, y + 28, 'Place LURES (50m)', '#8877aa');
-    this.addLine(rightX - 135, y + 42, 'Heavy/Sniper lured 3x faster', '#8877aa');
+    this.addLine(rightX - 155, y + 12, '> N3+ TELEPORTER', '#aa88cc', true);
+    this.addLine(rightX - 155, y + 28, 'Place LURES (50m)', '#8877aa');
+    this.addLine(rightX - 155, y + 42, 'Heavy/Sniper lured 3x faster', '#8877aa');
     y += 68;
     
     // SPY box
-    const spyBox = this.add.rectangle(rightX, y + 32, 290, 55, 0x18120c);
+    const spyBox = this.add.rectangle(rightX - 5, y + 32, 320, 55, 0x18120c);
     spyBox.setStrokeStyle(1, 0xaa7744);
     this.tutorialContainer.add(spyBox);
-    this.addLine(rightX - 135, y + 10, '> SPY: Two modes (not both!)', '#ddaa77', true);
-    this.addLine(rightX - 135, y + 26, '• DISGUISE: Fake enemy on cams', '#aa9966');
-    this.addLine(rightX - 135, y + 40, '• SAP: May sap sentry if you TP', '#aa9966');
-    this.addLine(rightX - 135, y + 54, 'Sapper? Press SPACE x2!', '#ffcc88');
+    this.addLine(rightX - 155, y + 10, '> SPY: Two modes (not both!)', '#ddaa77', true);
+    this.addLine(rightX - 155, y + 26, '• DISGUISE: Fake enemy on cams', '#aa9966');
+    this.addLine(rightX - 155, y + 40, '• SAP: May sap if you TP away', '#aa9966');
+    this.addLine(rightX - 155, y + 54, 'Sapper? Press SPACE x2!', '#ffcc88');
     
     // Close instruction
     const closeText = this.add.text(panelX, panelY + panelHeight/2 - 15, '[ click to close ]', {
@@ -714,32 +737,35 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.extrasContainer.add(subText);
     
-    // All 5 characters
+    // All 5 real characters
     const characters = [
-      { name: 'SCOUT', color: 0x5599dd, desc: 'Fast Attacker', night: 1 },
+      { name: 'SCOUT', color: 0x9966cc, desc: 'Fast Attacker', night: 1 },  // Purple
       { name: 'SOLDIER', color: 0xaa5544, desc: 'Siege Specialist', night: 1 },
       { name: 'DEMOMAN', color: 0x44cc44, desc: 'Ghostly Charger', night: 2 },
       { name: 'HEAVY', color: 0xaa7744, desc: 'Unstoppable Tank', night: 3 },
       { name: 'SNIPER', color: 0x5588cc, desc: 'Long-Range Threat', night: 4 },
     ];
     
+    // Spy disguises as a random character each time gallery opens!
+    const spyDisguiseIndex = Math.floor(Math.random() * 5);
+    const spyDisguise = characters[spyDisguiseIndex];
+    
     // Draw 3 cards in first row (centered on screen width 1280)
-    // Card width = 180, spacing = 40, total = 180*3 + 40*2 = 620
-    // Screen center = 640, so first card center = 640 - 220 = 420
     for (let i = 0; i < 3; i++) {
       const x = 420 + i * 220;  // 420, 640, 860
-      this.drawCharacterCard(x, 250, characters[i].name, characters[i].color, characters[i].desc, characters[i].night);
+      this.drawCharacterCard(x, 250, characters[i].name, characters[i].color, characters[i].night);
     }
     
-    // Draw 2 cards in second row (centered)
-    // Two cards = 180*2 + 40 = 400, so offset from center = 200
+    // Draw 2 cards in second row + Spy card (generated dynamically in showExtras)
     for (let i = 3; i < 5; i++) {
-      const x = 530 + (i - 3) * 220;  // 530, 750
-      this.drawCharacterCard(x, 480, characters[i].name, characters[i].color, characters[i].desc, characters[i].night);
+      const x = 420 + (i - 3) * 220;  // 420, 640
+      this.drawCharacterCard(x, 480, characters[i].name, characters[i].color, characters[i].night);
     }
+    
+    // SPY card placeholder (actual card generated in regenerateSpyCard each time gallery opens)
   }
   
-  private drawCharacterCard(x: number, y: number, name: string, color: number, desc: string, night: number): void {
+  private drawCharacterCard(x: number, y: number, name: string, color: number, night: number): void {
     // Card background
     const cardBg = this.add.rectangle(x, y, 180, 180, 0x0a0a15);
     cardBg.setStrokeStyle(2, color);
@@ -750,22 +776,14 @@ export class BootScene extends Phaser.Scene {
     this.drawCharacterSilhouette(silhouette, x, y - 15, name, color);
     this.extrasContainer.add(silhouette);
     
-    // Name
-    const nameText = this.add.text(x, y + 65, name, {
+    // Name only (no description tagline)
+    const nameText = this.add.text(x, y + 70, name, {
       fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
+      fontSize: '18px',
       color: `#${color.toString(16).padStart(6, '0')}`,
       fontStyle: 'bold',
     }).setOrigin(0.5);
     this.extrasContainer.add(nameText);
-    
-    // Description
-    const descText = this.add.text(x, y + 82, desc, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#666677',
-    }).setOrigin(0.5);
-    this.extrasContainer.add(descText);
     
     // Night badge
     const nightBadge = this.add.text(x + 75, y - 75, `N${night}`, {
@@ -1532,10 +1550,63 @@ export class BootScene extends Phaser.Scene {
   }
   
   private showExtras(): void {
+    // Regenerate the Spy card with a new random disguise each time
+    this.regenerateSpyCard();
     this.extrasContainer.setVisible(true);
   }
   
   private hideExtras(): void {
     this.extrasContainer.setVisible(false);
+  }
+  
+  // Store spy card elements so we can regenerate them
+  private spyCardElements: Phaser.GameObjects.GameObject[] = [];
+  
+  private regenerateSpyCard(): void {
+    // Remove old spy card elements
+    this.spyCardElements.forEach(el => el.destroy());
+    this.spyCardElements = [];
+    
+    // Pick a random character to disguise as
+    const characters = [
+      { name: 'SCOUT', color: 0x9966cc },  // Purple
+      { name: 'SOLDIER', color: 0xaa5544 },
+      { name: 'DEMOMAN', color: 0x44cc44 },
+      { name: 'HEAVY', color: 0xaa7744 },
+      { name: 'SNIPER', color: 0x5588cc },
+    ];
+    const disguise = characters[Math.floor(Math.random() * characters.length)];
+    
+    // Create new spy card at position (860, 480)
+    const x = 860, y = 480;
+    
+    const cardBg = this.add.rectangle(x, y, 180, 180, 0x050508);
+    cardBg.setStrokeStyle(2, 0x333333);
+    this.extrasContainer.add(cardBg);
+    this.spyCardElements.push(cardBg);
+    
+    const silhouette = this.add.graphics();
+    this.drawCharacterSilhouette(silhouette, x, y - 15, disguise.name, disguise.color);
+    this.extrasContainer.add(silhouette);
+    this.spyCardElements.push(silhouette);
+    
+    const nameText = this.add.text(x, y + 65, '???', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '20px',
+      color: '#444444',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.extrasContainer.add(nameText);
+    this.spyCardElements.push(nameText);
+    
+    const nightBadge = this.add.text(x + 75, y - 75, 'N5', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '11px',
+      color: '#444444',
+      backgroundColor: '#111111',
+      padding: { left: 4, right: 4, top: 2, bottom: 2 },
+    }).setOrigin(0.5);
+    this.extrasContainer.add(nightBadge);
+    this.spyCardElements.push(nightBadge);
   }
 }

@@ -1,4 +1,4 @@
-# TwoFort Nights - AI Reference Guide
+# Five Nights at 2Fort - AI Reference Guide
 
 This document contains all enemy AI parameters and behaviors. **Keep this updated when changing game balance.**
 

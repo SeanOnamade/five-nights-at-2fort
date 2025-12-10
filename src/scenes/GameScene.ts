@@ -5539,6 +5539,42 @@ export class GameScene extends Phaser.Scene {
     // Future: could add more container slots for rendering multiple silhouettes
   }
   
+  /**
+   * Draw character model for jumpscare - reuses camera/gallery poses exactly
+   */
+  private drawJumpscareSilhouette(
+    graphics: Phaser.GameObjects.Graphics,
+    isScout: boolean,
+    isSoldier: boolean,
+    isDemoman: boolean,
+    isHeavy: boolean,
+    isSniper: boolean
+  ): void {
+    graphics.clear();
+    
+    // Use the exact same drawing functions as camera/gallery - no extra overlays
+    if (isScout) {
+      this.drawEnemySilhouette(graphics, 'SCOUT');
+    } else if (isSoldier) {
+      this.drawEnemySilhouette(graphics, 'SOLDIER');
+    } else if (isDemoman) {
+      this.drawEnemySilhouette(graphics, 'DEMOMAN_BODY');
+    } else if (isHeavy) {
+      this.drawHeavySilhouette(graphics, false);
+    } else if (isSniper) {
+      this.drawSniperSilhouette(graphics, false);
+    } else {
+      // Default - generic figure
+      graphics.fillStyle(0x444444, 1);
+      graphics.fillCircle(0, -50, 30);
+      graphics.fillStyle(0xff0000, 1);
+      graphics.fillCircle(-10, -55, 8);
+      graphics.fillCircle(10, -55, 8);
+      graphics.fillStyle(0x444444, 1);
+      graphics.fillRect(-35, -20, 70, 90);
+    }
+  }
+  
   // ============================================
   // ENEMY EVENT HANDLERS
   // ============================================
@@ -5994,169 +6030,9 @@ export class GameScene extends Phaser.Scene {
     const jumpscareContainer = this.add.container(640, 360);
     this.endScreen.add(jumpscareContainer);
     
-    // Enemy silhouette - menacing shape
+    // Draw proper character model for jumpscare
     const enemyGraphics = this.add.graphics();
-    if (isScout) {
-      // Scout - lean, angular, fast-looking with baseball cap
-      enemyGraphics.fillStyle(0x3366aa, 1);
-      // Head
-      enemyGraphics.fillCircle(0, -80, 35);
-      // Baseball cap
-      enemyGraphics.fillStyle(0x2244aa, 1);
-      enemyGraphics.fillTriangle(-45, -90, 15, -90, -50, -70);
-      // Glowing eyes
-      enemyGraphics.fillStyle(0xff0000, 1);
-      enemyGraphics.fillCircle(-12, -85, 10);
-      enemyGraphics.fillCircle(12, -85, 10);
-      enemyGraphics.fillStyle(0xffffff, 1);
-      enemyGraphics.fillCircle(-14, -87, 3);
-      enemyGraphics.fillCircle(10, -87, 3);
-      // Body - lean, athletic
-      enemyGraphics.fillStyle(0x3366aa, 1);
-      enemyGraphics.fillTriangle(-35, -45, 35, -45, 0, 90);
-      // Arms reaching out menacingly
-      enemyGraphics.fillRect(-90, -35, 55, 15);
-      enemyGraphics.fillCircle(-95, -27, 10);
-      enemyGraphics.fillRect(35, -35, 55, 15);
-      enemyGraphics.fillCircle(95, -27, 10);
-      // Bat in hand
-      enemyGraphics.fillStyle(0x553311, 1);
-      enemyGraphics.fillRect(85, -80, 10, 70);
-    } else if (isDemoman) {
-      // Demoman - HEADLESS body with Eyelander, sword glows bright green
-      // Ghostly aura around body
-      enemyGraphics.fillStyle(0x00ff44, 0.2);
-      enemyGraphics.fillCircle(0, 20, 120);
-      // Body - stocky Scottish build
-      enemyGraphics.fillStyle(0x2a4a2a, 1);
-      enemyGraphics.fillRect(-50, -20, 100, 120);
-      // FLAT NECK STUMP - NO HEAD!
-      enemyGraphics.fillStyle(0x2a4a2a, 1);
-      enemyGraphics.fillRect(-25, -45, 50, 30);
-      // Green ectoplasm dripping from severed neck
-      enemyGraphics.fillStyle(0x00ff44, 0.7);
-      enemyGraphics.fillRect(-18, -55, 36, 15);
-      enemyGraphics.fillStyle(0x00ff44, 0.4);
-      enemyGraphics.fillRect(-12, -65, 24, 12);
-      // Arms
-      enemyGraphics.fillStyle(0x2a4a2a, 1);
-      enemyGraphics.fillRect(-90, -15, 45, 75);
-      enemyGraphics.fillRect(45, -15, 45, 75);
-      // Eyelander sword - BRIGHT GREEN GLOW (no eyes, sword is the threat!)
-      enemyGraphics.fillStyle(0x00ff44, 0.6);
-      enemyGraphics.fillRect(70, -110, 25, 180);  // Outer glow
-      enemyGraphics.fillStyle(0x556677, 1);
-      enemyGraphics.fillRect(78, -105, 12, 170);  // Blade
-      enemyGraphics.fillStyle(0x443322, 1);
-      enemyGraphics.fillRect(73, 60, 22, 35);     // Handle
-      // Bright green sword edge (the menacing part)
-      enemyGraphics.fillStyle(0x00ff44, 1);
-      enemyGraphics.fillRect(76, -100, 5, 160);
-      // Extra glow particles around sword
-      enemyGraphics.fillStyle(0x00ff44, 0.4);
-      enemyGraphics.fillCircle(82, -80, 15);
-      enemyGraphics.fillCircle(82, -40, 12);
-      enemyGraphics.fillCircle(82, 10, 15);
-    } else if (isHeavy) {
-      // Heavy - massive, terrifying, bald head, red eyes
-      // Huge body
-      enemyGraphics.fillStyle(0x553333, 1);
-      enemyGraphics.fillRect(-70, -40, 140, 130);
-      // Massive arms
-      enemyGraphics.fillRect(-110, -30, 45, 100);
-      enemyGraphics.fillRect(65, -30, 45, 100);
-      // Bald head
-      enemyGraphics.fillStyle(0x664433, 1);
-      enemyGraphics.fillCircle(0, -80, 50);
-      // Angry glowing eyes
-      enemyGraphics.fillStyle(0xff0000, 0.8);
-      enemyGraphics.fillCircle(-20, -80, 15);
-      enemyGraphics.fillCircle(20, -80, 15);
-      enemyGraphics.fillStyle(0xff0000, 1);
-      enemyGraphics.fillCircle(-20, -80, 8);
-      enemyGraphics.fillCircle(20, -80, 8);
-      // Minigun being held
-      enemyGraphics.fillStyle(0x333333, 1);
-      enemyGraphics.fillRect(-90, 40, 180, 35);
-      enemyGraphics.fillCircle(-90, 57, 18);
-      enemyGraphics.fillCircle(90, 57, 18);
-      // Muzzle flash
-      enemyGraphics.fillStyle(0xff6600, 0.7);
-      enemyGraphics.fillCircle(-95, 57, 25);
-    } else if (isSoldier) {
-      // Soldier - bulky, intimidating with helmet
-      enemyGraphics.fillStyle(0x886644, 1);
-      // Helmet
-      enemyGraphics.fillRoundedRect(-40, -110, 80, 50, 10);
-      // Face
-      enemyGraphics.fillStyle(0x664422, 1);
-      enemyGraphics.fillCircle(0, -70, 30);
-      // Glowing eyes
-      enemyGraphics.fillStyle(0xff0000, 1);
-      enemyGraphics.fillCircle(-10, -75, 10);
-      enemyGraphics.fillCircle(10, -75, 10);
-      // Body - bulky
-      enemyGraphics.fillStyle(0x886644, 1);
-      enemyGraphics.fillRect(-50, -40, 100, 120);
-      // Arms
-      enemyGraphics.fillRect(-90, -30, 40, 80);
-      enemyGraphics.fillRect(50, -30, 40, 80);
-      // Rocket launcher
-      enemyGraphics.fillStyle(0x444444, 1);
-      enemyGraphics.fillRect(70, -100, 20, 80);
-    } else if (isSniper) {
-      // Sniper - tall, lean, eerie blue glow, holding rifle
-      // Eerie blue glow/aura
-      enemyGraphics.fillStyle(0x3366ff, 0.3);
-      enemyGraphics.fillCircle(0, 0, 120);
-      enemyGraphics.fillStyle(0x4488ff, 0.2);
-      enemyGraphics.fillCircle(0, 0, 150);
-      // Tall lean body
-      enemyGraphics.fillStyle(0x334455, 1);
-      enemyGraphics.fillRect(-30, -40, 60, 130);
-      // Arms
-      enemyGraphics.fillRect(-70, -30, 40, 70);
-      enemyGraphics.fillRect(30, -30, 40, 70);
-      // Head with slouch hat
-      enemyGraphics.fillStyle(0x445566, 1);
-      enemyGraphics.fillCircle(0, -75, 35);
-      // Hat brim
-      enemyGraphics.fillStyle(0x334455, 1);
-      enemyGraphics.fillEllipse(0, -100, 60, 15);
-      enemyGraphics.fillRect(-30, -115, 60, 20);
-      // Aviator glasses - eerie blue glow
-      enemyGraphics.fillStyle(0x4488ff, 0.7);
-      enemyGraphics.fillCircle(-15, -75, 15);
-      enemyGraphics.fillCircle(15, -75, 15);
-      enemyGraphics.fillStyle(0x66aaff, 1);
-      enemyGraphics.fillCircle(-15, -75, 8);
-      enemyGraphics.fillCircle(15, -75, 8);
-      // Sniper rifle - very prominent, aimed at viewer
-      enemyGraphics.fillStyle(0x222222, 1);
-      enemyGraphics.fillRect(60, -120, 15, 180);
-      // Scope
-      enemyGraphics.fillStyle(0x446688, 1);
-      enemyGraphics.fillRect(55, -80, 25, 30);
-      // Scope lens - bright, aimed at you!
-      enemyGraphics.fillStyle(0xff0000, 1);
-      enemyGraphics.fillCircle(67, -65, 10);
-      enemyGraphics.fillStyle(0xff0000, 0.5);
-      enemyGraphics.fillCircle(67, -65, 18);
-      // Laser dot on screen (he's got you!)
-      enemyGraphics.fillStyle(0xff0000, 1);
-      enemyGraphics.fillCircle(0, 0, 5);
-      enemyGraphics.fillStyle(0xff0000, 0.3);
-      enemyGraphics.fillCircle(0, 0, 15);
-    } else {
-      // Default/unknown - generic menacing figure
-      enemyGraphics.fillStyle(0x444444, 1);
-      enemyGraphics.fillCircle(0, -70, 40);
-      enemyGraphics.fillStyle(0xff0000, 1);
-      enemyGraphics.fillCircle(-12, -75, 8);
-      enemyGraphics.fillCircle(12, -75, 8);
-      enemyGraphics.fillStyle(0x444444, 1);
-      enemyGraphics.fillRect(-50, -30, 100, 120);
-    }
+    this.drawJumpscareSilhouette(enemyGraphics, isScout, isSoldier, isDemoman, isHeavy, isSniper);
     jumpscareContainer.add(enemyGraphics);
     
     // Start small and zoom in fast
