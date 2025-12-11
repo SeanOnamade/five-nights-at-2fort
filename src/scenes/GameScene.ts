@@ -255,6 +255,7 @@ export class GameScene extends Phaser.Scene {
   private mobileWranglerButton!: Phaser.GameObjects.Container;
   private mobileActionButton!: Phaser.GameObjects.Container;
   private mobileActionText!: Phaser.GameObjects.Text;
+  private mobileActionCostText!: Phaser.GameObjects.Text;
   private mobileFireButton!: Phaser.GameObjects.Container;
   private mobilePauseButton!: Phaser.GameObjects.Container;
   private mobileLeftZone!: Phaser.GameObjects.Rectangle;
@@ -760,13 +761,43 @@ export class GameScene extends Phaser.Scene {
     sparks.lineBetween(5, -35, 20, -25);
     sparks.lineBetween(-20, -25, -5, -35);
     
-    // BIG SHAKING "SPACE" instruction above sapper
-    const spaceText = this.add.text(0, -80, 'SPACE', {
+    // BIG SHAKING instruction above sapper - "TAP" on mobile, "SPACE" on desktop
+    const instructionText = this.isMobile ? 'TAP' : 'SPACE';
+    const spaceText = this.add.text(0, -80, instructionText, {
       fontFamily: 'Courier New, monospace',
       fontSize: '42px',
       color: '#ff0000',
       fontStyle: 'bold',
     }).setOrigin(0.5);
+    
+    // Make it tappable on mobile - large tap target covering sentry area
+    if (this.isMobile) {
+      // Tap zone covers from above "TAP" text down to below sentry
+      // Container is at (width/2, height-260), sentry is at (width/2, height-220)
+      // So sentry is 40px below this container - extend tap zone to cover it
+      const tapZone = this.add.rectangle(0, 20, 200, 200, 0x000000, 0);
+      tapZone.setInteractive({ useHandCursor: true });
+      tapZone.on('pointerdown', () => {
+        if (this.gameStatus !== 'PLAYING' || this.isPaused) return;
+        if (!this.isSpyEnabled() || !this.spy || !this.spy.isSapping()) return;
+        
+        this.sapperRemoveClicks++;
+        this.sapperRemoveTimeout = 2000;
+        
+        if (this.sapperRemoveClicks >= GAME_CONSTANTS.SPY_SAP_REMOVE_CLICKS) {
+          this.spy.removeSapper();
+          this.sapperIndicator.setVisible(false);
+          this.stopSapperSound();
+          this.showAlert('SAPPER REMOVED!', 0x00ff00);
+          this.sapperRemoveClicks = 0;
+          this.playSound('fire');
+        } else {
+          this.showAlert(`REMOVING SAPPER... (${this.sapperRemoveClicks}/${GAME_CONSTANTS.SPY_SAP_REMOVE_CLICKS})`, 0xffaa00);
+          this.playSound('fire');
+        }
+      });
+      this.sapperIndicator.add(tapZone);
+    }
     
     this.sapperIndicator.add([sapperBody, sapperLight, sparks, spaceText]);
     this.sapperIndicator.setVisible(false);
@@ -790,7 +821,7 @@ export class GameScene extends Phaser.Scene {
       repeat: -1,
     });
     
-    // Shake "SPACE" text violently
+    // Shake instruction text violently
     this.tweens.add({
       targets: spaceText,
       x: -3,
@@ -949,20 +980,20 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.alertContainer.add(this.alertText);
     
-    // Lure duration bar (far top right corner)
-    this.lureBarContainer = this.add.container(1180, 45);
-    this.lureBarContainer.setDepth(150); // Above camera UI (100)
+    // Lure duration bar (to the right of metal count, top left area)
+    this.lureBarContainer = this.add.container(280, 32);
+    this.lureBarContainer.setDepth(200); // Same depth as HUD
     
-    const lureBarBg = this.add.rectangle(0, 0, 150, 30, 0x222222, 0.9);
+    const lureBarBg = this.add.rectangle(0, 0, 120, 24, 0x222222, 0.9);
     lureBarBg.setStrokeStyle(2, 0xffaa00);
     
-    this.lureBarFill = this.add.rectangle(-75 + 1, 0, 148, 26, 0xff8800);
+    this.lureBarFill = this.add.rectangle(-60 + 1, 0, 118, 20, 0xff8800);
     this.lureBarFill.setOrigin(0, 0.5);
     
-    this.lureBarText = this.add.text(0, -22, 'LURE ACTIVE', {
+    this.lureBarText = this.add.text(0, 0, 'LURE', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#ffaa00',
+      fontSize: '10px',
+      color: '#ffffff',
       fontStyle: 'bold',
     }).setOrigin(0.5);
     
@@ -1477,10 +1508,11 @@ export class GameScene extends Phaser.Scene {
       const nodeY = mapOffsetY + cam.mapY * mapScale;
       
       // Outer selection ring (hidden by default)
-      const nodeGlow = this.add.circle(nodeX, nodeY, 22, 0x44aaff, 0);
+      // Node glow (square)
+      const nodeGlow = this.add.rectangle(nodeX, nodeY, 50, 50, 0x44aaff, 0);
       
-      // Node background - circular button
-      const nodeBg = this.add.circle(nodeX, nodeY, 18, 0x0a1830);
+      // Node background - square button (larger, easier to click)
+      const nodeBg = this.add.rectangle(nodeX, nodeY, 44, 44, 0x0a1830);
       nodeBg.setStrokeStyle(2, 0x2266aa);
       nodeBg.setInteractive({ useHandCursor: true });
       
@@ -1500,15 +1532,15 @@ export class GameScene extends Phaser.Scene {
       // Camera number
       const camNum = this.add.text(nodeX, nodeY - 2, `${index + 1}`, {
         fontFamily: 'Courier New, monospace',
-        fontSize: '14px',
+        fontSize: '16px',
         color: '#66aaee',
         fontStyle: 'bold',
       }).setOrigin(0.5);
       
       // Camera name below
-      const nodeLabel = this.add.text(nodeX, nodeY + 28, cam.name, {
+      const nodeLabel = this.add.text(nodeX, nodeY + 32, cam.name, {
         fontFamily: 'Courier New, monospace',
-        fontSize: '8px',
+        fontSize: '9px',
         color: '#5588bb',
       }).setOrigin(0.5);
       
@@ -2107,6 +2139,9 @@ export class GameScene extends Phaser.Scene {
       // Move metal text below room header when teleported (aligned with header at x=40)
       this.metalText.setPosition(40, 60);
       
+      // Move lure bar below metal text when teleported
+      this.lureBarContainer.setPosition(100, 105);
+      
       // Update room view header
       this.roomViewHeader.setText(`ROOM: ${node.replace('_', ' ')}`);
       
@@ -2146,6 +2181,9 @@ export class GameScene extends Phaser.Scene {
       
       // Restore metal text to original position
       this.metalText.setPosition(20, 20);
+      
+      // Restore lure bar to original position (right of metal count)
+      this.lureBarContainer.setPosition(280, 32);
       
       console.log('Engineer returned to Intel room');
       
@@ -4373,18 +4411,26 @@ export class GameScene extends Phaser.Scene {
     });
     this.mobileUI.add(this.mobileWranglerButton);
     
-    // ===== ACTION BUTTON (top left, below HUD) =====
-    this.mobileActionButton = this.add.container(130, 140);
+    // ===== ACTION BUTTON (to the left of CAM button, visible in camera mode too) =====
+    // Spacing: Pause at width-50, CAM at width-145 (95px apart), ACTION at width-240 (95px apart)
+    this.mobileActionButton = this.add.container(width - 240, 50);
     
-    const actionBg = this.add.rectangle(0, 0, 140, 40, 0x224422);
+    const actionBg = this.add.rectangle(0, 0, 80, 40, 0x224422);
     actionBg.setStrokeStyle(2, 0x44aa44);
     actionBg.setInteractive({ useHandCursor: true });
     
-    this.mobileActionText = this.add.text(0, 0, 'BUILD', {
+    // Two-line text: action on top, cost below
+    this.mobileActionText = this.add.text(0, -6, 'BUILD', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
+      fontSize: '11px',
       color: '#88ff88',
       fontStyle: 'bold',
+    }).setOrigin(0.5);
+    
+    this.mobileActionCostText = this.add.text(0, 8, '(100)', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '9px',
+      color: '#88ff88',
     }).setOrigin(0.5);
     
     actionBg.on('pointerdown', () => {
@@ -4396,7 +4442,7 @@ export class GameScene extends Phaser.Scene {
     actionBg.on('pointerover', () => actionBg.setFillStyle(0x336633));
     actionBg.on('pointerout', () => actionBg.setFillStyle(0x224422));
     
-    this.mobileActionButton.add([actionBg, this.mobileActionText]);
+    this.mobileActionButton.add([actionBg, this.mobileActionText, this.mobileActionCostText]);
     this.mobileUI.add(this.mobileActionButton);
     
     // Initial update
@@ -4492,8 +4538,8 @@ export class GameScene extends Phaser.Scene {
     // Wrangler button: only in intel room with sentry
     this.mobileWranglerButton.setVisible(inIntelRoom && this.sentry.exists);
     
-    // Action button: only in intel room (not in camera mode, not teleported)
-    this.mobileActionButton.setVisible(inIntelRoom);
+    // Action button: visible except when teleported (stays visible in camera mode)
+    this.mobileActionButton.setVisible(!this.isTeleported);
     
     // Camera button: available except when teleported
     this.mobileCameraButton.setVisible(!this.isTeleported);
@@ -4540,46 +4586,63 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
-   * Update action button text based on current state
+   * Update action button text based on current state (two-line format)
    */
   private updateMobileActionButton(): void {
     if (!this.isMobile || !this.mobileActionText) return;
     
     const bg = this.mobileActionButton.list[0] as Phaser.GameObjects.Rectangle;
     
-    // Check for sapper
+    // Check for sapper - single line, no cost
     if (this.isSpyEnabled() && this.spy && this.spy.isSapping()) {
-      this.mobileActionText.setText('REMOVE SAP');
+      this.mobileActionText.setText('REMOVE');
+      this.mobileActionText.setY(0); // Center vertically
+      this.mobileActionCostText.setText('SAP');
       this.mobileActionText.setColor('#ff8888');
+      this.mobileActionCostText.setColor('#ff8888');
       bg.setFillStyle(0x442222);
       bg.setStrokeStyle(2, 0xaa4444);
       this.mobileActionButton.setVisible(true);
       return;
     }
     
+    // Reset Y positions for two-line format
+    this.mobileActionText.setY(-6);
+    
     // Normal sentry actions
     if (!this.sentry.exists) {
       const canBuild = this.metal >= GAME_CONSTANTS.BUILD_SENTRY_COST;
-      this.mobileActionText.setText(`BUILD (${GAME_CONSTANTS.BUILD_SENTRY_COST})`);
-      this.mobileActionText.setColor(canBuild ? '#88ff88' : '#888888');
+      this.mobileActionText.setText('BUILD');
+      this.mobileActionCostText.setText(`(${GAME_CONSTANTS.BUILD_SENTRY_COST})`);
+      const color = canBuild ? '#88ff88' : '#888888';
+      this.mobileActionText.setColor(color);
+      this.mobileActionCostText.setColor(color);
       bg.setFillStyle(canBuild ? 0x224422 : 0x222222);
       bg.setStrokeStyle(2, canBuild ? 0x44aa44 : 0x444444);
     } else if (this.sentry.hp < this.sentry.maxHp) {
-      const repairCost = Math.min(this.sentry.maxHp - this.sentry.hp, GAME_CONSTANTS.REPAIR_SENTRY_AMOUNT);
+      const repairCost = Math.ceil(Math.min(this.sentry.maxHp - this.sentry.hp, GAME_CONSTANTS.REPAIR_SENTRY_AMOUNT));
       const canRepair = this.metal >= repairCost;
-      this.mobileActionText.setText(`REPAIR (${repairCost})`);
-      this.mobileActionText.setColor(canRepair ? '#ffaa44' : '#888888');
+      this.mobileActionText.setText('REPAIR');
+      this.mobileActionCostText.setText(`(${repairCost})`);
+      const color = canRepair ? '#ffaa44' : '#888888';
+      this.mobileActionText.setColor(color);
+      this.mobileActionCostText.setColor(color);
       bg.setFillStyle(canRepair ? 0x442a22 : 0x222222);
       bg.setStrokeStyle(2, canRepair ? 0xaa6644 : 0x444444);
     } else if (this.sentry.level < 3) {
       const canUpgrade = this.metal >= GAME_CONSTANTS.UPGRADE_SENTRY_COST;
-      this.mobileActionText.setText(`UPGRADE (${GAME_CONSTANTS.UPGRADE_SENTRY_COST})`);
-      this.mobileActionText.setColor(canUpgrade ? '#88aaff' : '#888888');
+      this.mobileActionText.setText('UPGRADE');
+      this.mobileActionCostText.setText(`(${GAME_CONSTANTS.UPGRADE_SENTRY_COST})`);
+      const color = canUpgrade ? '#88aaff' : '#888888';
+      this.mobileActionText.setColor(color);
+      this.mobileActionCostText.setColor(color);
       bg.setFillStyle(canUpgrade ? 0x222244 : 0x222222);
       bg.setStrokeStyle(2, canUpgrade ? 0x4466aa : 0x444444);
     } else {
-      // Max level, no action needed
-      this.mobileActionText.setText('MAX LEVEL');
+      // Max level, no action needed - single line
+      this.mobileActionText.setText('MAX');
+      this.mobileActionText.setY(0);
+      this.mobileActionCostText.setText('');
       this.mobileActionText.setColor('#44aa44');
       bg.setFillStyle(0x223322);
       bg.setStrokeStyle(2, 0x336633);
@@ -6869,8 +6932,8 @@ export class GameScene extends Phaser.Scene {
       
       // Update lure bar
       const progress = this.activeLure.playTimeRemaining / GAME_CONSTANTS.LURE_DURATION;
-      const fillWidth = Math.max(0, 148 * progress);
-      this.lureBarFill.setSize(fillWidth, 26);
+      const fillWidth = Math.max(0, 118 * progress);
+      this.lureBarFill.setSize(fillWidth, 20);
       this.lureBarText.setText(`LURE ${Math.ceil(this.activeLure.playTimeRemaining / 1000)}s`);
       this.lureBarContainer.setVisible(true);
       
