@@ -202,6 +202,7 @@ export class BootScene extends Phaser.Scene {
       heavy: false,
       sniper: false,
       spy: false,
+      pyro: false,
     };
     
     // Custom night UI container (created later, shown when N6 selected)
@@ -309,8 +310,8 @@ export class BootScene extends Phaser.Scene {
     customNightUI = this.add.container(width / 2, nightSelY - 75);
     customNightUI.setVisible(false);
     
-    // Brighter panel for custom night
-    const customBg = this.add.rectangle(0, 0, 460, 60, 0x101815, 0.98);
+    // Brighter panel for custom night (wider to fit 7 enemies including Pyro)
+    const customBg = this.add.rectangle(0, 0, 520, 60, 0x101815, 0.98);
     customBg.setStrokeStyle(2, 0x44aa44);
     customNightUI.add(customBg);
     
@@ -322,7 +323,7 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5);
     customNightUI.add(customTitle);
     
-    const enemyTypes = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy'] as const;
+    const enemyTypes = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy', 'pyro'] as const;
     const enemyColors: Record<string, number> = {
       scout: 0x7755aa,   // Purple for scout
       soldier: 0x6688aa,
@@ -330,6 +331,7 @@ export class BootScene extends Phaser.Scene {
       heavy: 0xaa6644,
       sniper: 0x5599cc,
       spy: 0x666677,
+      pyro: 0xdd6622,    // Fire orange for Pyro
     };
     const enemyLabels: Record<string, string> = {
       scout: 'SCT',
@@ -338,14 +340,15 @@ export class BootScene extends Phaser.Scene {
       heavy: 'HVY',
       sniper: 'SNP',
       spy: 'SPY',
+      pyro: 'PYR',
     };
     
     enemyTypes.forEach((enemy, i) => {
-      const ex = -182 + i * 73;
+      const ex = -210 + i * 63;  // Adjusted spacing for 7 enemies
       const ey = 10;
       
-      // Brighter toggle button - starts OFF by default
-      const toggleBg = this.add.rectangle(ex, ey, 60, 30, enemyColors[enemy], 0.5);
+      // Brighter toggle button - starts OFF by default (smaller to fit 7 enemies)
+      const toggleBg = this.add.rectangle(ex, ey, 55, 28, enemyColors[enemy], 0.5);
       toggleBg.setStrokeStyle(1, 0x555555);
       toggleBg.setInteractive({ useHandCursor: true });
       
@@ -523,7 +526,7 @@ export class BootScene extends Phaser.Scene {
     
     // Main panel - wider to fit content
     const panelWidth = 780;
-    const panelHeight = 460;
+    const panelHeight = 560;
     const panelX = width / 2;
     const panelY = height / 2;
     
@@ -627,13 +630,23 @@ export class BootScene extends Phaser.Scene {
     y += 68;
     
     // SPY box
-    const spyBox = this.add.rectangle(rightX - 5, y + 32, 320, 55, 0x18120c);
+    const spyBox = this.add.rectangle(rightX - 5, y + 36, 320, 68, 0x18120c);
     spyBox.setStrokeStyle(1, 0xaa7744);
     this.tutorialContainer.add(spyBox);
-    this.addLine(rightX - 155, y + 10, '> SPY: Two modes (not both!)', '#ddaa77', true);
-    this.addLine(rightX - 155, y + 26, '• DISGUISE: Fake enemy on cams', '#aa9966');
+    this.addLine(rightX - 155, y + 8, '> SPY: Two modes (not both!)', '#ddaa77', true);
+    this.addLine(rightX - 155, y + 24, '• DISGUISE: Fake enemy on cams', '#aa9966');
     this.addLine(rightX - 155, y + 40, '• SAP: May sap if you TP away', '#aa9966');
-    this.addLine(rightX - 155, y + 54, 'Sapper? Press SPACE x2!', '#ffcc88');
+    this.addLine(rightX - 155, y + 56, 'Sapper? Press SPACE x2!', '#ffcc88');
+    y += 78;
+    
+    // PYRO box (Custom Night only)
+    const pyroBox = this.add.rectangle(rightX - 5, y + 36, 320, 68, 0x18120c);
+    pyroBox.setStrokeStyle(1, 0xff6622);
+    this.tutorialContainer.add(pyroBox);
+    this.addLine(rightX - 155, y + 8, '> PYRO: Custom Night Only!', '#ff6622', true);
+    this.addLine(rightX - 155, y + 24, '• ROOM: Invisible! Crackle on cams', '#dd8844');
+    this.addLine(rightX - 155, y + 40, '• INTEL: Match = 10s to escape!', '#dd8844');
+    this.addLine(rightX - 155, y + 56, 'Reflects sentry shots!', '#ffaa66');
     
     // Close instruction
     const closeText = this.add.text(panelX, panelY + panelHeight/2 - 15, '[ click to close ]', {

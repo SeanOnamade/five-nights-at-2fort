@@ -196,6 +196,43 @@ Non-lethal saboteur. **Two modes (not both at once!):**
 
 ---
 
+## Custom Night Enemy
+
+### 🔥 PYRO
+Ghostly, invisible menace. **CUSTOM NIGHT ONLY - Very difficult!**
+
+| Parameter | Value |
+|-----------|-------|
+| Mode Toggle | 45 sec |
+| Room Teleport | 7 sec |
+| Intel Escape Time | **10 sec** |
+| Intel Spawn Chance | 30% per check |
+| Always starts in | ROOM mode |
+
+**Two modes (alternates every 45 sec):**
+
+**ROOM Mode:**
+- Teleports rapidly between all rooms (including hallways)
+- **Invisible on cameras** - only heard as crackling/burning sound!
+- Teleporting to Pyro's room = **instant death**
+- In hallways: **floating Pyro mask** visible with wrangler light
+- **Firing sentry at Pyro = SENTRY DESTROYED** (reflected attack!)
+
+**INTEL Mode:**
+- Has 30% chance to appear in Intel room (when player is there)
+- **Match igniting sound** warns player
+- Player has **10 seconds** to teleport away or die
+- After escaping, Pyro despawns and mode continues
+- Cannot appear if player is already teleported away
+
+**Counters:**
+- Listen for burning sound on cameras to track Pyro's room
+- Check hallways with wrangler light before firing
+- Be ready to teleport immediately when match lights
+- **Lures have NO EFFECT** on Pyro
+
+---
+
 ## Defense Mechanics
 
 ### Sentry
@@ -226,6 +263,7 @@ Non-lethal saboteur. **Two modes (not both at once!):**
 | Demoman | Sentry dies, repels | 1 shot | 1 shot | — |
 | Heavy | **NO EFFECT** | **NO EFFECT** | **NO EFFECT** | ✓ Redirects |
 | Sniper | **NO EFFECT** | **2 shots** | **2 shots** | ✓ Stops charge |
+| Pyro | **N/A** | **SENTRY DESTROYED** | **SENTRY DESTROYED** | **NO EFFECT** |
 
 ---
 
@@ -239,4 +277,4 @@ Non-lethal saboteur. **Two modes (not both at once!):**
 
 ---
 
-*Last updated: Night 5 complete*
+*Last updated: Custom Night (Pyro) complete*

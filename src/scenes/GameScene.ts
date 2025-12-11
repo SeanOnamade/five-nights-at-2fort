@@ -18,6 +18,7 @@ import { DemomanEnemy } from '../entities/DemomanEnemy';
 import { HeavyEnemy } from '../entities/HeavyEnemy';
 import { SniperEnemy } from '../entities/SniperEnemy';
 import { SpyEnemy } from '../entities/SpyEnemy';
+import { PyroEnemy } from '../entities/PyroEnemy';
 
 /**
  * GameScene - Main gameplay scene for Night 1
@@ -76,7 +77,7 @@ export class GameScene extends Phaser.Scene {
     "Only Scout, Soldier, Demoman, and Sniper show up in the light. Heavy does not!",
     "Scout is the fastest of the mercs.",
     "Sniper moves at random!",
-    "Spy can disguise as any other enemy! When disguised, he will not sap your sentry!",
+    "Spy can disguise as any enemy except Pyro! When disguised, he will not sap your sentry!",
     "Deterring Demoman's charge at the last second provides bonus metal! Test your luck!",
     "Heavy's footsteps get louder the closer he is to the intel room!",
     "Press Space twice to remove a Sapper!",
@@ -106,6 +107,7 @@ export class GameScene extends Phaser.Scene {
   private heavy!: HeavyEnemy;
   private sniper!: SniperEnemy;
   private spy!: SpyEnemy;
+  private pyro!: PyroEnemy;
   
   // Night number (determines which enemies are active)
   private nightNumber: number = 1;
@@ -118,6 +120,7 @@ export class GameScene extends Phaser.Scene {
     heavy: boolean;
     sniper: boolean;
     spy: boolean;
+    pyro: boolean;
   } | null = null;
   
   // Night 5+ features - Spy sapper
@@ -137,6 +140,7 @@ export class GameScene extends Phaser.Scene {
   private activeLure: LureData | null = null;
   private teleportEscapeTimer: number = 0;
   private enemyApproachingRoom: boolean = false;
+  private approachingEnemyType: string = 'an enemy'; // Track which enemy triggered the approach
   
   // Sniper charge visual
   private sniperChargeOverlay!: Phaser.GameObjects.Rectangle;
@@ -163,6 +167,10 @@ export class GameScene extends Phaser.Scene {
   private sniperLaserLeft!: Phaser.GameObjects.Container;
   private sniperLaserRight!: Phaser.GameObjects.Container;
   private sniperChargeText!: Phaser.GameObjects.Text;
+  
+  // Pyro floating mask visuals (Custom Night only - visible with wrangler light)
+  private pyroMaskLeft!: Phaser.GameObjects.Container;
+  private pyroMaskRight!: Phaser.GameObjects.Container;
   
   // Demoman head visuals (can appear anywhere)
   private demomanHeadInRoom!: Phaser.GameObjects.Container; // In Intel room
@@ -230,6 +238,10 @@ export class GameScene extends Phaser.Scene {
   private escapeWarning!: Phaser.GameObjects.Container;
   private roomDoorway!: Phaser.GameObjects.Container;
   private roomDoorwayEyes!: Phaser.GameObjects.Container;
+  
+  // Pyro Intel mode warning UI (Custom Night only)
+  private pyroEscapeWarning!: Phaser.GameObjects.Container;
+  private pyroEscapeTimer!: Phaser.GameObjects.Text;
   
   // Sound state for detection buzzer
   private isPlayingDetectionSound: boolean = false;
@@ -302,6 +314,11 @@ export class GameScene extends Phaser.Scene {
     return this.customEnemies ? this.customEnemies.spy : (this.nightNumber >= 5);
   }
   
+  private isPyroEnabled(): boolean {
+    // Pyro is CUSTOM NIGHT ONLY - never appears in regular nights
+    return this.customEnemies ? this.customEnemies.pyro : false;
+  }
+  
   /**
    * Reset all game state for a clean start/restart
    */
@@ -336,6 +353,7 @@ export class GameScene extends Phaser.Scene {
     this.activeLure = null;
     this.teleportEscapeTimer = 0;
     this.enemyApproachingRoom = false;
+    this.approachingEnemyType = 'an enemy';
     
     // Stop any playing sounds
     this.stopDetectionSound();
@@ -375,6 +393,7 @@ export class GameScene extends Phaser.Scene {
         heavy: boolean;
         sniper: boolean;
         spy: boolean;
+        pyro: boolean;
       };
     } | undefined;
     this.nightNumber = data?.night ?? 1;
@@ -383,13 +402,13 @@ export class GameScene extends Phaser.Scene {
     const isCustomNight = this.nightNumber === 6;
     const customEnemies = data?.customEnemies ?? {
       scout: true, soldier: true, demoman: true, 
-      heavy: true, sniper: true, spy: true
+      heavy: true, sniper: true, spy: true, pyro: false
     };
     
     console.log(`🌙 Starting Night ${this.nightNumber}${isCustomNight ? ' (Custom)' : ''}`);
     if (isCustomNight) {
       console.log('Custom enemies:', JSON.stringify(customEnemies, null, 2));
-      console.log(`Scout: ${customEnemies.scout}, Soldier: ${customEnemies.soldier}, Demo: ${customEnemies.demoman}, Heavy: ${customEnemies.heavy}, Sniper: ${customEnemies.sniper}, Spy: ${customEnemies.spy}`);
+      console.log(`Scout: ${customEnemies.scout}, Soldier: ${customEnemies.soldier}, Demo: ${customEnemies.demoman}, Heavy: ${customEnemies.heavy}, Sniper: ${customEnemies.sniper}, Spy: ${customEnemies.spy}, Pyro: ${customEnemies.pyro}`);
     }
     
     // Initialize enemies - all are created but may be disabled
@@ -432,6 +451,18 @@ export class GameScene extends Phaser.Scene {
       this.sniper.setDestroyCameraCallback((node) => this.onCameraDestroyed(node, 'SNIPER'));
       this.sniper.setChargeCallback((progress) => this.onSniperChargeProgress(progress));
       this.sniper.setTeleportCallback(() => this.playSniperTeleportSound());
+    }
+    
+    // Only create Pyro on custom night with pyro enabled
+    const pyroEnabled = isCustomNight ? customEnemies.pyro : false;
+    if (pyroEnabled) {
+      this.pyro = new PyroEnemy();
+      // Set up Pyro callbacks
+      this.pyro.setMatchLitCallback(() => this.onPyroMatchLit());
+    } else if (isCustomNight && !customEnemies.pyro) {
+      // Create but immediately disable Pyro if custom night with pyro disabled
+      this.pyro = new PyroEnemy();
+      this.pyro.forceDespawn();
     }
     
     // Spy callbacks are now set up when Spy is created above
@@ -716,6 +747,106 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.sniperChargeText.setVisible(false);
     this.sniperChargeText.setDepth(100);
+    
+    // Create Pyro floating mask visuals (Custom Night only)
+    this.createPyroMaskVisuals(eyeLevelY);
+  }
+  
+  /**
+   * Create floating Pyro mask visuals for hallways (Custom Night only)
+   * Ghostly gas mask that floats at eye level - visible only with wrangler light
+   */
+  private createPyroMaskVisuals(eyeLevelY: number): void {
+    // Left hallway Pyro mask
+    const leftDoorX = 120;
+    this.pyroMaskLeft = this.add.container(leftDoorX, eyeLevelY);
+    
+    // Eerie orange/red glow behind mask
+    const glowLeft = this.add.graphics();
+    glowLeft.fillStyle(0xff4400, 0.06);
+    glowLeft.fillCircle(0, 0, 180);
+    glowLeft.fillStyle(0xff6600, 0.1);
+    glowLeft.fillCircle(0, 0, 120);
+    glowLeft.fillStyle(0xff8800, 0.15);
+    glowLeft.fillCircle(0, 0, 80);
+    
+    // Gas mask shape - simple iconic silhouette
+    const maskLeft = this.add.graphics();
+    // Main mask oval
+    maskLeft.fillStyle(0x222222, 0.9);
+    maskLeft.fillEllipse(0, 0, 70, 80);
+    // Eye holes - glowing white/orange
+    maskLeft.fillStyle(0xffffff, 0.95);
+    maskLeft.fillCircle(-15, -10, 12);
+    maskLeft.fillCircle(15, -10, 12);
+    // Inner eye glow
+    maskLeft.fillStyle(0xff6600, 0.8);
+    maskLeft.fillCircle(-15, -10, 6);
+    maskLeft.fillCircle(15, -10, 6);
+    // Filter canister
+    maskLeft.fillStyle(0x333333, 0.9);
+    maskLeft.fillRoundedRect(-15, 15, 30, 25, 5);
+    // Straps hint
+    maskLeft.lineStyle(3, 0x444444, 0.7);
+    maskLeft.lineBetween(-35, -5, -45, -20);
+    maskLeft.lineBetween(35, -5, 45, -20);
+    
+    this.pyroMaskLeft.add([glowLeft, maskLeft]);
+    this.pyroMaskLeft.setVisible(false);
+    this.pyroMaskLeft.setDepth(11);
+    
+    // Creepy floating animation
+    this.tweens.add({
+      targets: this.pyroMaskLeft,
+      y: eyeLevelY - 8,
+      duration: 2000,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    
+    // Right hallway Pyro mask
+    const rightDoorX = 1280 - 120;
+    this.pyroMaskRight = this.add.container(rightDoorX, eyeLevelY);
+    
+    // Eerie orange/red glow behind mask
+    const glowRight = this.add.graphics();
+    glowRight.fillStyle(0xff4400, 0.06);
+    glowRight.fillCircle(0, 0, 180);
+    glowRight.fillStyle(0xff6600, 0.1);
+    glowRight.fillCircle(0, 0, 120);
+    glowRight.fillStyle(0xff8800, 0.15);
+    glowRight.fillCircle(0, 0, 80);
+    
+    // Gas mask shape - simple iconic silhouette
+    const maskRight = this.add.graphics();
+    maskRight.fillStyle(0x222222, 0.9);
+    maskRight.fillEllipse(0, 0, 70, 80);
+    maskRight.fillStyle(0xffffff, 0.95);
+    maskRight.fillCircle(-15, -10, 12);
+    maskRight.fillCircle(15, -10, 12);
+    maskRight.fillStyle(0xff6600, 0.8);
+    maskRight.fillCircle(-15, -10, 6);
+    maskRight.fillCircle(15, -10, 6);
+    maskRight.fillStyle(0x333333, 0.9);
+    maskRight.fillRoundedRect(-15, 15, 30, 25, 5);
+    maskRight.lineStyle(3, 0x444444, 0.7);
+    maskRight.lineBetween(-35, -5, -45, -20);
+    maskRight.lineBetween(35, -5, 45, -20);
+    
+    this.pyroMaskRight.add([glowRight, maskRight]);
+    this.pyroMaskRight.setVisible(false);
+    this.pyroMaskRight.setDepth(11);
+    
+    // Creepy floating animation
+    this.tweens.add({
+      targets: this.pyroMaskRight,
+      y: eyeLevelY - 8,
+      duration: 2000,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
   }
   
   private createSentry(): void {
@@ -1612,7 +1743,7 @@ export class GameScene extends Phaser.Scene {
     });
     
     // Status text at bottom of map
-    const statusText = this.add.text(1000, 520, 'CLICK LOCATION TO VIEW', {
+    const statusText = this.add.text(1000, 520, '', {
       fontFamily: 'Courier New, monospace',
       fontSize: '10px',
       color: '#2a6a3a',
@@ -1627,7 +1758,7 @@ export class GameScene extends Phaser.Scene {
     this.soldierMapIcon.setVisible(false);
     
     // Instructions at bottom
-    const camInstructions = this.add.text(640, 680, 'CLICK LOCATION TO VIEW  •  TAB TO EXIT  •  FIND THE THREATS', {
+    const camInstructions = this.add.text(640, 680, 'TAB TO EXIT  •  FIND THE THREATS', {
       fontFamily: 'Courier New, monospace',
       fontSize: '12px',
       color: '#446644',
@@ -1764,14 +1895,14 @@ export class GameScene extends Phaser.Scene {
     // Teleport button on camera map (shows when viewing a camera)
     this.teleportButton = this.add.container(1000, 570);
     
-    const tpBtnBg = this.add.rectangle(0, 0, 180, 35, 0x442244);
-    tpBtnBg.setStrokeStyle(2, 0x8844aa);
+    const tpBtnBg = this.add.rectangle(0, 0, 180, 35, 0x224466);
+    tpBtnBg.setStrokeStyle(2, 0x4488cc);
     tpBtnBg.setInteractive({ useHandCursor: true });
     
     const tpBtnText = this.add.text(0, 0, 'TELEPORT HERE', {
       fontFamily: 'Courier New, monospace',
       fontSize: '12px',
-      color: '#cc88ff',
+      color: '#88ccff',
       fontStyle: 'bold',
     }).setOrigin(0.5);
     
@@ -1779,8 +1910,8 @@ export class GameScene extends Phaser.Scene {
     this.teleportButton.setVisible(false);
     this.cameraUI.add(this.teleportButton);
     
-    tpBtnBg.on('pointerover', () => tpBtnBg.setFillStyle(0x553355));
-    tpBtnBg.on('pointerout', () => tpBtnBg.setFillStyle(0x442244));
+    tpBtnBg.on('pointerover', () => tpBtnBg.setFillStyle(0x336688));
+    tpBtnBg.on('pointerout', () => tpBtnBg.setFillStyle(0x224466));
     tpBtnBg.on('pointerdown', () => {
       const cam = CAMERAS[this.selectedCamera];
       this.teleportToRoom(cam.node);
@@ -2068,6 +2199,65 @@ export class GameScene extends Phaser.Scene {
     
     this.escapeWarning.add([barBg, progressBar, innerGlow]);
     this.roomViewUI.add(this.escapeWarning);
+    
+    // Pyro escape warning (Custom Night only) - appears in Intel room when Pyro lights match
+    this.pyroEscapeWarning = this.add.container(640, 100);
+    this.pyroEscapeWarning.setVisible(false);
+    this.pyroEscapeWarning.setDepth(100);
+    
+    // Fiery background panel
+    const pyroBg = this.add.rectangle(0, 0, 400, 80, 0x331100, 0.95);
+    pyroBg.setStrokeStyle(3, 0xff4400);
+    
+    // Warning text
+    const pyroWarningText = this.add.text(0, -20, 'PYRO LIT A MATCH!', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '24px',
+      color: '#ff6600',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    
+    // Timer text
+    this.pyroEscapeTimer = this.add.text(0, 15, 'ESCAPE: 10s', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '18px',
+      color: '#ffaa00',
+    }).setOrigin(0.5);
+    
+    // Fire icon hint
+    const fireHint = this.add.text(0, 40, 'TELEPORT TO ESCAPE!', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '12px',
+      color: '#ff8844',
+    }).setOrigin(0.5);
+    
+    this.pyroEscapeWarning.add([pyroBg, pyroWarningText, this.pyroEscapeTimer, fireHint]);
+  }
+  
+  /**
+   * Show/hide Pyro escape warning (Custom Night - Intel mode)
+   */
+  private showPyroEscapeWarning(show: boolean): void {
+    if (this.pyroEscapeWarning) {
+      this.pyroEscapeWarning.setVisible(show);
+    }
+  }
+  
+  /**
+   * Update Pyro escape timer display
+   */
+  private updatePyroEscapeTimer(secondsRemaining: number): void {
+    if (this.pyroEscapeTimer) {
+      this.pyroEscapeTimer.setText(`ESCAPE: ${secondsRemaining}s`);
+      // Color gets more urgent as time runs out
+      if (secondsRemaining <= 3) {
+        this.pyroEscapeTimer.setColor('#ff0000');
+      } else if (secondsRemaining <= 5) {
+        this.pyroEscapeTimer.setColor('#ff4400');
+      } else {
+        this.pyroEscapeTimer.setColor('#ffaa00');
+      }
+    }
   }
   
   /**
@@ -2079,9 +2269,17 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     
+    // Freeze Pyro's teleportation during player's teleport animation
+    // This prevents the unfair situation where Pyro teleports into the destination
+    // while the animation is playing
+    if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
+      this.pyro.freezeTeleport();
+    }
+    
     // Show teleport animation overlay FIRST, then check for enemies after arrival
     this.showTeleportAnimation(() => {
       // Check if any enemy BODY is in this room (not just heads)
+      // NOTE: Pyro stays frozen until AFTER this check completes
       const scoutThere = this.scout.isAtNode(node);
       const soldierThere = this.soldier.isAtNode(node);
       // Demoman: only check if his BODY is there (when charging), not just his head
@@ -2090,28 +2288,49 @@ export class GameScene extends Phaser.Scene {
                                 this.demoman.currentNode === node;
       const heavyThere = this.isHeavyEnabled() && this.heavy.isAtNode(node);
       const sniperThere = this.isSniperEnabled() && this.sniper.isAtNode(node);
+      // Pyro: in Room mode, teleporting to his room = death (he's invisible but deadly)
+      const pyroThere = this.isPyroEnabled() && this.pyro && 
+                        !this.pyro.isForceDespawned() && 
+                        this.pyro.isAtNode(node);
       
-      console.log(`Arrived at ${node}. Enemies: Scout=${scoutThere}, Soldier=${soldierThere}, DemoBody=${demomanBodyThere}, Heavy=${heavyThere}, Sniper=${sniperThere}`);
+      console.log(`Arrived at ${node}. Enemies: Scout=${scoutThere}, Soldier=${soldierThere}, DemoBody=${demomanBodyThere}, Heavy=${heavyThere}, Sniper=${sniperThere}, Pyro=${pyroThere}`);
+      
+      // Helper to unfreeze Pyro before returning
+      const unfreezeAndReturn = () => {
+        if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
+          this.pyro.unfreezeTeleport();
+        }
+      };
       
       // Check each enemy type and show appropriate jumpscare AFTER teleport animation
       if (scoutThere) {
+        unfreezeAndReturn();
         this.gameOver('Scout caught you!');
         return;
       }
       if (soldierThere) {
+        unfreezeAndReturn();
         this.gameOver('Soldier got you!');
         return;
       }
       if (demomanBodyThere) {
+        unfreezeAndReturn();
         this.gameOver('Demoman charged you!');
         return;
       }
       if (heavyThere) {
+        unfreezeAndReturn();
         this.gameOver('Heavy crushed you!');
         return;
       }
       if (sniperThere) {
+        unfreezeAndReturn();
         this.gameOver('Sniped at close range!');
+        return;
+      }
+      if (pyroThere) {
+        unfreezeAndReturn();
+        this.gameOver('Pyro burned you alive!');
         return;
       }
       
@@ -2120,6 +2339,7 @@ export class GameScene extends Phaser.Scene {
       this.currentRoom = node;
       this.teleportEscapeTimer = 0;
       this.enemyApproachingRoom = false;
+      this.approachingEnemyType = 'an enemy';
       
       // Stop dispenser hum when leaving Intel room
       this.stopDispenserHum();
@@ -2129,17 +2349,25 @@ export class GameScene extends Phaser.Scene {
       this.keyDDown = false;
       this.sentry.aimedDoor = 'NONE';
       
-      // Immediately check for approaching enemies
+      // Immediately check for approaching enemies and identify which one
       const adjacent = ROOM_ADJACENCY[this.currentRoom] || [];
       
-      const enemyApproaching = 
-        (this.isHeavyEnabled() && this.heavy.isActive() && adjacent.includes(this.heavy.currentNode)) ||
-        (this.isSniperEnabled() && this.sniper.isActive() && adjacent.includes(this.sniper.currentNode)) ||
-        (this.isScoutEnabled() && this.scout.isActive() && adjacent.includes(this.scout.currentNode)) ||
-        (this.isSoldierEnabled() && this.soldier.isActive() && adjacent.includes(this.soldier.currentNode));
+      let approachingEnemy = '';
+      if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned() && this.pyro.getMode() === 'ROOM' && adjacent.includes(this.pyro.currentNode)) {
+        approachingEnemy = 'Pyro';
+      } else if (this.isHeavyEnabled() && this.heavy.isActive() && adjacent.includes(this.heavy.currentNode)) {
+        approachingEnemy = 'Heavy';
+      } else if (this.isSniperEnabled() && this.sniper.isActive() && adjacent.includes(this.sniper.currentNode)) {
+        approachingEnemy = 'Sniper';
+      } else if (this.isScoutEnabled() && this.scout.isActive() && adjacent.includes(this.scout.currentNode)) {
+        approachingEnemy = 'Scout';
+      } else if (this.isSoldierEnabled() && this.soldier.isActive() && adjacent.includes(this.soldier.currentNode)) {
+        approachingEnemy = 'Soldier';
+      }
       
-      if (enemyApproaching) {
+      if (approachingEnemy) {
         this.enemyApproachingRoom = true;
+        this.approachingEnemyType = approachingEnemy;
         this.teleportEscapeTimer = GAME_CONSTANTS.TELEPORT_ESCAPE_TIME;
         this.showAlert('A nearby enemy heard you!', 0xff0000);
         this.escapeWarning.setVisible(true);
@@ -2174,6 +2402,11 @@ export class GameScene extends Phaser.Scene {
         }
       }
       
+      // Unfreeze Pyro AFTER all checks complete - prevents race condition
+      if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
+        this.pyro.unfreezeTeleport();
+      }
+      
       console.log(`Engineer teleported to ${node}`);
     });
   }
@@ -2193,13 +2426,14 @@ export class GameScene extends Phaser.Scene {
       this.escapeWarning.setVisible(false);
       this.roomDoorwayEyes.setVisible(false);
       this.enemyApproachingRoom = false;
+      this.approachingEnemyType = 'an enemy';
       this.teleportEscapeTimer = 0;
       
       // Restore metal text to original position
       this.metalText.setPosition(20, 20);
       
-      // Restore lure bar to original position (right of metal count)
-      this.lureBarContainer.setPosition(280, 32);
+      // Restore lure bar to original position (right of metal count, with spacing)
+      this.lureBarContainer.setPosition(300, 28);
       
       // Resume dispenser hum when back in Intel room
       this.startDispenserHum();
@@ -3944,8 +4178,353 @@ export class GameScene extends Phaser.Scene {
     }
   }
   
+  /**
+   * Play Pyro match lighting sound - sharp click followed by fire fwoosh
+   * Plays once when match is lit, does not loop.
+   * LOUD - plays even when player is on cameras.
+   */
+  private playPyroMatchSound(): void {
+    if (!this.isPyroEnabled()) return;
+    
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      const now = audioContext.currentTime;
+      
+      // === PART 1: Sharp click (match head striking) ===
+      // Very short, bright click sound - LOUD
+      const clickBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.03, audioContext.sampleRate);
+      const clickData = clickBuffer.getChannelData(0);
+      for (let i = 0; i < clickData.length; i++) {
+        // Sharp attack with fast decay
+        const t = i / audioContext.sampleRate;
+        clickData[i] = (Math.random() * 2 - 1) * Math.exp(-t * 150);
+      }
+      const clickSource = audioContext.createBufferSource();
+      clickSource.buffer = clickBuffer;
+      
+      // Highpass to make it bright and clicky
+      const clickFilter = audioContext.createBiquadFilter();
+      clickFilter.type = 'highpass';
+      clickFilter.frequency.value = 2500;
+      
+      const clickGain = audioContext.createGain();
+      clickGain.gain.setValueAtTime(0.7, now); // LOUDER
+      
+      clickSource.connect(clickFilter);
+      clickFilter.connect(clickGain);
+      clickGain.connect(audioContext.destination);
+      
+      clickSource.start(now);
+      clickSource.stop(now + 0.03);
+      
+      // === PART 2: Fire fwoosh (ignition) ===
+      // Rising then falling noise with warmth - LOUD
+      const fwooshDuration = 0.8;
+      const fwooshBuffer = audioContext.createBuffer(1, audioContext.sampleRate * fwooshDuration, audioContext.sampleRate);
+      const fwooshData = fwooshBuffer.getChannelData(0);
+      for (let i = 0; i < fwooshData.length; i++) {
+        const t = i / fwooshData.length;
+        // Envelope: quick rise, sustained, gradual fall
+        const envelope = Math.sin(t * Math.PI) * (1 - t * 0.3);
+        fwooshData[i] = (Math.random() * 2 - 1) * envelope;
+      }
+      const fwooshSource = audioContext.createBufferSource();
+      fwooshSource.buffer = fwooshBuffer;
+      
+      // Bandpass filter for fire-like warmth
+      const fwooshFilter = audioContext.createBiquadFilter();
+      fwooshFilter.type = 'bandpass';
+      fwooshFilter.frequency.value = 500;
+      fwooshFilter.Q.value = 0.6;
+      
+      const fwooshGain = audioContext.createGain();
+      fwooshGain.gain.setValueAtTime(0, now + 0.02);
+      fwooshGain.gain.linearRampToValueAtTime(0.6, now + 0.1);  // LOUDER
+      fwooshGain.gain.linearRampToValueAtTime(0.45, now + 0.4);
+      fwooshGain.gain.exponentialRampToValueAtTime(0.001, now + fwooshDuration + 0.02);
+      
+      fwooshSource.connect(fwooshFilter);
+      fwooshFilter.connect(fwooshGain);
+      fwooshGain.connect(audioContext.destination);
+      
+      fwooshSource.start(now + 0.02); // Start right after click
+      fwooshSource.stop(now + 0.02 + fwooshDuration);
+      
+      // Start the ambient crackling sound after the match ignites
+      this.startPyroCracklingAmbient();
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  // Pyro ambient crackling sound nodes
+  private pyroCracklingGain: GainNode | null = null;
+  private pyroCracklingInterval: number | null = null;
+  
+  /**
+   * Start low ambient crackling sound while match is lit
+   */
+  private startPyroCracklingAmbient(): void {
+    // Stop any existing crackling first
+    this.stopPyroCracklingAmbient();
+    
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') return;
+      const audioContext = this.sharedAudioContext;
+      
+      // Create master gain for crackling
+      this.pyroCracklingGain = audioContext.createGain();
+      this.pyroCracklingGain.gain.setValueAtTime(0.08, audioContext.currentTime); // Low but audible
+      this.pyroCracklingGain.connect(audioContext.destination);
+      
+      // Store reference to the context used to create the gain
+      const originalContext = audioContext;
+      
+      // Play periodic crackle sounds
+      this.pyroCracklingInterval = window.setInterval(() => {
+        try {
+          // Stop if gain was cleaned up or context changed
+          if (!this.pyroCracklingGain || !this.sharedAudioContext) {
+            this.stopPyroCracklingAmbient();
+            return;
+          }
+          
+          // Stop if audio context was replaced (game restarted)
+          if (this.sharedAudioContext !== originalContext) {
+            this.stopPyroCracklingAmbient();
+            return;
+          }
+          
+          // Check if Pyro's match is still lit
+          if (!this.pyro || !this.pyro.isMatchLit()) {
+            this.stopPyroCracklingAmbient();
+            return;
+          }
+          
+          const ctx = this.sharedAudioContext;
+          const now = ctx.currentTime;
+          
+          // Random short crackle
+          const duration = 0.05 + Math.random() * 0.08;
+          const crackleBuffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+          const crackleData = crackleBuffer.getChannelData(0);
+          for (let i = 0; i < crackleData.length; i++) {
+            const env = Math.exp(-i / (crackleData.length * 0.3));
+            crackleData[i] = (Math.random() * 2 - 1) * env;
+          }
+          const crackleSource = ctx.createBufferSource();
+          crackleSource.buffer = crackleBuffer;
+          
+          // Bandpass for fire crackle
+          const filter = ctx.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.frequency.value = 800 + Math.random() * 600;
+          filter.Q.value = 2;
+          
+          crackleSource.connect(filter);
+          filter.connect(this.pyroCracklingGain!);
+          
+          crackleSource.start(now);
+          crackleSource.stop(now + duration);
+        } catch (e) {
+          // Audio context mismatch or other error - stop crackling
+          this.stopPyroCracklingAmbient();
+        }
+      }, 150 + Math.random() * 100); // Random interval between crackles
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Stop ambient crackling sound
+   */
+  private stopPyroCracklingAmbient(): void {
+    if (this.pyroCracklingInterval) {
+      clearInterval(this.pyroCracklingInterval);
+      this.pyroCracklingInterval = null;
+    }
+    if (this.pyroCracklingGain) {
+      try {
+        this.pyroCracklingGain.disconnect();
+      } catch (e) {
+        // Already disconnected
+      }
+      this.pyroCracklingGain = null;
+    }
+  }
+  
+  /**
+   * Play Pyro burning/crackling ambient sound (for camera viewing)
+   * Creates a realistic fire crackle with pops and hisses
+   */
+  private playPyroBurningSound(): void {
+    if (!this.isPyroEnabled()) return;
+    
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      const duration = 0.4;
+      const now = audioContext.currentTime;
+      
+      // Create multiple short crackle bursts for fire effect
+      for (let burst = 0; burst < 4; burst++) {
+        const burstStart = now + burst * 0.08 + Math.random() * 0.05;
+        const burstDuration = 0.03 + Math.random() * 0.04;
+        
+        // High-frequency crackle (short noise burst)
+        const crackleBuffer = audioContext.createBuffer(1, audioContext.sampleRate * burstDuration, audioContext.sampleRate);
+        const crackleData = crackleBuffer.getChannelData(0);
+        for (let i = 0; i < crackleData.length; i++) {
+          // Sharp attack, quick decay for crackle effect
+          const envelope = Math.exp(-i / (crackleData.length * 0.2));
+          crackleData[i] = (Math.random() * 2 - 1) * envelope;
+        }
+        const crackleSource = audioContext.createBufferSource();
+        crackleSource.buffer = crackleBuffer;
+        
+        // Highpass filter for crisp crackle
+        const highpass = audioContext.createBiquadFilter();
+        highpass.type = 'highpass';
+        highpass.frequency.value = 2000 + Math.random() * 3000;
+        
+        // Vary volume for each burst
+        const crackleGain = audioContext.createGain();
+        crackleGain.gain.setValueAtTime(0.08 + Math.random() * 0.1, burstStart);
+        crackleGain.gain.exponentialRampToValueAtTime(0.001, burstStart + burstDuration);
+        
+        crackleSource.connect(highpass);
+        highpass.connect(crackleGain);
+        crackleGain.connect(audioContext.destination);
+        
+        crackleSource.start(burstStart);
+        crackleSource.stop(burstStart + burstDuration);
+      }
+      
+      // Low rumbling base fire sound
+      const baseBuffer = audioContext.createBuffer(1, audioContext.sampleRate * duration, audioContext.sampleRate);
+      const baseData = baseBuffer.getChannelData(0);
+      for (let i = 0; i < baseData.length; i++) {
+        // Slow modulation for fire roar
+        const mod = Math.sin(i / (audioContext.sampleRate * 0.05)) * 0.3 + 0.7;
+        baseData[i] = (Math.random() * 2 - 1) * mod * 0.5;
+      }
+      const baseSource = audioContext.createBufferSource();
+      baseSource.buffer = baseBuffer;
+      
+      // Bandpass for warm fire tone
+      const bandpass = audioContext.createBiquadFilter();
+      bandpass.type = 'bandpass';
+      bandpass.frequency.value = 400;
+      bandpass.Q.value = 0.5;
+      
+      const baseGain = audioContext.createGain();
+      baseGain.gain.setValueAtTime(0.06, now);
+      baseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      
+      baseSource.connect(bandpass);
+      bandpass.connect(baseGain);
+      baseGain.connect(audioContext.destination);
+      
+      baseSource.start(now);
+      baseSource.stop(now + duration);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play Pyro airblast sound - sudden burst of compressed air
+   */
+  private playPyroReflectSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      const now = audioContext.currentTime;
+      
+      // === Airblast: sudden burst of compressed air ===
+      // Fast attack white noise with rapid decay - "PSSH!"
+      const blastDuration = 0.25;
+      const blastBuffer = audioContext.createBuffer(1, audioContext.sampleRate * blastDuration, audioContext.sampleRate);
+      const blastData = blastBuffer.getChannelData(0);
+      for (let i = 0; i < blastData.length; i++) {
+        const t = i / blastData.length;
+        // Sharp attack, quick decay
+        const envelope = Math.exp(-t * 15) * (1 - Math.exp(-t * 100));
+        blastData[i] = (Math.random() * 2 - 1) * envelope;
+      }
+      const blastSource = audioContext.createBufferSource();
+      blastSource.buffer = blastBuffer;
+      
+      // Highpass filter for airy, hissy quality
+      const highpass = audioContext.createBiquadFilter();
+      highpass.type = 'highpass';
+      highpass.frequency.value = 2000;
+      
+      // Bandpass for body
+      const bandpass = audioContext.createBiquadFilter();
+      bandpass.type = 'bandpass';
+      bandpass.frequency.value = 4000;
+      bandpass.Q.value = 0.5;
+      
+      const blastGain = audioContext.createGain();
+      blastGain.gain.setValueAtTime(0.5, now);
+      
+      blastSource.connect(highpass);
+      highpass.connect(bandpass);
+      bandpass.connect(blastGain);
+      blastGain.connect(audioContext.destination);
+      
+      blastSource.start(now);
+      blastSource.stop(now + blastDuration);
+      
+      // === Low thump for impact ===
+      const thumpOsc = audioContext.createOscillator();
+      thumpOsc.type = 'sine';
+      thumpOsc.frequency.setValueAtTime(80, now);
+      thumpOsc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+      
+      const thumpGain = audioContext.createGain();
+      thumpGain.gain.setValueAtTime(0.3, now);
+      thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      
+      thumpOsc.connect(thumpGain);
+      thumpGain.connect(audioContext.destination);
+      
+      thumpOsc.start(now);
+      thumpOsc.stop(now + 0.15);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
   // Track if camera warning sound is currently playing
   private cameraWarningSoundPlaying: boolean = false;
+  
+  // Throttle for Pyro burning sound (prevent spam)
+  private pyroBurningSoundThrottle: number = 0;
   
   /**
    * Play mounting camera watch warning sound - gets more intense as watch progress increases
@@ -4859,10 +5438,11 @@ export class GameScene extends Phaser.Scene {
       this.updateHUD();
       
       // Pause dispenser hum when aiming down a hallway (for focus)
-      if (this.sentry.aimedDoor !== 'NONE') {
+      // Only pause if sentry actually exists - otherwise resume hum
+      if (this.sentry.aimedDoor !== 'NONE' && this.sentry.exists) {
         this.stopDispenserHum();
       } else if (!this.isTeleported && !this.isPaused) {
-        // Resume hum when no longer aiming
+        // Resume hum when no longer aiming (or sentry destroyed)
         this.startDispenserHum();
       }
     }
@@ -4876,6 +5456,10 @@ export class GameScene extends Phaser.Scene {
     // Hide enemies by default
     this.scoutInDoorway.setVisible(false);
     this.soldierInDoorway.setVisible(false);
+    
+    // Hide Pyro masks by default
+    if (this.pyroMaskLeft) this.pyroMaskLeft.setVisible(false);
+    if (this.pyroMaskRight) this.pyroMaskRight.setVisible(false);
     
     // Reset door colors to dark
     this.leftDoor.setFillStyle(0x000000);
@@ -4927,6 +5511,16 @@ export class GameScene extends Phaser.Scene {
                           (this.scout.state === 'WAITING' || this.scout.state === 'ATTACKING');
       this.scoutInDoorway.setVisible(scoutAtDoor);
       enemyDetected = scoutAtDoor;
+      
+      // Show Pyro floating mask if Pyro is in left hall (Custom Night)
+      // No sound here - only visual. Sound is for cameras only.
+      const pyroInLeftHall = this.isPyroEnabled() && this.pyro && 
+                             !this.pyro.isForceDespawned() && 
+                             this.pyro.getHallway() === 'LEFT';
+      if (this.pyroMaskLeft && pyroInLeftHall) {
+        this.pyroMaskLeft.setVisible(true);
+        enemyDetected = true;
+      }
     } else if (this.sentry.aimedDoor === 'RIGHT') {
       // ========== WRANGLER CONE CONFIG (RIGHT DOOR) ==========
       // Adjust these values to change the cone shape:
@@ -4959,6 +5553,16 @@ export class GameScene extends Phaser.Scene {
                             (this.soldier.state === 'WAITING' || this.soldier.state === 'SIEGING');
       this.soldierInDoorway.setVisible(soldierAtDoor);
       enemyDetected = soldierAtDoor;
+      
+      // Show Pyro floating mask if Pyro is in right hall (Custom Night)
+      // No sound here - only visual. Sound is for cameras only.
+      const pyroInRightHall = this.isPyroEnabled() && this.pyro && 
+                              !this.pyro.isForceDespawned() && 
+                              this.pyro.getHallway() === 'RIGHT';
+      if (this.pyroMaskRight && pyroInRightHall) {
+        this.pyroMaskRight.setVisible(true);
+        enemyDetected = true;
+      }
     } else {
       // Aiming middle (NONE) - cone straight ahead
       this.aimBeam.fillStyle(0xff4400, 0.06);
@@ -5323,6 +5927,7 @@ export class GameScene extends Phaser.Scene {
     this.stopDemoEyeGlowSound();
     this.stopApproachGrowl();
     this.stopDispenserHum();
+    this.stopPyroCracklingAmbient();
     
     // Force stop any oscillators that might still be running
     const oscillatorsToStop = [
@@ -5361,6 +5966,7 @@ export class GameScene extends Phaser.Scene {
     this.sniperHumGain = null;
     this.approachGrowlGain = null;
     this.dispenserHumGain = null;
+    this.pyroCracklingGain = null;
     
     // Close the shared audio context completely to stop ALL sounds
     if (this.sharedAudioContext) {
@@ -5427,6 +6033,25 @@ export class GameScene extends Phaser.Scene {
     
     // Check if we hit an enemy
     let hitEnemy = false;
+    
+    // PYRO REFLECTION CHECK - Pyro reflects sentry fire and destroys sentry!
+    // This check happens BEFORE other enemy checks
+    if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
+      const pyroHallway = this.pyro.getHallway();
+      const firingAtPyro = (this.sentry.aimedDoor === 'LEFT' && pyroHallway === 'LEFT') ||
+                           (this.sentry.aimedDoor === 'RIGHT' && pyroHallway === 'RIGHT');
+      if (firingAtPyro) {
+        // Pyro reflects the shot! Sentry is destroyed!
+        console.log('🔥 PYRO REFLECTED YOUR SHOT!');
+        this.showAlert('PYRO REFLECTED! SENTRY DESTROYED!', 0xff4400);
+        this.destroySentry();
+        this.playPyroReflectSound();
+        // Pyro teleports away immediately after reflecting
+        this.pyro.teleportToRandomRoom();
+        return; // Don't process any other hits
+      }
+    }
+    
     if (this.sentry.aimedDoor === 'LEFT') {
       // Check Scout at left door (if enabled)
       if (this.isScoutEnabled() && this.scout.currentNode === 'LEFT_HALL' && 
@@ -5632,6 +6257,11 @@ export class GameScene extends Phaser.Scene {
     
     // Stop detection sound
     this.stopDetectionSound();
+    
+    // Resume dispenser hum if in Intel room (was paused for aiming)
+    if (!this.isTeleported && !this.isPaused) {
+      this.startDispenserHum();
+    }
     
     // Reset door colors
     this.leftDoor.setFillStyle(0x000000);
@@ -5898,6 +6528,19 @@ export class GameScene extends Phaser.Scene {
     // Check for Spy - only visible when in DISGUISE state
     const spyAtCam = this.isSpyEnabled() && this.spy && this.spy.isInDisguiseState() && this.spy.isAtCamera(selectedCam.node);
     const spyDisguise = spyAtCam ? this.spy.getDisguise() : null;
+    
+    // Check for Pyro - INVISIBLE on cameras, but plays burning sound (Custom Night only)
+    const pyroAtCam = this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned() && 
+                      this.pyro.shouldPlayBurningSound(selectedCam.node);
+    if (pyroAtCam) {
+      // Play burning sound periodically when viewing Pyro's room
+      // Use a simple throttle based on time
+      if (!this.pyroBurningSoundThrottle || Date.now() - this.pyroBurningSoundThrottle > 800) {
+        this.pyroBurningSoundThrottle = Date.now();
+        this.playPyroBurningSound();
+        console.log(`🔥 BURNING SOUND at ${selectedCam.node} - Pyro is here (invisible)`);
+      }
+    }
     
     // Update Spy's watching state for fake watch bar
     if (this.isSpyEnabled() && this.spy) {
@@ -6194,12 +6837,16 @@ export class GameScene extends Phaser.Scene {
     isSoldier: boolean,
     isDemoman: boolean,
     isHeavy: boolean,
-    isSniper: boolean
+    isSniper: boolean,
+    isPyro: boolean = false
   ): void {
     graphics.clear();
     
     // Use the exact same drawing functions as camera/gallery - no extra overlays
-    if (isScout) {
+    if (isPyro) {
+      // Pyro floating mask - eerie gas mask with glowing eyes
+      this.drawPyroMaskJumpscare(graphics);
+    } else if (isScout) {
       this.drawEnemySilhouette(graphics, 'SCOUT');
     } else if (isSoldier) {
       this.drawEnemySilhouette(graphics, 'SOLDIER');
@@ -6219,6 +6866,72 @@ export class GameScene extends Phaser.Scene {
       graphics.fillStyle(0x444444, 1);
       graphics.fillRect(-35, -20, 70, 90);
     }
+  }
+  
+  /**
+   * Draw Pyro's floating mask for jumpscare - larger and more menacing
+   */
+  private drawPyroMaskJumpscare(graphics: Phaser.GameObjects.Graphics): void {
+    // Dark background glow (fire aura)
+    graphics.fillStyle(0xff4400, 0.3);
+    graphics.fillCircle(0, 0, 80);
+    graphics.fillStyle(0xff6600, 0.2);
+    graphics.fillCircle(0, 0, 100);
+    
+    // Mask base - dark rubber/leather look
+    graphics.fillStyle(0x222222, 1);
+    graphics.fillEllipse(0, 0, 100, 120);
+    
+    // Mask shape - rounded bottom for filter area
+    graphics.fillStyle(0x1a1a1a, 1);
+    graphics.fillEllipse(0, 30, 80, 60);
+    
+    // Eye lenses - large circular with eerie white glow
+    graphics.fillStyle(0x111111, 1);
+    graphics.fillCircle(-25, -15, 22);
+    graphics.fillCircle(25, -15, 22);
+    
+    // Eye lens rims
+    graphics.lineStyle(3, 0x333333, 1);
+    graphics.strokeCircle(-25, -15, 22);
+    graphics.strokeCircle(25, -15, 22);
+    
+    // Glowing white eyes - the signature Pyro stare
+    graphics.fillStyle(0xffffff, 1);
+    graphics.fillCircle(-25, -15, 12);
+    graphics.fillCircle(25, -15, 12);
+    
+    // Inner eye glow
+    graphics.fillStyle(0xffeecc, 0.8);
+    graphics.fillCircle(-25, -15, 8);
+    graphics.fillCircle(25, -15, 8);
+    
+    // Filter canister (center bottom of mask)
+    graphics.fillStyle(0x2a2a2a, 1);
+    graphics.fillCircle(0, 35, 25);
+    graphics.lineStyle(2, 0x444444, 1);
+    graphics.strokeCircle(0, 35, 25);
+    
+    // Filter ridges
+    graphics.lineStyle(2, 0x333333, 1);
+    for (let i = -15; i <= 15; i += 6) {
+      graphics.beginPath();
+      graphics.arc(0, 35, 20, 
+        Phaser.Math.DegToRad(180 + i * 3), 
+        Phaser.Math.DegToRad(180 + i * 3 + 30), false);
+      graphics.strokePath();
+    }
+    
+    // Straps (side of head)
+    graphics.lineStyle(4, 0x333333, 1);
+    graphics.beginPath();
+    graphics.moveTo(-50, -10);
+    graphics.lineTo(-60, -30);
+    graphics.strokePath();
+    graphics.beginPath();
+    graphics.moveTo(50, -10);
+    graphics.lineTo(60, -30);
+    graphics.strokePath();
   }
   
   // ============================================
@@ -6668,6 +7381,7 @@ export class GameScene extends Phaser.Scene {
     const isHeavy = reasonLower.includes('heavy');
     const isSoldier = reasonLower.includes('soldier') || reasonLower.includes('breached');
     const isSniper = reasonLower.includes('snipe') || reasonLower.includes('sniper');
+    const isPyro = reasonLower.includes('pyro') || reasonLower.includes('burned');
     
     // Create jumpscare container
     this.endScreen.removeAll(true);
@@ -6683,7 +7397,7 @@ export class GameScene extends Phaser.Scene {
     
     // Draw proper character model for jumpscare
     const enemyGraphics = this.add.graphics();
-    this.drawJumpscareSilhouette(enemyGraphics, isScout, isSoldier, isDemoman, isHeavy, isSniper);
+    this.drawJumpscareSilhouette(enemyGraphics, isScout, isSoldier, isDemoman, isHeavy, isSniper, isPyro);
     jumpscareContainer.add(enemyGraphics);
     
     // Start small and zoom in fast
@@ -7019,8 +7733,8 @@ export class GameScene extends Phaser.Scene {
       }
     }
     
-    // Update Heavy, Sniper, Spy (if enabled)
-    if (this.isHeavyEnabled() || this.isSniperEnabled() || this.isSpyEnabled()) {
+    // Update Heavy, Sniper, Spy, Pyro (if enabled)
+    if (this.isHeavyEnabled() || this.isSniperEnabled() || this.isSpyEnabled() || this.isPyroEnabled()) {
       this.updateHeavyAndSniper(delta);
     }
     
@@ -7194,6 +7908,45 @@ export class GameScene extends Phaser.Scene {
       }
     }
     
+    // Update Pyro (Custom Night only)
+    if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
+      // Player is in Intel if not teleported away
+      const playerInIntel = !this.isTeleported;
+      const pyroResult = this.pyro.update(delta, playerInIntel);
+      
+      // Handle match just lit warning
+      if (pyroResult.matchJustLit) {
+        // Match was just lit - show escape warning (handled by callback, but update UI too)
+        this.showPyroEscapeWarning(true);
+      }
+      
+      // Handle ongoing escape timer
+      if (pyroResult.playerMustEscape && playerInIntel) {
+        // Update escape timer display
+        const timeRemaining = Math.ceil(pyroResult.escapeTimeRemaining / 1000);
+        this.updatePyroEscapeTimer(timeRemaining);
+      } else {
+        this.showPyroEscapeWarning(false);
+        // Stop crackling if match is no longer lit
+        if (!this.pyro.isMatchLit()) {
+          this.stopPyroCracklingAmbient();
+        }
+      }
+      
+      // Handle player burned (didn't escape in time)
+      if (pyroResult.playerBurned && playerInIntel) {
+        this.gameOver('Pyro burned you alive!');
+      }
+      
+      // If player teleported away while match was lit, notify Pyro
+      if (this.isTeleported && this.pyro.isMatchLit()) {
+        this.pyro.onPlayerEscaped();
+        this.showAlert('Escaped Pyro!', 0x00ff00);
+        this.showPyroEscapeWarning(false);
+        this.stopPyroCracklingAmbient();
+      }
+    }
+    
     // Update camera repair timers
     const now = Date.now();
     this.cameraStates.forEach((state, _camId) => {
@@ -7219,22 +7972,38 @@ export class GameScene extends Phaser.Scene {
       const heavyInRoom = this.isHeavyEnabled() && this.heavy.currentNode === this.currentRoom && this.heavy.isActive();
       const sniperInRoom = this.isSniperEnabled() && this.sniper.currentNode === this.currentRoom && this.sniper.isActive();
       const demomanInRoom = this.isDemomanEnabled() && this.demoman.isCharging() && this.demoman.currentNode === this.currentRoom;
+      const pyroInRoom = this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned() && this.pyro.isAtNode(this.currentRoom);
       
-      const enemyInRoom = scoutInRoom || soldierInRoom || heavyInRoom || sniperInRoom || demomanInRoom;
+      const enemyInRoom = scoutInRoom || soldierInRoom || heavyInRoom || sniperInRoom || demomanInRoom || pyroInRoom;
       
       const adjacent = ROOM_ADJACENCY[this.currentRoom] || [];
       
-      const enemyAdjacent = 
-        (this.isHeavyEnabled() && this.heavy.isActive() && adjacent.includes(this.heavy.currentNode)) ||
-        (this.isSniperEnabled() && this.sniper.isActive() && adjacent.includes(this.sniper.currentNode)) ||
-        (this.isScoutEnabled() && this.scout.isActive() && adjacent.includes(this.scout.currentNode)) ||
-        (this.isSoldierEnabled() && this.soldier.isActive() && adjacent.includes(this.soldier.currentNode));
+      // Identify which enemy is approaching (prioritize in-room over adjacent)
+      let newApproachingEnemy = '';
+      if (pyroInRoom) newApproachingEnemy = 'Pyro';
+      else if (scoutInRoom) newApproachingEnemy = 'Scout';
+      else if (soldierInRoom) newApproachingEnemy = 'Soldier';
+      else if (heavyInRoom) newApproachingEnemy = 'Heavy';
+      else if (sniperInRoom) newApproachingEnemy = 'Sniper';
+      else if (demomanInRoom) newApproachingEnemy = 'Demoman';
+      else if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned() && this.pyro.getMode() === 'ROOM' && adjacent.includes(this.pyro.currentNode)) {
+        newApproachingEnemy = 'Pyro';
+      } else if (this.isHeavyEnabled() && this.heavy.isActive() && adjacent.includes(this.heavy.currentNode)) {
+        newApproachingEnemy = 'Heavy';
+      } else if (this.isSniperEnabled() && this.sniper.isActive() && adjacent.includes(this.sniper.currentNode)) {
+        newApproachingEnemy = 'Sniper';
+      } else if (this.isScoutEnabled() && this.scout.isActive() && adjacent.includes(this.scout.currentNode)) {
+        newApproachingEnemy = 'Scout';
+      } else if (this.isSoldierEnabled() && this.soldier.isActive() && adjacent.includes(this.soldier.currentNode)) {
+        newApproachingEnemy = 'Soldier';
+      }
       
       // Enemy in room OR adjacent triggers warning
-      const enemyApproaching = enemyInRoom || enemyAdjacent;
+      const enemyApproaching = enemyInRoom || !!newApproachingEnemy;
       
       if (enemyApproaching && !this.enemyApproachingRoom) {
         this.enemyApproachingRoom = true;
+        this.approachingEnemyType = newApproachingEnemy || 'an enemy';
         this.teleportEscapeTimer = GAME_CONSTANTS.TELEPORT_ESCAPE_TIME;
         this.showAlert('A nearby enemy heard you!', 0xff0000);
         this.escapeWarning.setVisible(true);
@@ -7242,10 +8011,7 @@ export class GameScene extends Phaser.Scene {
         this.playEnemyApproachSound();
       }
       
-      // Hide eyes if no longer approaching
-      if (!enemyApproaching && this.enemyApproachingRoom) {
-        this.roomDoorwayEyes.setVisible(false);
-      }
+      // Eyes stay visible once triggered - only hide when returning to Intel
       
       if (this.enemyApproachingRoom) {
         this.teleportEscapeTimer -= delta;
@@ -7271,25 +8037,12 @@ export class GameScene extends Phaser.Scene {
         this.updateApproachGrowl(this.teleportEscapeTimer);
         
         if (this.teleportEscapeTimer <= 0) {
-          // Too late - player dies. Determine which enemy caught them.
+          // Too late - player dies. Use the enemy that triggered the approach.
           this.stopApproachGrowl();
           
-          // Priority: enemy IN room > enemy adjacent
-          let killer = 'an enemy';
-          if (scoutInRoom) killer = 'Scout';
-          else if (soldierInRoom) killer = 'Soldier';
-          else if (demomanInRoom) killer = 'Demoman';
-          else if (heavyInRoom) killer = 'Heavy';
-          else if (sniperInRoom) killer = 'Sniper';
-          else {
-            // Check adjacent enemies
-            const adj = ROOM_ADJACENCY[this.currentRoom] || [];
-            if (this.isScoutEnabled() && this.scout.isActive() && adj.includes(this.scout.currentNode)) killer = 'Scout';
-            else if (this.isSoldierEnabled() && this.soldier.isActive() && adj.includes(this.soldier.currentNode)) killer = 'Soldier';
-            else if (this.isDemomanEnabled() && this.demoman.isCharging() && adj.includes(this.demoman.currentNode)) killer = 'Demoman';
-            else if (this.isHeavyEnabled() && this.heavy.isActive() && adj.includes(this.heavy.currentNode)) killer = 'Heavy';
-            else if (this.isSniperEnabled() && this.sniper.isActive() && adj.includes(this.sniper.currentNode)) killer = 'Sniper';
-          }
+          // Use the stored approaching enemy type (the one who triggered the timer)
+          // This ensures proper jumpscare even if the enemy moved away
+          const killer = this.approachingEnemyType || 'an enemy';
           
           this.gameOver(`${killer} caught you!`);
           return;
@@ -7366,6 +8119,15 @@ export class GameScene extends Phaser.Scene {
   private onSniperHeadshot(): void {
     // This is triggered when sniper's charge completes
     this.gameOver('Sniped!');
+  }
+  
+  /**
+   * Handle Pyro match lit warning (Custom Night)
+   * No alert notification - just play the sound. The escape timer UI will show.
+   */
+  private onPyroMatchLit(): void {
+    console.log('🔥 PYRO MATCH LIT! ESCAPE NOW!');
+    this.playPyroMatchSound();
   }
   
   /**

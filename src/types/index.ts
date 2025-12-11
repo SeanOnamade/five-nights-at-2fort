@@ -69,7 +69,7 @@ export const ROOM_ADJACENCY: Record<NodeId, NodeId[]> = {
 /**
  * Enemy types available in the game
  */
-export type EnemyType = 'SCOUT' | 'SOLDIER' | 'DEMOMAN' | 'HEAVY' | 'SNIPER' | 'SPY';
+export type EnemyType = 'SCOUT' | 'SOLDIER' | 'DEMOMAN' | 'HEAVY' | 'SNIPER' | 'SPY' | 'PYRO';
 
 /**
  * Spy-specific state (Night 5)
@@ -80,6 +80,11 @@ export type SpyState = 'DISGUISE' | 'SAPPING';
  * What enemy Spy is disguised as
  */
 export type SpyDisguise = 'SCOUT' | 'SOLDIER' | 'DEMOMAN_HEAD' | 'HEAVY' | 'SNIPER';
+
+/**
+ * Pyro mode (Custom Night only)
+ */
+export type PyroMode = 'ROOM' | 'INTEL';
 
 /**
  * Possible states an enemy can be in
@@ -280,5 +285,12 @@ export const GAME_CONSTANTS = {
   SPY_SAP_DAMAGE_RATE: 30,          // HP per second drain when sapping
   SPY_SAP_REMOVE_CLICKS: 2,         // SPACE presses needed to remove sapper
   SPY_FAKE_WATCH_SPEED: 1.5,        // Fake watch bar fills at 1.5x normal speed
+  
+  // Pyro settings - CUSTOM NIGHT ONLY
+  PYRO_ROOM_TELEPORT_INTERVAL: 7000,  // Time between Pyro teleports in room mode (7 sec)
+  PYRO_MODE_TOGGLE_INTERVAL: 45000,   // Time between ROOM/INTEL mode switches (45 sec)
+  PYRO_INTEL_ESCAPE_TIME: 10000,      // Time to escape after match is lit (10 sec)
+  PYRO_INTEL_SPAWN_CHANCE: 0.3,       // 30% chance to spawn in Intel each check
+  PYRO_INTEL_CHECK_INTERVAL: 2000,    // Check for Intel spawn every 2 sec
 } as const;
 
