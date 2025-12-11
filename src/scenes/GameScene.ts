@@ -82,6 +82,8 @@ export class GameScene extends Phaser.Scene {
     "Press Space twice to remove a Sapper!",
     "Spy and Demoman's head will not attack you when teleported.",
     "If you don't have the metal to defend yourself, unwrangle your Sentry before an enemy attacks to save yourself!",
+    "Spy switches mode every hour.",
+    "Demo will never begin his attack while you're watching him.",
     // Additional hints
     "The Wrangler lets you manually aim your sentry at either doorway.",
     "Use cameras to track enemy positions across the map.",
@@ -242,6 +244,12 @@ export class GameScene extends Phaser.Scene {
   // Shared audio context for consistent sound levels
   private sharedAudioContext: AudioContext | null = null;
   
+  // Dispenser ambient hum (plays in Intel room)
+  private isPlayingDispenserHum: boolean = false;
+  private dispenserHumOscillator: OscillatorNode | null = null;
+  private dispenserHumOscillator2: OscillatorNode | null = null;
+  private dispenserHumGain: GainNode | null = null;
+  
   // End screen
   private endScreen!: Phaser.GameObjects.Container;
   
@@ -334,6 +342,7 @@ export class GameScene extends Phaser.Scene {
     this.stopDemoEyeGlowSound();
     this.stopSniperLaserHum();
     this.stopSapperSound();
+    this.stopDispenserHum();
     
     // Reset sapper state for Night 5
     this.sapperRemoveClicks = 0;
@@ -474,6 +483,9 @@ export class GameScene extends Phaser.Scene {
     
     // Initial HUD update
     this.updateHUD();
+    
+    // Start ambient dispenser hum in Intel room
+    this.startDispenserHum();
   }
   
   // ============================================
@@ -2067,46 +2079,50 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     
-    // Check if any enemy BODY is in this room (not just heads)
-    const scoutThere = this.scout.isAtNode(node);
-    const soldierThere = this.soldier.isAtNode(node);
-    // Demoman: only check if his BODY is there (when charging), not just his head
-    const demomanBodyThere = this.isDemomanEnabled() && 
-                              this.demoman.isCharging() && 
-                              this.demoman.currentNode === node;
-    const heavyThere = this.isHeavyEnabled() && this.heavy.isAtNode(node);
-    const sniperThere = this.isSniperEnabled() && this.sniper.isAtNode(node);
-    
-    console.log(`Teleporting to ${node}. Enemies: Scout=${scoutThere}, Soldier=${soldierThere}, DemoBody=${demomanBodyThere}, Heavy=${heavyThere}, Sniper=${sniperThere}`);
-    
-    // Check each enemy type and show appropriate jumpscare
-    if (scoutThere) {
-      this.gameOver('Scout caught you!');
-      return;
-    }
-    if (soldierThere) {
-      this.gameOver('Soldier got you!');
-      return;
-    }
-    if (demomanBodyThere) {
-      this.gameOver('Demoman charged you!');
-      return;
-    }
-    if (heavyThere) {
-      this.gameOver('Heavy crushed you!');
-      return;
-    }
-    if (sniperThere) {
-      this.gameOver('Sniped at close range!');
-      return;
-    }
-    
-    // Show teleport animation overlay
+    // Show teleport animation overlay FIRST, then check for enemies after arrival
     this.showTeleportAnimation(() => {
+      // Check if any enemy BODY is in this room (not just heads)
+      const scoutThere = this.scout.isAtNode(node);
+      const soldierThere = this.soldier.isAtNode(node);
+      // Demoman: only check if his BODY is there (when charging), not just his head
+      const demomanBodyThere = this.isDemomanEnabled() && 
+                                this.demoman.isCharging() && 
+                                this.demoman.currentNode === node;
+      const heavyThere = this.isHeavyEnabled() && this.heavy.isAtNode(node);
+      const sniperThere = this.isSniperEnabled() && this.sniper.isAtNode(node);
+      
+      console.log(`Arrived at ${node}. Enemies: Scout=${scoutThere}, Soldier=${soldierThere}, DemoBody=${demomanBodyThere}, Heavy=${heavyThere}, Sniper=${sniperThere}`);
+      
+      // Check each enemy type and show appropriate jumpscare AFTER teleport animation
+      if (scoutThere) {
+        this.gameOver('Scout caught you!');
+        return;
+      }
+      if (soldierThere) {
+        this.gameOver('Soldier got you!');
+        return;
+      }
+      if (demomanBodyThere) {
+        this.gameOver('Demoman charged you!');
+        return;
+      }
+      if (heavyThere) {
+        this.gameOver('Heavy crushed you!');
+        return;
+      }
+      if (sniperThere) {
+        this.gameOver('Sniped at close range!');
+        return;
+      }
+      
+      // No enemy - safe to teleport
       this.isTeleported = true;
       this.currentRoom = node;
       this.teleportEscapeTimer = 0;
       this.enemyApproachingRoom = false;
+      
+      // Stop dispenser hum when leaving Intel room
+      this.stopDispenserHum();
       
       // Reset aim states (important for mobile touch zones)
       this.keyADown = false;
@@ -2184,6 +2200,9 @@ export class GameScene extends Phaser.Scene {
       
       // Restore lure bar to original position (right of metal count)
       this.lureBarContainer.setPosition(280, 32);
+      
+      // Resume dispenser hum when back in Intel room
+      this.startDispenserHum();
       
       console.log('Engineer returned to Intel room');
       
@@ -4192,6 +4211,13 @@ export class GameScene extends Phaser.Scene {
       if (!this.sentry.exists) return;
       
       this.sentry.isWrangled = !this.sentry.isWrangled;
+      
+      // Resume dispenser hum if turning wrangler off (no longer aiming)
+      if (!this.sentry.isWrangled && !this.isTeleported) {
+        this.sentry.aimedDoor = 'NONE';
+        this.startDispenserHum();
+      }
+      
       this.updateWranglerVisuals();
       this.updateHUD();
     });
@@ -4405,6 +4431,13 @@ export class GameScene extends Phaser.Scene {
       if (!this.sentry.exists) return;
       
       this.sentry.isWrangled = !this.sentry.isWrangled;
+      
+      // Resume dispenser hum if turning wrangler off (no longer aiming)
+      if (!this.sentry.isWrangled && !this.isTeleported) {
+        this.sentry.aimedDoor = 'NONE';
+        this.startDispenserHum();
+      }
+      
       this.updateWranglerVisuals();
       this.updateHUD();
       this.updateMobileWranglerButton();
@@ -4781,6 +4814,7 @@ export class GameScene extends Phaser.Scene {
     if (this.isPaused) {
       // Pause the game
       this.stopDetectionSound();
+      this.stopDispenserHum();
       this.physics?.pause();
       
       // Show a random hint
@@ -4789,6 +4823,10 @@ export class GameScene extends Phaser.Scene {
     } else {
       // Resume
       this.physics?.resume();
+      // Resume dispenser hum if in Intel room (plays even with cameras up)
+      if (!this.isTeleported) {
+        this.startDispenserHum();
+      }
     }
   }
   
@@ -4819,6 +4857,14 @@ export class GameScene extends Phaser.Scene {
     if (prevAim !== this.sentry.aimedDoor) {
       this.updateWranglerVisuals();
       this.updateHUD();
+      
+      // Pause dispenser hum when aiming down a hallway (for focus)
+      if (this.sentry.aimedDoor !== 'NONE') {
+        this.stopDispenserHum();
+      } else if (!this.isTeleported && !this.isPaused) {
+        // Resume hum when no longer aiming
+        this.startDispenserHum();
+      }
     }
   }
   
@@ -5060,6 +5106,88 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
+   * Start the dispenser ambient hum - low continuous electrical hum
+   */
+  private startDispenserHum(): void {
+    if (this.isPlayingDispenserHum) return;
+    
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Main gain node
+      this.dispenserHumGain = audioContext.createGain();
+      this.dispenserHumGain.gain.setValueAtTime(0.08, audioContext.currentTime);
+      this.dispenserHumGain.connect(audioContext.destination);
+      
+      // Primary low hum (electrical transformer sound)
+      this.dispenserHumOscillator = audioContext.createOscillator();
+      this.dispenserHumOscillator.type = 'sine';
+      this.dispenserHumOscillator.frequency.setValueAtTime(100, audioContext.currentTime);
+      this.dispenserHumOscillator.connect(this.dispenserHumGain);
+      
+      // Secondary harmonic for richness (higher pitch whir)
+      this.dispenserHumOscillator2 = audioContext.createOscillator();
+      this.dispenserHumOscillator2.type = 'triangle';
+      this.dispenserHumOscillator2.frequency.setValueAtTime(200, audioContext.currentTime);
+      
+      const secondaryGain = audioContext.createGain();
+      secondaryGain.gain.setValueAtTime(0.04, audioContext.currentTime);
+      secondaryGain.connect(audioContext.destination);
+      this.dispenserHumOscillator2.connect(secondaryGain);
+      
+      // Add subtle wobble to make it sound more organic
+      const lfo = audioContext.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.setValueAtTime(0.3, audioContext.currentTime);
+      const lfoGain = audioContext.createGain();
+      lfoGain.gain.setValueAtTime(2, audioContext.currentTime);
+      lfo.connect(lfoGain);
+      lfoGain.connect(this.dispenserHumOscillator.frequency);
+      lfo.start();
+      
+      this.dispenserHumOscillator.start();
+      this.dispenserHumOscillator2.start();
+      this.isPlayingDispenserHum = true;
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Stop the dispenser ambient hum
+   */
+  private stopDispenserHum(): void {
+    if (!this.isPlayingDispenserHum) return;
+    
+    try {
+      if (this.dispenserHumOscillator) {
+        this.dispenserHumOscillator.stop();
+        this.dispenserHumOscillator.disconnect();
+        this.dispenserHumOscillator = null;
+      }
+      if (this.dispenserHumOscillator2) {
+        this.dispenserHumOscillator2.stop();
+        this.dispenserHumOscillator2.disconnect();
+        this.dispenserHumOscillator2 = null;
+      }
+      if (this.dispenserHumGain) {
+        this.dispenserHumGain.disconnect();
+        this.dispenserHumGain = null;
+      }
+    } catch (e) {
+      // Already stopped
+    }
+    this.isPlayingDispenserHum = false;
+  }
+  
+  /**
    * Play sapper sparking/buzzing sound (Night 5+)
    */
   private playSapperSound(): void {
@@ -5194,6 +5322,7 @@ export class GameScene extends Phaser.Scene {
     this.stopSapperSound();
     this.stopDemoEyeGlowSound();
     this.stopApproachGrowl();
+    this.stopDispenserHum();
     
     // Force stop any oscillators that might still be running
     const oscillatorsToStop = [
@@ -5202,6 +5331,8 @@ export class GameScene extends Phaser.Scene {
       this.sniperHumOscillator,
       this.detectionOscillator,
       this.approachGrowlOsc,
+      this.dispenserHumOscillator,
+      this.dispenserHumOscillator2,
     ];
     
     for (const osc of oscillatorsToStop) {
@@ -5221,12 +5352,15 @@ export class GameScene extends Phaser.Scene {
     this.sniperHumOscillator = null;
     this.detectionOscillator = null;
     this.approachGrowlOsc = null;
+    this.dispenserHumOscillator = null;
+    this.dispenserHumOscillator2 = null;
     
     // Null out gain nodes too
     this.demoEyeGlowGain = null;
     this.sapperSoundGain = null;
     this.sniperHumGain = null;
     this.approachGrowlGain = null;
+    this.dispenserHumGain = null;
     
     // Close the shared audio context completely to stop ALL sounds
     if (this.sharedAudioContext) {

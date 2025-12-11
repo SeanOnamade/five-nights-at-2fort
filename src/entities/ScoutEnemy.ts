@@ -36,3 +36,4 @@ export class ScoutEnemy extends EnemyBase {
 }
 
 
+
