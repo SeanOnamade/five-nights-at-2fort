@@ -6588,6 +6588,9 @@ export class GameScene extends Phaser.Scene {
    * Update teleport danger check - runs every frame regardless of which enemies are enabled
    */
   private updateTeleportDanger(delta: number): void {
+    // Only run on Night 3+ when teleporting is available (escapeWarning only exists then)
+    if (!this.escapeWarning) return;
+    
     // Check if enemy is IN the Engineer's room or approaching
     if (this.isTeleported && this.currentRoom !== 'INTEL') {
       // Check if any enemy is IN the same room as engineer (very dangerous!)
