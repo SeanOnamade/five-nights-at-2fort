@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>Five Nights at 2Fort</title>
   <style>
     * {
@@ -17,16 +19,125 @@
       align-items: center;
       min-height: 100vh;
       overflow: hidden;
+      font-family: 'Courier New', monospace;
+      /* Prevent pull-to-refresh and overscroll */
+      overscroll-behavior: none;
+      touch-action: manipulation;
     }
     #game-container {
       box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
     }
+    
+    /* ===== LANDSCAPE ORIENTATION PROMPT ===== */
+    #orientation-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #0a0a18 0%, #141428 50%, #1a1a2e 100%);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      text-align: center;
+      padding: 20px;
+    }
+    
+    #orientation-overlay.visible {
+      display: flex;
+    }
+    
+    .rotate-icon {
+      width: 120px;
+      height: 120px;
+      margin-bottom: 30px;
+      animation: rotatePhone 2s ease-in-out infinite;
+    }
+    
+    @keyframes rotatePhone {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-20deg); }
+      75% { transform: rotate(90deg); }
+    }
+    
+    .rotate-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+    
+    .orientation-title {
+      color: #ff6600;
+      font-size: 28px;
+      font-weight: bold;
+      margin-bottom: 15px;
+      text-shadow: 0 0 20px rgba(255, 102, 0, 0.5);
+    }
+    
+    .orientation-subtitle {
+      color: #7799bb;
+      font-size: 16px;
+      line-height: 1.5;
+      max-width: 300px;
+    }
+    
+    .orientation-corners {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    
+    .corner {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      border-color: #ff6600;
+      border-style: solid;
+      opacity: 0.6;
+    }
+    
+    .corner-tl { top: 20px; left: 20px; border-width: 3px 0 0 3px; }
+    .corner-tr { top: 20px; right: 20px; border-width: 3px 3px 0 0; }
+    .corner-bl { bottom: 20px; left: 20px; border-width: 0 0 3px 3px; }
+    .corner-br { bottom: 20px; right: 20px; border-width: 0 3px 3px 0; }
   </style>
 </head>
 <body>
+  <!-- Landscape Orientation Overlay (shown on mobile in portrait mode) -->
+  <div id="orientation-overlay">
+    <div class="orientation-corners">
+      <div class="corner corner-tl"></div>
+      <div class="corner corner-tr"></div>
+      <div class="corner corner-bl"></div>
+      <div class="corner corner-br"></div>
+    </div>
+    
+    <div class="rotate-icon">
+      <!-- Phone rotation SVG icon -->
+      <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Phone body -->
+        <rect x="30" y="15" width="40" height="70" rx="5" stroke="#ff6600" stroke-width="3" fill="#1a1a2e"/>
+        <!-- Screen -->
+        <rect x="34" y="22" width="32" height="52" rx="2" fill="#2a2a4e"/>
+        <!-- Home button -->
+        <circle cx="50" cy="79" r="4" stroke="#ff6600" stroke-width="2" fill="none"/>
+        <!-- Rotation arrow -->
+        <path d="M75 50 C85 50, 85 70, 70 75" stroke="#7799bb" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M70 75 L74 70 L66 71" fill="#7799bb"/>
+        <path d="M25 50 C15 50, 15 30, 30 25" stroke="#7799bb" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M30 25 L26 30 L34 29" fill="#7799bb"/>
+      </svg>
+    </div>
+    
+    <div class="orientation-title">ROTATE YOUR DEVICE</div>
+    <div class="orientation-subtitle">
+      Please rotate your device to landscape mode to play Five Nights at 2Fort
+    </div>
+  </div>
+  
   <div id="game-container"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
-
-

@@ -11,6 +11,7 @@ import {
   LureData,
   ROOM_ADJACENCY,
 } from '../types';
+import { isMobileDevice } from '../utils/mobile';
 import { ScoutEnemy } from '../entities/ScoutEnemy';
 import { SoldierEnemy } from '../entities/SoldierEnemy';
 import { DemomanEnemy } from '../entities/DemomanEnemy';
@@ -244,6 +245,23 @@ export class GameScene extends Phaser.Scene {
   // End screen
   private endScreen!: Phaser.GameObjects.Container;
   
+  // ============================================
+  // MOBILE CONTROLS
+  // ============================================
+  
+  private isMobile: boolean = false;
+  private mobileUI!: Phaser.GameObjects.Container;
+  private mobileCameraButton!: Phaser.GameObjects.Container;
+  private mobileWranglerButton!: Phaser.GameObjects.Container;
+  private mobileActionButton!: Phaser.GameObjects.Container;
+  private mobileActionText!: Phaser.GameObjects.Text;
+  private mobileFireButton!: Phaser.GameObjects.Container;
+  private mobilePauseButton!: Phaser.GameObjects.Container;
+  private mobileLeftZone!: Phaser.GameObjects.Rectangle;
+  private mobileRightZone!: Phaser.GameObjects.Rectangle;
+  private mobileLeftHint!: Phaser.GameObjects.Graphics;
+  private mobileRightHint!: Phaser.GameObjects.Graphics;
+  
   constructor() {
     super({ key: 'GameScene' });
   }
@@ -433,6 +451,9 @@ export class GameScene extends Phaser.Scene {
     // Clean up on scene shutdown
     this.events.once('shutdown', this.cleanup, this);
     
+    // Check for mobile FIRST (needed for pause menu layout)
+    this.isMobile = isMobileDevice();
+    
     // Create visuals
     this.createRoom();
     this.createSentry();
@@ -440,10 +461,15 @@ export class GameScene extends Phaser.Scene {
     this.createHUD();
     this.createCameraUI();
     this.createEndScreen();
-    this.createPauseMenu();
+    this.createPauseMenu(); // Uses this.isMobile for layout
     
     // Set up input
     this.setupInput();
+    
+    // Create mobile touch controls if on mobile
+    if (this.isMobile) {
+      this.createMobileControls();
+    }
     
     // Initial HUD update
     this.updateHUD();
@@ -2049,6 +2075,11 @@ export class GameScene extends Phaser.Scene {
       this.currentRoom = node;
       this.teleportEscapeTimer = 0;
       this.enemyApproachingRoom = false;
+      
+      // Reset aim states (important for mobile touch zones)
+      this.keyADown = false;
+      this.keyDDown = false;
+      this.sentry.aimedDoor = 'NONE';
       
       // Immediately check for approaching enemies
       const adjacent = ROOM_ADJACENCY[this.currentRoom] || [];
@@ -4198,6 +4229,385 @@ export class GameScene extends Phaser.Scene {
     });
   }
   
+  // ============================================
+  // MOBILE CONTROLS
+  // ============================================
+  
+  /**
+   * Create mobile touch controls (only called on mobile devices)
+   */
+  private createMobileControls(): void {
+    const width = 1280;
+    const height = 720;
+    
+    // Main container for all mobile UI
+    this.mobileUI = this.add.container(0, 0);
+    this.mobileUI.setDepth(150); // Above game, below pause menu
+    
+    // ===== LEFT TOUCH ZONE (A key equivalent) =====
+    this.mobileLeftZone = this.add.rectangle(0, height / 2, 180, height, 0x000000, 0);
+    this.mobileLeftZone.setOrigin(0, 0.5);
+    this.mobileLeftZone.setInteractive();
+    
+    // Left visual hint (subtle edge glow)
+    this.mobileLeftHint = this.add.graphics();
+    this.mobileLeftHint.fillStyle(0x4488ff, 0.15);
+    this.mobileLeftHint.fillRect(0, 50, 15, height - 100);
+    this.mobileLeftHint.setVisible(true);
+    this.mobileUI.add(this.mobileLeftHint);
+    
+    // Left zone touch handlers
+    const resetLeftZone = () => {
+      this.keyADown = false;
+      this.mobileLeftHint.clear();
+      this.mobileLeftHint.fillStyle(0x4488ff, 0.15);
+      this.mobileLeftHint.fillRect(0, 50, 15, height - 100);
+    };
+    this.mobileLeftZone.on('pointerdown', () => {
+      if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isCameraMode || this.isTeleported) return;
+      this.keyADown = true;
+      this.mobileLeftHint.clear();
+      this.mobileLeftHint.fillStyle(0x4488ff, 0.4);
+      this.mobileLeftHint.fillRect(0, 50, 30, height - 100);
+    });
+    this.mobileLeftZone.on('pointerup', resetLeftZone);
+    this.mobileLeftZone.on('pointerout', resetLeftZone);
+    this.mobileLeftZone.on('pointercancel', resetLeftZone);
+    
+    // ===== RIGHT TOUCH ZONE (D key equivalent) =====
+    this.mobileRightZone = this.add.rectangle(width, height / 2, 180, height, 0x000000, 0);
+    this.mobileRightZone.setOrigin(1, 0.5);
+    this.mobileRightZone.setInteractive();
+    
+    // Right visual hint
+    this.mobileRightHint = this.add.graphics();
+    this.mobileRightHint.fillStyle(0x4488ff, 0.15);
+    this.mobileRightHint.fillRect(width - 15, 50, 15, height - 100);
+    this.mobileRightHint.setVisible(true);
+    this.mobileUI.add(this.mobileRightHint);
+    
+    // Right zone touch handlers
+    const resetRightZone = () => {
+      this.keyDDown = false;
+      this.mobileRightHint.clear();
+      this.mobileRightHint.fillStyle(0x4488ff, 0.15);
+      this.mobileRightHint.fillRect(width - 15, 50, 15, height - 100);
+    };
+    this.mobileRightZone.on('pointerdown', () => {
+      if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isCameraMode || this.isTeleported) return;
+      this.keyDDown = true;
+      this.mobileRightHint.clear();
+      this.mobileRightHint.fillStyle(0x4488ff, 0.4);
+      this.mobileRightHint.fillRect(width - 30, 50, 30, height - 100);
+    });
+    this.mobileRightZone.on('pointerup', resetRightZone);
+    this.mobileRightZone.on('pointerout', resetRightZone);
+    this.mobileRightZone.on('pointercancel', resetRightZone);
+    
+    // ===== FIRE BUTTON (appears near sentry when wrangled + aimed) =====
+    this.mobileFireButton = this.add.container(width / 2, height - 320);
+    const fireBg = this.add.rectangle(0, 0, 100, 50, 0x442222);
+    fireBg.setStrokeStyle(3, 0xff4444);
+    fireBg.setInteractive({ useHandCursor: true });
+    const fireText = this.add.text(0, 0, 'FIRE', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '18px',
+      color: '#ff6666',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    fireBg.on('pointerdown', () => {
+      if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isCameraMode) return;
+      if (!this.sentry.exists || !this.sentry.isWrangled) return;
+      if (this.sentry.aimedDoor === 'NONE') return;
+      this.fireWrangler();
+    });
+    fireBg.on('pointerover', () => fireBg.setFillStyle(0x663333));
+    fireBg.on('pointerout', () => fireBg.setFillStyle(0x442222));
+    this.mobileFireButton.add([fireBg, fireText]);
+    this.mobileFireButton.setVisible(false);
+    this.mobileUI.add(this.mobileFireButton);
+    
+    // ===== PAUSE BUTTON (top right corner) =====
+    this.mobilePauseButton = this.add.container(width - 50, 50);
+    const pauseBg = this.add.rectangle(0, 0, 80, 40, 0x1a2a3a, 0.9);
+    pauseBg.setStrokeStyle(2, 0x3a5a7a);
+    pauseBg.setInteractive({ useHandCursor: true });
+    // Pause icon: two vertical bars using graphics
+    const pauseIconGfx = this.add.graphics();
+    pauseIconGfx.fillStyle(0x7799bb, 1);
+    pauseIconGfx.fillRect(-12, -10, 8, 20); // Left bar
+    pauseIconGfx.fillRect(4, -10, 8, 20);   // Right bar
+    pauseBg.on('pointerdown', () => {
+      if (this.gameStatus !== 'PLAYING') return;
+      this.togglePause();
+    });
+    pauseBg.on('pointerover', () => {
+      pauseBg.setFillStyle(0x2a3a4a);
+      pauseBg.setStrokeStyle(2, 0x5a8aba);
+    });
+    pauseBg.on('pointerout', () => {
+      pauseBg.setFillStyle(0x1a2a3a, 0.9);
+      pauseBg.setStrokeStyle(2, 0x3a5a7a);
+    });
+    this.mobilePauseButton.add([pauseBg, pauseIconGfx]);
+    this.mobileUI.add(this.mobilePauseButton);
+    
+    // ===== CAMERA BUTTON (to the left of pause, with spacing) =====
+    this.mobileCameraButton = this.createMobileButton(width - 145, 50, 'CAM', () => {
+      if (this.gameStatus !== 'PLAYING' || this.isPaused) return;
+      if (this.isTeleported) return; // Can't use cameras when teleported
+      this.toggleCameraMode();
+    });
+    this.mobileUI.add(this.mobileCameraButton);
+    
+    // ===== WRANGLER BUTTON (below pause/cam row) =====
+    this.mobileWranglerButton = this.createMobileButton(width - 50, 100, 'WRANGLE', () => {
+      if (this.gameStatus !== 'PLAYING' || this.isPaused) return;
+      if (this.isCameraMode) return;
+      if (!this.sentry.exists) return;
+      
+      this.sentry.isWrangled = !this.sentry.isWrangled;
+      this.updateWranglerVisuals();
+      this.updateHUD();
+      this.updateMobileWranglerButton();
+    });
+    this.mobileUI.add(this.mobileWranglerButton);
+    
+    // ===== ACTION BUTTON (top left, below HUD) =====
+    this.mobileActionButton = this.add.container(130, 140);
+    
+    const actionBg = this.add.rectangle(0, 0, 140, 40, 0x224422);
+    actionBg.setStrokeStyle(2, 0x44aa44);
+    actionBg.setInteractive({ useHandCursor: true });
+    
+    this.mobileActionText = this.add.text(0, 0, 'BUILD', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '14px',
+      color: '#88ff88',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    
+    actionBg.on('pointerdown', () => {
+      if (this.gameStatus !== 'PLAYING' || this.isPaused) return;
+      if (this.isTeleported) return; // Can't build/repair/upgrade when teleported
+      this.handleMobileAction();
+    });
+    
+    actionBg.on('pointerover', () => actionBg.setFillStyle(0x336633));
+    actionBg.on('pointerout', () => actionBg.setFillStyle(0x224422));
+    
+    this.mobileActionButton.add([actionBg, this.mobileActionText]);
+    this.mobileUI.add(this.mobileActionButton);
+    
+    // Initial update
+    this.updateMobileUI();
+  }
+  
+  /**
+   * Create a styled mobile button (text only, no emojis)
+   */
+  private createMobileButton(
+    x: number, 
+    y: number, 
+    label: string, 
+    callback: () => void
+  ): Phaser.GameObjects.Container {
+    const container = this.add.container(x, y);
+    
+    const bg = this.add.rectangle(0, 0, 80, 40, 0x1a2a3a, 0.9);
+    bg.setStrokeStyle(2, 0x3a5a7a);
+    bg.setInteractive({ useHandCursor: true });
+    
+    const labelText = this.add.text(0, 0, label, {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '12px',
+      color: '#7799bb',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    
+    bg.on('pointerdown', callback);
+    bg.on('pointerover', () => {
+      bg.setFillStyle(0x2a3a4a);
+      bg.setStrokeStyle(2, 0x5a8aba);
+    });
+    bg.on('pointerout', () => {
+      bg.setFillStyle(0x1a2a3a, 0.9);
+      bg.setStrokeStyle(2, 0x3a5a7a);
+    });
+    
+    container.add([bg, labelText]);
+    return container;
+  }
+  
+  /**
+   * Handle mobile action button press (context-sensitive)
+   */
+  private handleMobileAction(): void {
+    // Check for sapper removal first
+    if (this.isSpyEnabled() && this.spy && this.spy.isSapping()) {
+      this.sapperRemoveClicks++;
+      this.sapperRemoveTimeout = 2000;
+      
+      if (this.sapperRemoveClicks >= GAME_CONSTANTS.SPY_SAP_REMOVE_CLICKS) {
+        this.spy.removeSapper();
+        this.sapperIndicator.setVisible(false);
+        this.stopSapperSound();
+        this.showAlert('SAPPER REMOVED!', 0x00ff00);
+        this.sapperRemoveClicks = 0;
+        this.playSound('fire');
+      } else {
+        this.showAlert(`REMOVING SAPPER... (${this.sapperRemoveClicks}/${GAME_CONSTANTS.SPY_SAP_REMOVE_CLICKS})`, 0xffaa00);
+        this.playSound('fire');
+      }
+      return;
+    }
+    
+    // Then handle sentry actions
+    if (!this.sentry.exists) {
+      this.buildSentry();
+    } else if (this.sentry.hp < this.sentry.maxHp) {
+      this.repairSentry();
+    } else if (this.sentry.level < 3) {
+      this.upgradeSentry();
+    }
+  }
+  
+  /**
+   * Update mobile UI state
+   */
+  private updateMobileUI(): void {
+    if (!this.isMobile) return;
+    
+    // Update button states
+    this.updateMobileWranglerButton();
+    this.updateMobileActionButton();
+    this.updateMobileCameraButton();
+    this.updateMobileFireButton();
+    
+    // Show/hide zones based on mode
+    const inIntelRoom = !this.isCameraMode && !this.isTeleported;
+    this.mobileLeftHint.setVisible(inIntelRoom);
+    this.mobileRightHint.setVisible(inIntelRoom);
+    
+    // Wrangler button: only in intel room with sentry
+    this.mobileWranglerButton.setVisible(inIntelRoom && this.sentry.exists);
+    
+    // Action button: only in intel room (not in camera mode, not teleported)
+    this.mobileActionButton.setVisible(inIntelRoom);
+    
+    // Camera button: available except when teleported
+    this.mobileCameraButton.setVisible(!this.isTeleported);
+    
+    // Pause button: always visible
+    this.mobilePauseButton.setVisible(true);
+  }
+  
+  /**
+   * Update fire button visibility (shows when wrangled + aimed at door)
+   */
+  private updateMobileFireButton(): void {
+    if (!this.isMobile || !this.mobileFireButton) return;
+    
+    const inIntelRoom = !this.isCameraMode && !this.isTeleported;
+    const canFire = inIntelRoom && 
+                    this.sentry.exists && 
+                    this.sentry.isWrangled && 
+                    this.sentry.aimedDoor !== 'NONE';
+    
+    this.mobileFireButton.setVisible(canFire);
+  }
+  
+  /**
+   * Update wrangler button appearance based on state
+   */
+  private updateMobileWranglerButton(): void {
+    if (!this.isMobile || !this.mobileWranglerButton) return;
+    
+    const bg = this.mobileWranglerButton.list[0] as Phaser.GameObjects.Rectangle;
+    const label = this.mobileWranglerButton.list[1] as Phaser.GameObjects.Text;
+    
+    if (this.sentry.isWrangled) {
+      bg.setFillStyle(0x2a4a2a);
+      bg.setStrokeStyle(2, 0x44ff44);
+      label.setText('WRANGLED');
+      label.setColor('#44ff44');
+    } else {
+      bg.setFillStyle(0x1a2a3a, 0.9);
+      bg.setStrokeStyle(2, 0x3a5a7a);
+      label.setText('WRANGLE');
+      label.setColor('#7799bb');
+    }
+  }
+  
+  /**
+   * Update action button text based on current state
+   */
+  private updateMobileActionButton(): void {
+    if (!this.isMobile || !this.mobileActionText) return;
+    
+    const bg = this.mobileActionButton.list[0] as Phaser.GameObjects.Rectangle;
+    
+    // Check for sapper
+    if (this.isSpyEnabled() && this.spy && this.spy.isSapping()) {
+      this.mobileActionText.setText('REMOVE SAP');
+      this.mobileActionText.setColor('#ff8888');
+      bg.setFillStyle(0x442222);
+      bg.setStrokeStyle(2, 0xaa4444);
+      this.mobileActionButton.setVisible(true);
+      return;
+    }
+    
+    // Normal sentry actions
+    if (!this.sentry.exists) {
+      const canBuild = this.metal >= GAME_CONSTANTS.BUILD_SENTRY_COST;
+      this.mobileActionText.setText(`BUILD (${GAME_CONSTANTS.BUILD_SENTRY_COST})`);
+      this.mobileActionText.setColor(canBuild ? '#88ff88' : '#888888');
+      bg.setFillStyle(canBuild ? 0x224422 : 0x222222);
+      bg.setStrokeStyle(2, canBuild ? 0x44aa44 : 0x444444);
+    } else if (this.sentry.hp < this.sentry.maxHp) {
+      const repairCost = Math.min(this.sentry.maxHp - this.sentry.hp, GAME_CONSTANTS.REPAIR_SENTRY_AMOUNT);
+      const canRepair = this.metal >= repairCost;
+      this.mobileActionText.setText(`REPAIR (${repairCost})`);
+      this.mobileActionText.setColor(canRepair ? '#ffaa44' : '#888888');
+      bg.setFillStyle(canRepair ? 0x442a22 : 0x222222);
+      bg.setStrokeStyle(2, canRepair ? 0xaa6644 : 0x444444);
+    } else if (this.sentry.level < 3) {
+      const canUpgrade = this.metal >= GAME_CONSTANTS.UPGRADE_SENTRY_COST;
+      this.mobileActionText.setText(`UPGRADE (${GAME_CONSTANTS.UPGRADE_SENTRY_COST})`);
+      this.mobileActionText.setColor(canUpgrade ? '#88aaff' : '#888888');
+      bg.setFillStyle(canUpgrade ? 0x222244 : 0x222222);
+      bg.setStrokeStyle(2, canUpgrade ? 0x4466aa : 0x444444);
+    } else {
+      // Max level, no action needed
+      this.mobileActionText.setText('MAX LEVEL');
+      this.mobileActionText.setColor('#44aa44');
+      bg.setFillStyle(0x223322);
+      bg.setStrokeStyle(2, 0x336633);
+    }
+  }
+  
+  /**
+   * Update camera button based on camera mode
+   */
+  private updateMobileCameraButton(): void {
+    if (!this.isMobile || !this.mobileCameraButton) return;
+    
+    const bg = this.mobileCameraButton.list[0] as Phaser.GameObjects.Rectangle;
+    const label = this.mobileCameraButton.list[1] as Phaser.GameObjects.Text;
+    
+    if (this.isCameraMode) {
+      label.setText('CLOSE');
+      bg.setFillStyle(0x4a2a2a);
+      bg.setStrokeStyle(2, 0xaa5555);
+      label.setColor('#ff8888');
+    } else {
+      label.setText('CAM');
+      bg.setFillStyle(0x1a2a3a, 0.9);
+      bg.setStrokeStyle(2, 0x3a5a7a);
+      label.setColor('#7799bb');
+    }
+  }
+  
   /**
    * Create the pause menu UI
    */
@@ -4210,13 +4620,13 @@ export class GameScene extends Phaser.Scene {
     const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.8);
     this.pauseMenu.add(overlay);
     
-    // Pause panel
+    // Main pause panel (center)
     const panel = this.add.rectangle(640, 360, 400, 350, 0x1a1a2a);
     panel.setStrokeStyle(3, 0xff6600);
     this.pauseMenu.add(panel);
     
     // Title
-    const title = this.add.text(640, 240, 'PAUSED', {
+    const title = this.add.text(640, 220, 'PAUSED', {
       fontFamily: 'Courier New, monospace',
       fontSize: '48px',
       color: '#ff6600',
@@ -4224,8 +4634,11 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.pauseMenu.add(title);
     
+    // Buttons Y position
+    const buttonsStartY = 310;
+    
     // Resume button
-    const resumeBtn = this.add.rectangle(640, 330, 250, 50, 0x224422);
+    const resumeBtn = this.add.rectangle(640, buttonsStartY, 250, 45, 0x224422);
     resumeBtn.setStrokeStyle(2, 0x44aa44);
     resumeBtn.setInteractive({ useHandCursor: true });
     resumeBtn.on('pointerover', () => resumeBtn.setFillStyle(0x336633));
@@ -4233,15 +4646,15 @@ export class GameScene extends Phaser.Scene {
     resumeBtn.on('pointerdown', () => this.togglePause());
     this.pauseMenu.add(resumeBtn);
     
-    const resumeText = this.add.text(640, 330, 'RESUME (ESC)', {
+    const resumeText = this.add.text(640, buttonsStartY, 'RESUME', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
+      fontSize: '16px',
       color: '#88ff88',
     }).setOrigin(0.5);
     this.pauseMenu.add(resumeText);
     
     // Restart button
-    const restartBtn = this.add.rectangle(640, 400, 250, 50, 0x442222);
+    const restartBtn = this.add.rectangle(640, buttonsStartY + 55, 250, 45, 0x442222);
     restartBtn.setStrokeStyle(2, 0xaa4444);
     restartBtn.setInteractive({ useHandCursor: true });
     restartBtn.on('pointerover', () => restartBtn.setFillStyle(0x663333));
@@ -4252,15 +4665,15 @@ export class GameScene extends Phaser.Scene {
     });
     this.pauseMenu.add(restartBtn);
     
-    const restartText = this.add.text(640, 400, 'RESTART NIGHT', {
+    const restartText = this.add.text(640, buttonsStartY + 55, 'RESTART NIGHT', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
+      fontSize: '16px',
       color: '#ff8888',
     }).setOrigin(0.5);
     this.pauseMenu.add(restartText);
     
     // Main menu button
-    const menuBtn = this.add.rectangle(640, 470, 250, 50, 0x222244);
+    const menuBtn = this.add.rectangle(640, buttonsStartY + 110, 250, 45, 0x222244);
     menuBtn.setStrokeStyle(2, 0x4444aa);
     menuBtn.setInteractive({ useHandCursor: true });
     menuBtn.on('pointerover', () => menuBtn.setFillStyle(0x333366));
@@ -4271,22 +4684,22 @@ export class GameScene extends Phaser.Scene {
     });
     this.pauseMenu.add(menuBtn);
     
-    const menuText = this.add.text(640, 470, 'MAIN MENU', {
+    const menuText = this.add.text(640, buttonsStartY + 110, 'MAIN MENU', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
+      fontSize: '16px',
       color: '#8888ff',
     }).setOrigin(0.5);
     this.pauseMenu.add(menuText);
     
-    // Hint background
-    const hintBg = this.add.rectangle(640, 600, 500, 60, 0x0a0a14, 0.95);
+    // Hint background (bottom)
+    const hintBg = this.add.rectangle(640, 620, 500, 55, 0x0a0a14, 0.95);
     hintBg.setStrokeStyle(1, 0x333344);
     this.pauseMenu.add(hintBg);
     
     // Hint text (random hint shown each pause)
-    this.pauseHintText = this.add.text(640, 600, '', {
+    this.pauseHintText = this.add.text(640, 620, '', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
+      fontSize: '14px',
       color: '#cccccc',
       fontStyle: 'italic',
       wordWrap: { width: 470 },
@@ -5200,6 +5613,11 @@ export class GameScene extends Phaser.Scene {
       this.sentry.isWrangled = false;
       this.stopDetectionSound(); // Stop scary sound when viewing cameras
       
+      // Reset aim states (important for mobile touch zones)
+      this.keyADown = false;
+      this.keyDDown = false;
+      this.sentry.aimedDoor = 'NONE';
+      
       // Select first camera by default and update view
       this.selectCamera(this.selectedCamera);
     }
@@ -6024,6 +6442,11 @@ export class GameScene extends Phaser.Scene {
     // Update lure button state (grey out if not enough metal) - Night 3+
     if (this.nightNumber >= 3 && this.isTeleported) {
       this.updateLureButtonText();
+    }
+    
+    // Update mobile UI if on mobile
+    if (this.isMobile) {
+      this.updateMobileUI();
     }
   }
   

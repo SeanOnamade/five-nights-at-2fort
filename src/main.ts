@@ -28,6 +28,15 @@
  * doorway and can see enemies there. Release to aim middle (no light).
  * 
  * =============================================
+ * MOBILE CONTROLS
+ * =============================================
+ * Touch zones on left/right edges - Hold to aim at doorways
+ * Camera button (top right)      - Toggle camera view
+ * Wrangler button (when visible) - Toggle wrangler ON/OFF
+ * Tap sentry area                - Fire (when wrangler active)
+ * Action button                  - Build/Repair/Upgrade/Remove Sap
+ * 
+ * =============================================
  * GAME MECHANICS
  * =============================================
  * 
@@ -60,8 +69,52 @@
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
+import { isMobileDevice, isLandscape, onOrientationChange } from './utils/mobile';
 
-// Game configuration
+// =============================================
+// MOBILE ORIENTATION HANDLING
+// =============================================
+
+const orientationOverlay = document.getElementById('orientation-overlay');
+
+/**
+ * Check and update orientation overlay visibility
+ */
+function updateOrientationOverlay(): void {
+  if (!orientationOverlay) return;
+  
+  const isMobile = isMobileDevice();
+  const landscape = isLandscape();
+  
+  if (isMobile && !landscape) {
+    // Show overlay on mobile in portrait mode
+    orientationOverlay.classList.add('visible');
+    // Pause the game if running
+    if (game && game.scene.isActive('GameScene')) {
+      const gameScene = game.scene.getScene('GameScene') as any;
+      if (gameScene && !gameScene.isPaused) {
+        gameScene.pauseGame?.();
+      }
+    }
+  } else {
+    // Hide overlay
+    orientationOverlay.classList.remove('visible');
+  }
+}
+
+// Initial check
+updateOrientationOverlay();
+
+// Listen for orientation changes
+onOrientationChange(updateOrientationOverlay);
+
+// Also check on window resize (for desktop testing)
+window.addEventListener('resize', updateOrientationOverlay);
+
+// =============================================
+// GAME CONFIGURATION
+// =============================================
+
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: 1280,
@@ -75,11 +128,15 @@ const config: Phaser.Types.Core.GameConfig = {
   },
   // Disable right-click context menu
   disableContextMenu: true,
+  // Enable touch input
+  input: {
+    touch: true,
+    activePointers: 3, // Allow multiple simultaneous touches
+  },
 };
 
 // Create the game instance
 const game = new Phaser.Game(config);
 
-// Export for potential debugging
-export { game };
-
+// Export for potential debugging and mobile detection
+export { game, isMobileDevice };

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { isMobileDevice } from '../utils/mobile';
 
 /**
  * BootScene - Main Menu / Title Screen
@@ -9,6 +10,7 @@ export class BootScene extends Phaser.Scene {
   private selectedNight: number = 1;
   private tutorialContainer!: Phaser.GameObjects.Container;
   private extrasContainer!: Phaser.GameObjects.Container;
+  private isMobile: boolean = false;
   
   constructor() {
     super({ key: 'BootScene' });
@@ -30,6 +32,9 @@ export class BootScene extends Phaser.Scene {
   create(): void {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
+    
+    // Detect mobile device
+    this.isMobile = isMobileDevice();
     
     // Reset selected night to 1 when returning to menu
     this.selectedNight = 1;
@@ -96,46 +101,79 @@ export class BootScene extends Phaser.Scene {
     let startText: Phaser.GameObjects.Text;
     
     // ===== CONTROLS LEGEND (left side with background) =====
-    const controlsX = 115;
-    const controlsY = 350;
-    
-    // Background panel for controls
-    const controlsBg = this.add.rectangle(controlsX, controlsY, 150, 170, 0x0a0f15, 0.9);
-    controlsBg.setStrokeStyle(1, 0x2a3545);
-    
-    this.add.text(controlsX, controlsY - 65, 'CONTROLS', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#5588aa',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    
-    const controlsList = [
-      ['F', 'Wrangler'],
-      ['A/D', 'Aim'],
-      ['SPACE', 'Fire'],
-      ['TAB', 'Cameras'],
-      ['R', 'Build'],
-    ];
-    
-    controlsList.forEach((ctrl, i) => {
-      const cy = controlsY - 35 + i * 26;
-      // Key
-      const keyBg = this.add.rectangle(controlsX - 35, cy, 40, 20, 0x152535);
-      keyBg.setStrokeStyle(1, 0x3a4a5a);
-      this.add.text(controlsX - 35, cy, ctrl[0], {
+    // Only show keyboard controls on desktop
+    if (!this.isMobile) {
+      const controlsX = 115;
+      const controlsY = 350;
+      
+      // Background panel for controls
+      const controlsBg = this.add.rectangle(controlsX, controlsY, 150, 170, 0x0a0f15, 0.9);
+      controlsBg.setStrokeStyle(1, 0x2a3545);
+      
+      this.add.text(controlsX, controlsY - 65, 'CONTROLS', {
         fontFamily: 'Courier New, monospace',
-        fontSize: '11px',
-        color: '#7799bb',
+        fontSize: '12px',
+        color: '#5588aa',
         fontStyle: 'bold',
       }).setOrigin(0.5);
-      // Action
-      this.add.text(controlsX + 5, cy, ctrl[1], {
+      
+      const controlsList = [
+        ['F', 'Wrangler'],
+        ['A/D', 'Aim'],
+        ['SPACE', 'Fire'],
+        ['TAB', 'Cameras'],
+        ['R', 'Build'],
+      ];
+      
+      controlsList.forEach((ctrl, i) => {
+        const cy = controlsY - 35 + i * 26;
+        // Key
+        const keyBg = this.add.rectangle(controlsX - 35, cy, 40, 20, 0x152535);
+        keyBg.setStrokeStyle(1, 0x3a4a5a);
+        this.add.text(controlsX - 35, cy, ctrl[0], {
+          fontFamily: 'Courier New, monospace',
+          fontSize: '11px',
+          color: '#7799bb',
+          fontStyle: 'bold',
+        }).setOrigin(0.5);
+        // Action
+        this.add.text(controlsX + 5, cy, ctrl[1], {
+          fontFamily: 'Courier New, monospace',
+          fontSize: '11px',
+          color: '#556677',
+        }).setOrigin(0, 0.5);
+      });
+    } else {
+      // Mobile touch controls hint
+      const controlsX = 115;
+      const controlsY = 350;
+      
+      // Background panel
+      const controlsBg = this.add.rectangle(controlsX, controlsY, 150, 140, 0x0a0f15, 0.9);
+      controlsBg.setStrokeStyle(1, 0x2a3545);
+      
+      this.add.text(controlsX, controlsY - 50, 'TOUCH CONTROLS', {
         fontFamily: 'Courier New, monospace',
-        fontSize: '11px',
-        color: '#556677',
-      }).setOrigin(0, 0.5);
-    });
+        fontSize: '10px',
+        color: '#5588aa',
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+      
+      const touchHints = [
+        'Hold edges to aim',
+        'Tap sentry to fire',
+        'CAM button: cameras',
+        'Action button: build',
+      ];
+      
+      touchHints.forEach((hint, i) => {
+        this.add.text(controlsX, controlsY - 20 + i * 22, hint, {
+          fontFamily: 'Courier New, monospace',
+          fontSize: '10px',
+          color: '#556677',
+        }).setOrigin(0.5);
+      });
+    }
     
     // ===== NIGHT SELECTION (bottom area) =====
     const nightSelY = 580;
