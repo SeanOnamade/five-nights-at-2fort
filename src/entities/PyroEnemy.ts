@@ -165,7 +165,7 @@ export class PyroEnemy {
   /**
    * Teleport to a random room (Room mode)
    */
-  private teleportToRandomRoom(): void {
+  public teleportToRandomRoom(): void {
     const availableRooms = PyroEnemy.TELEPORT_ROOMS.filter(r => r !== this.currentNode);
     this.currentNode = availableRooms[Math.floor(Math.random() * availableRooms.length)];
     console.log(`🔥 Pyro teleported to ${this.currentNode}`);
