@@ -873,6 +873,17 @@ export class GameScene extends Phaser.Scene {
     
     this.sentryGraphic.add([this.sentryBody, this.sentryGun, levelBadge, levelText]);
     
+    // Make sentry body interactive for mobile tap-to-fire
+    this.sentryBody.setInteractive({ useHandCursor: true });
+    this.sentryBody.on('pointerdown', () => {
+      // Only fire on mobile when wrangled and aimed at a door
+      if (!this.isMobile) return;
+      if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isCameraMode) return;
+      if (!this.sentry.exists || !this.sentry.isWrangled) return;
+      if (this.sentry.aimedDoor === 'NONE') return;
+      this.fireWrangler();
+    });
+    
     // Aim beam (for wrangler)
     this.aimBeam = this.add.graphics();
     this.aimBeam.setVisible(false);
@@ -2440,9 +2451,21 @@ export class GameScene extends Phaser.Scene {
       
       console.log('Engineer returned to Intel room');
       
-      // Check if Heavy is waiting in Intel room (reached while player was away)
+      // Check if any enemy is waiting in Intel room (reached while player was away)
       if (this.isHeavyEnabled() && this.heavy.currentNode === 'INTEL') {
         this.gameOver('Heavy was waiting for you!');
+        return;
+      }
+      if (this.isScoutEnabled() && this.scout.state === 'ATTACKING') {
+        this.gameOver('Scout was waiting for you!');
+        return;
+      }
+      if (this.isSoldierEnabled() && this.soldier.state === 'ATTACKING') {
+        this.gameOver('Soldier was waiting for you!');
+        return;
+      }
+      if (this.isDemomanEnabled() && this.demoman.state === 'ATTACKING') {
+        this.gameOver('Demoman was waiting for you!');
         return;
       }
     });
@@ -4268,6 +4291,8 @@ export class GameScene extends Phaser.Scene {
   // Pyro ambient crackling sound nodes
   private pyroCracklingGain: GainNode | null = null;
   private pyroCracklingInterval: number | null = null;
+  private pyroCracklingIntensity: number = 0; // 0-1, increases as time runs out
+  private pyroCracklingLastInterval: number = 200; // Track current interval speed
   
   /**
    * Start low ambient crackling sound while match is lit
@@ -4280,67 +4305,107 @@ export class GameScene extends Phaser.Scene {
       if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') return;
       const audioContext = this.sharedAudioContext;
       
-      // Create master gain for crackling
+      // Create master gain for crackling - starts quiet
       this.pyroCracklingGain = audioContext.createGain();
-      this.pyroCracklingGain.gain.setValueAtTime(0.08, audioContext.currentTime); // Low but audible
+      this.pyroCracklingGain.gain.setValueAtTime(0.08, audioContext.currentTime); // Start low
       this.pyroCracklingGain.connect(audioContext.destination);
       
-      // Store reference to the context used to create the gain
-      const originalContext = audioContext;
+      // Reset intensity tracking
+      this.pyroCracklingIntensity = 0;
+      this.pyroCracklingLastInterval = 200;
       
-      // Play periodic crackle sounds
-      this.pyroCracklingInterval = window.setInterval(() => {
-        try {
-          // Stop if gain was cleaned up or context changed
-          if (!this.pyroCracklingGain || !this.sharedAudioContext) {
-            this.stopPyroCracklingAmbient();
-            return;
-          }
-          
-          // Stop if audio context was replaced (game restarted)
-          if (this.sharedAudioContext !== originalContext) {
-            this.stopPyroCracklingAmbient();
-            return;
-          }
-          
-          // Check if Pyro's match is still lit
-          if (!this.pyro || !this.pyro.isMatchLit()) {
-            this.stopPyroCracklingAmbient();
-            return;
-          }
-          
-          const ctx = this.sharedAudioContext;
-          const now = ctx.currentTime;
-          
-          // Random short crackle
-          const duration = 0.05 + Math.random() * 0.08;
-          const crackleBuffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
-          const crackleData = crackleBuffer.getChannelData(0);
-          for (let i = 0; i < crackleData.length; i++) {
-            const env = Math.exp(-i / (crackleData.length * 0.3));
-            crackleData[i] = (Math.random() * 2 - 1) * env;
-          }
-          const crackleSource = ctx.createBufferSource();
-          crackleSource.buffer = crackleBuffer;
-          
-          // Bandpass for fire crackle
-          const filter = ctx.createBiquadFilter();
-          filter.type = 'bandpass';
-          filter.frequency.value = 800 + Math.random() * 600;
-          filter.Q.value = 2;
-          
-          crackleSource.connect(filter);
-          filter.connect(this.pyroCracklingGain!);
-          
-          crackleSource.start(now);
-          crackleSource.stop(now + duration);
-        } catch (e) {
-          // Audio context mismatch or other error - stop crackling
-          this.stopPyroCracklingAmbient();
-        }
-      }, 150 + Math.random() * 100); // Random interval between crackles
+      // Start the crackling loop
+      this.schedulePyroCrackle();
     } catch (e) {
       // Audio not available
+    }
+  }
+  
+  /**
+   * Schedule the next crackle sound with dynamic timing based on intensity
+   */
+  private schedulePyroCrackle(): void {
+    if (!this.pyroCracklingGain || !this.sharedAudioContext) return;
+    
+    const audioContext = this.sharedAudioContext;
+    
+    // Check if Pyro's match is still lit
+    if (!this.pyro || !this.pyro.isMatchLit()) {
+      this.stopPyroCracklingAmbient();
+      return;
+    }
+    
+    // Calculate intensity based on escape time (0 = full time, 1 = about to die)
+    const escapeRemaining = this.pyro.getEscapeTimeRemaining();
+    const escapeTotal = GAME_CONSTANTS.PYRO_INTEL_ESCAPE_TIME;
+    this.pyroCracklingIntensity = 1 - (escapeRemaining / escapeTotal);
+    
+    // Update gain: starts at 0.08, ramps up to 0.5 as intensity increases
+    const baseGain = 0.08;
+    const maxGain = 0.5;
+    const currentGain = baseGain + (maxGain - baseGain) * this.pyroCracklingIntensity;
+    
+    try {
+      this.pyroCracklingGain.gain.setValueAtTime(currentGain, audioContext.currentTime);
+    } catch (e) {
+      // Gain node may have been disconnected
+    }
+    
+    // Play a crackle
+    this.playPyroCrackleSound();
+    
+    // Schedule next crackle with dynamic interval
+    // Starts at 200ms, accelerates to 40ms as intensity increases
+    const baseInterval = 200;
+    const minInterval = 40;
+    const interval = baseInterval - (baseInterval - minInterval) * this.pyroCracklingIntensity;
+    this.pyroCracklingLastInterval = interval;
+    
+    // Add some randomness but less as intensity increases (more frantic)
+    const randomness = 50 * (1 - this.pyroCracklingIntensity * 0.7);
+    const nextInterval = interval + Math.random() * randomness;
+    
+    this.pyroCracklingInterval = window.setTimeout(() => {
+      this.schedulePyroCrackle();
+    }, nextInterval);
+  }
+  
+  /**
+   * Play a single crackle sound
+   */
+  private playPyroCrackleSound(): void {
+    if (!this.pyroCracklingGain || !this.sharedAudioContext) return;
+    
+    try {
+      const ctx = this.sharedAudioContext;
+      const now = ctx.currentTime;
+      
+      // Random short crackle - duration decreases as intensity increases
+      const baseDuration = 0.05 + Math.random() * 0.08;
+      const duration = baseDuration * (1 - this.pyroCracklingIntensity * 0.3);
+      
+      const crackleBuffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+      const crackleData = crackleBuffer.getChannelData(0);
+      for (let i = 0; i < crackleData.length; i++) {
+        const env = Math.exp(-i / (crackleData.length * 0.3));
+        crackleData[i] = (Math.random() * 2 - 1) * env;
+      }
+      const crackleSource = ctx.createBufferSource();
+      crackleSource.buffer = crackleBuffer;
+      
+      // Bandpass for fire crackle - pitch increases with intensity
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 800 + Math.random() * 600 + this.pyroCracklingIntensity * 400;
+      filter.Q.value = 2;
+      
+      crackleSource.connect(filter);
+      filter.connect(this.pyroCracklingGain!);
+      
+      crackleSource.start(now);
+      crackleSource.stop(now + duration);
+    } catch (e) {
+      // Audio context issue
     }
   }
   
@@ -4349,7 +4414,7 @@ export class GameScene extends Phaser.Scene {
    */
   private stopPyroCracklingAmbient(): void {
     if (this.pyroCracklingInterval) {
-      clearInterval(this.pyroCracklingInterval);
+      clearTimeout(this.pyroCracklingInterval);
       this.pyroCracklingInterval = null;
     }
     if (this.pyroCracklingGain) {
@@ -4360,6 +4425,7 @@ export class GameScene extends Phaser.Scene {
       }
       this.pyroCracklingGain = null;
     }
+    this.pyroCracklingIntensity = 0;
   }
   
   /**
@@ -7646,19 +7712,29 @@ export class GameScene extends Phaser.Scene {
       if (scoutResult.reachedIntel) {
       // Scout reached Intel Room
       if (!this.sentry.exists) {
-        this.gameOver('Scout broke in with no sentry!');
-        return;
+        // No sentry - check if player is teleported away
+        if (this.isTeleported) {
+          // Scout waits in Intel - player dies when they return
+          console.log('Scout reached Intel but player was teleported!');
+          // Scout will be at Intel - player dies when they return (handled in returnToIntel)
+        } else {
+          this.gameOver('Scout broke in with no sentry!');
+          return;
+        }
+      } else {
+        // Sentry exists
+        // If sentry is WRANGLED, player must manually fire to repel - otherwise GAME OVER
+        if (this.sentry.isWrangled) {
+          // Player was wrangling but didn't fire in time - Scout kills!
+          if (!this.isTeleported) {
+            this.gameOver('Scout attacked while sentry was wrangled!');
+            return;
+          }
+        } else {
+          // Sentry is UNWRANGLED - trigger auto-defense (sentry destroyed, scout repelled)
+          this.triggerAutoDefense('SCOUT');
+        }
       }
-      
-      // If sentry is WRANGLED, player must manually fire to repel - otherwise GAME OVER
-      if (this.sentry.isWrangled) {
-        // Player was wrangling but didn't fire in time - Scout kills!
-        this.gameOver('Scout attacked while sentry was wrangled!');
-        return;
-      }
-      
-        // Sentry is UNWRANGLED - trigger auto-defense (sentry destroyed, scout repelled)
-        this.triggerAutoDefense('SCOUT');
       }
     }
     
@@ -7669,14 +7745,20 @@ export class GameScene extends Phaser.Scene {
       if (soldierResult.reachedIntel) {
         // Soldier reached Intel Room - only enters to KILL if no sentry
         if (!this.sentry.exists) {
-          this.gameOver('Soldier breached with no sentry!');
-          return;
+          // No sentry - check if player is teleported away
+          if (this.isTeleported) {
+            // Soldier waits in Intel - player dies when they return
+            console.log('Soldier reached Intel but player was teleported!');
+          } else {
+            this.gameOver('Soldier breached with no sentry!');
+            return;
+          }
+        } else {
+          // Soldier won't attack if sentry exists - he sieges instead
+          // This case shouldn't normally happen because Soldier transitions to SIEGING
+          // But if it does, he just retreats
+          this.soldier.driveAway();
         }
-        
-        // Soldier won't attack if sentry exists - he sieges instead
-        // This case shouldn't normally happen because Soldier transitions to SIEGING
-        // But if it does, he just retreats
-        this.soldier.driveAway();
       }
     }
     
@@ -7718,18 +7800,24 @@ export class GameScene extends Phaser.Scene {
         const doorName = chargeDoor === 'LEFT' ? 'LEFT' : 'RIGHT';
         
         if (!this.sentry.exists) {
-          this.gameOver(`Demoman charged from ${doorName}!`);
-          return;
-        }
-        
-        if (this.sentry.isWrangled) {
+          // No sentry - check if player is teleported away
+          if (this.isTeleported) {
+            // Demoman waits in Intel - player dies when they return
+            console.log('Demoman reached Intel but player was teleported!');
+          } else {
+            this.gameOver(`Demoman charged from ${doorName}!`);
+            return;
+          }
+        } else if (this.sentry.isWrangled) {
           // Player had wrangler on but didn't stop him
-          this.gameOver(`Demoman charged from ${doorName}!`);
-          return;
+          if (!this.isTeleported) {
+            this.gameOver(`Demoman charged from ${doorName}!`);
+            return;
+          }
+        } else {
+          // Sentry is UNWRANGLED - auto-defense (sentry destroyed, demoman deterred)
+          this.triggerAutoDefense('DEMOMAN');
         }
-        
-        // Sentry is UNWRANGLED - auto-defense (sentry destroyed, demoman deterred)
-        this.triggerAutoDefense('DEMOMAN');
       }
     }
     

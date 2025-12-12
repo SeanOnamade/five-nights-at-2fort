@@ -288,9 +288,11 @@ export const GAME_CONSTANTS = {
   
   // Pyro settings - CUSTOM NIGHT ONLY
   PYRO_ROOM_TELEPORT_INTERVAL: 7000,  // Time between Pyro teleports in room mode (7 sec)
+  PYRO_HALLWAY_TELEPORT_INTERVAL: 4000,  // Time Pyro stays in hallways (4 sec - shorter than Scout's 5s wait)
   PYRO_MODE_TOGGLE_INTERVAL: 45000,   // Time between ROOM/INTEL mode switches (45 sec)
   PYRO_INTEL_ESCAPE_TIME: 10000,      // Time to escape after match is lit (10 sec)
-  PYRO_INTEL_SPAWN_CHANCE: 0.3,       // 30% chance to spawn in Intel each check
-  PYRO_INTEL_CHECK_INTERVAL: 2000,    // Check for Intel spawn every 2 sec
+  PYRO_INTEL_SPAWN_CHANCE: 0.15,      // 15% chance to spawn in Intel each check (reduced from 30%)
+  PYRO_INTEL_CHECK_INTERVAL: 4000,    // Check for Intel spawn every 4 sec (was 2 sec)
+  PYRO_INTEL_ESCAPE_COOLDOWN: 8000,   // Cooldown after player escapes before Pyro can attack again
 } as const;
 

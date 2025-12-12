@@ -29,6 +29,7 @@ export class PyroEnemy {
   private intelSpawnTimer: number = 0;
   private escapeTimer: number = 0;
   private matchLit: boolean = false;
+  private escapeCooldown: number = 0;  // Cooldown after player escapes
   
   // Callbacks
   private onMatchLitCallback: (() => void) | null = null;
@@ -104,7 +105,12 @@ export class PyroEnemy {
       // Teleport frequently in Room mode (unless frozen during player teleport)
       this.teleportTimer += delta;
       
-      if (this.teleportTimer >= GAME_CONSTANTS.PYRO_ROOM_TELEPORT_INTERVAL) {
+      // Use faster interval when in hallways to prevent stalling/game overs
+      const teleportInterval = this.isInHallway() 
+        ? GAME_CONSTANTS.PYRO_HALLWAY_TELEPORT_INTERVAL 
+        : GAME_CONSTANTS.PYRO_ROOM_TELEPORT_INTERVAL;
+      
+      if (this.teleportTimer >= teleportInterval) {
         this.teleportTimer = 0;
         // Only teleport if not frozen - prevents unfair race condition
         if (!this._teleportFrozen) {
@@ -113,6 +119,12 @@ export class PyroEnemy {
       }
     } else {
       // INTEL mode
+      
+      // Tick down escape cooldown
+      if (this.escapeCooldown > 0) {
+        this.escapeCooldown -= delta;
+      }
+      
       if (this.matchLit) {
         // Match is lit - countdown to death
         this.escapeTimer += delta;
@@ -123,8 +135,8 @@ export class PyroEnemy {
           // Player didn't escape in time - they burn!
           result.playerBurned = true;
         }
-      } else if (playerInIntel && !this.isInIntel) {
-        // Check if Pyro should appear in Intel
+      } else if (playerInIntel && !this.isInIntel && this.escapeCooldown <= 0) {
+        // Check if Pyro should appear in Intel (only if cooldown is over)
         this.intelSpawnTimer += delta;
         if (this.intelSpawnTimer >= GAME_CONSTANTS.PYRO_INTEL_CHECK_INTERVAL) {
           this.intelSpawnTimer = 0;
@@ -190,11 +202,13 @@ export class PyroEnemy {
    */
   public onPlayerEscaped(): void {
     if (this.matchLit) {
-      console.log('🔥 Player escaped Pyro! Pyro despawns from Intel.');
+      console.log('🔥 Player escaped Pyro! Pyro despawns from Intel. Cooldown started.');
       this.matchLit = false;
       this.isInIntel = false;
       this.escapeTimer = 0;
       this.intelSpawnTimer = 0;
+      // Start cooldown so Pyro doesn't immediately attack again
+      this.escapeCooldown = GAME_CONSTANTS.PYRO_INTEL_ESCAPE_COOLDOWN;
     }
   }
   
