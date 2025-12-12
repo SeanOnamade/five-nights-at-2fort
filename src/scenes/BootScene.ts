@@ -344,7 +344,7 @@ export class BootScene extends Phaser.Scene {
     };
     
     enemyTypes.forEach((enemy, i) => {
-      const ex = -210 + i * 63;  // Adjusted spacing for 7 enemies
+      const ex = -189 + i * 63;  // Centered spacing for 7 enemies
       const ey = 10;
       
       // Brighter toggle button - starts OFF by default (smaller to fit 7 enemies)
@@ -640,13 +640,14 @@ export class BootScene extends Phaser.Scene {
     y += 78;
     
     // PYRO box (Custom Night only)
-    const pyroBox = this.add.rectangle(rightX - 5, y + 36, 320, 68, 0x18120c);
+    const pyroBox = this.add.rectangle(rightX - 5, y + 44, 320, 84, 0x18120c);
     pyroBox.setStrokeStyle(1, 0xff6622);
     this.tutorialContainer.add(pyroBox);
     this.addLine(rightX - 155, y + 8, '> PYRO: Custom Night Only!', '#ff6622', true);
-    this.addLine(rightX - 155, y + 24, '• ROOM: Invisible! Crackle on cams', '#dd8844');
-    this.addLine(rightX - 155, y + 40, '• INTEL: Match = 10s to escape!', '#dd8844');
-    this.addLine(rightX - 155, y + 56, 'Reflects sentry shots!', '#ffaa66');
+    this.addLine(rightX - 155, y + 24, '• ROOM: Crackle on cams, invisible', '#dd8844');
+    this.addLine(rightX - 155, y + 40, '• HALLWAY: Shine light 2s!', '#ffcc66');
+    this.addLine(rightX - 155, y + 56, '• INTEL: Match = 10s to escape!', '#dd8844');
+    this.addLine(rightX - 155, y + 72, 'Reflects sentry shots!', '#ffaa66');
     
     // Close instruction
     const closeText = this.add.text(panelX, panelY + panelHeight/2 - 15, '[ click to close ]', {
@@ -791,32 +792,33 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.extrasContainer.add(subText);
     
-    // All 5 real characters
+    // All 6 real characters (Spy is dynamic, shown separately)
     const characters = [
       { name: 'SCOUT', color: 0x9966cc, desc: 'Fast Attacker', night: 1 },  // Purple
       { name: 'SOLDIER', color: 0xaa5544, desc: 'Siege Specialist', night: 1 },
       { name: 'DEMOMAN', color: 0x44cc44, desc: 'Ghostly Charger', night: 2 },
       { name: 'HEAVY', color: 0xaa7744, desc: 'Unstoppable Tank', night: 3 },
       { name: 'SNIPER', color: 0x5588cc, desc: 'Long-Range Threat', night: 4 },
+      { name: 'PYRO', color: 0xff6622, desc: 'Ghostly Flame', night: 0 },  // Custom night = 0
     ];
     
     // Spy disguises as a random character each time gallery opens!
     const spyDisguiseIndex = Math.floor(Math.random() * 5);
     const spyDisguise = characters[spyDisguiseIndex];
     
-    // Draw 3 cards in first row (centered on screen width 1280)
-    for (let i = 0; i < 3; i++) {
-      const x = 420 + i * 220;  // 420, 640, 860
+    // Draw 4 cards in first row (centered on screen width 1280)
+    for (let i = 0; i < 4; i++) {
+      const x = 310 + i * 220;  // 310, 530, 750, 970
       this.drawCharacterCard(x, 250, characters[i].name, characters[i].color, characters[i].night);
     }
     
-    // Draw 2 cards in second row + Spy card (generated dynamically in showExtras)
-    for (let i = 3; i < 5; i++) {
-      const x = 420 + (i - 3) * 220;  // 420, 640
+    // Draw 3 cards in second row (Sniper, Pyro, Spy) - centered
+    for (let i = 4; i < 6; i++) {
+      const x = 420 + (i - 4) * 220;  // 420, 640
       this.drawCharacterCard(x, 480, characters[i].name, characters[i].color, characters[i].night);
     }
     
-    // SPY card placeholder (actual card generated in regenerateSpyCard each time gallery opens)
+    // SPY card placeholder at position 860 (actual card generated in regenerateSpyCard each time gallery opens)
   }
   
   private drawCharacterCard(x: number, y: number, name: string, color: number, night: number): void {
@@ -839,11 +841,12 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.extrasContainer.add(nameText);
     
-    // Night badge
-    const nightBadge = this.add.text(x + 75, y - 75, `N${night}`, {
+    // Night badge (0 = Custom Night shown as "C")
+    const nightLabel = night === 0 ? 'C' : `N${night}`;
+    const nightBadge = this.add.text(x + 75, y - 75, nightLabel, {
       fontFamily: 'Courier New, monospace',
       fontSize: '11px',
-      color: '#888888',
+      color: night === 0 ? '#ff6622' : '#888888',
       backgroundColor: '#1a1a22',
       padding: { left: 4, right: 4, top: 2, bottom: 2 },
     }).setOrigin(0.5);
@@ -1600,6 +1603,73 @@ export class BootScene extends Phaser.Scene {
         graphics.fillRect(x - 28, y + 6, 5, 8);
         break;
         
+      case 'PYRO':
+        // Pyro - Ghostly floating gas mask with eerie fire glow
+        
+        // Intense fire glow behind (larger, more dramatic)
+        graphics.fillStyle(0xff2200, 0.08);
+        graphics.fillCircle(x, y, 90);
+        graphics.fillStyle(0xff4400, 0.12);
+        graphics.fillCircle(x, y, 70);
+        graphics.fillStyle(0xff6600, 0.18);
+        graphics.fillCircle(x, y, 50);
+        graphics.fillStyle(0xff8800, 0.25);
+        graphics.fillCircle(x, y, 35);
+        
+        // Ghostly wisps rising (fire-like)
+        graphics.fillStyle(0xff6600, 0.15);
+        graphics.fillEllipse(x - 25, y - 45, 12, 30);
+        graphics.fillEllipse(x + 30, y - 50, 10, 25);
+        graphics.fillEllipse(x + 5, y - 55, 8, 20);
+        graphics.fillStyle(0xff4400, 0.1);
+        graphics.fillEllipse(x - 35, y - 30, 15, 40);
+        graphics.fillEllipse(x + 40, y - 35, 12, 35);
+        
+        // Main gas mask shape - dark silhouette
+        graphics.fillStyle(0x1a1a1a, 0.95);
+        graphics.fillEllipse(x, y, 55, 65);
+        
+        // Mask details - filter/muzzle area
+        graphics.fillStyle(0x222222, 1);
+        graphics.fillRoundedRect(x - 18, y + 8, 36, 28, 8);
+        
+        // Eye holes - glowing white with orange inner
+        graphics.fillStyle(0xffffff, 0.3);
+        graphics.fillCircle(x - 15, y - 12, 16);
+        graphics.fillCircle(x + 15, y - 12, 16);
+        graphics.fillStyle(0xffffff, 0.9);
+        graphics.fillCircle(x - 15, y - 12, 12);
+        graphics.fillCircle(x + 15, y - 12, 12);
+        graphics.fillStyle(0xff6600, 0.9);
+        graphics.fillCircle(x - 15, y - 12, 7);
+        graphics.fillCircle(x + 15, y - 12, 7);
+        graphics.fillStyle(0xff2200, 1);
+        graphics.fillCircle(x - 15, y - 12, 4);
+        graphics.fillCircle(x + 15, y - 12, 4);
+        
+        // Filter canister details
+        graphics.fillStyle(0x333333, 1);
+        graphics.fillCircle(x, y + 22, 12);
+        graphics.fillStyle(0x444444, 1);
+        graphics.fillCircle(x, y + 22, 8);
+        // Vent lines on filter
+        graphics.lineStyle(2, 0x555555, 1);
+        graphics.lineBetween(x - 6, y + 18, x - 6, y + 26);
+        graphics.lineBetween(x, y + 16, x, y + 28);
+        graphics.lineBetween(x + 6, y + 18, x + 6, y + 26);
+        
+        // Straps going back (ghostly fade)
+        graphics.lineStyle(4, 0x333333, 0.6);
+        graphics.lineBetween(x - 28, y - 5, x - 45, y - 20);
+        graphics.lineBetween(x + 28, y - 5, x + 45, y - 20);
+        
+        // Hood outline (very faint)
+        graphics.lineStyle(2, 0x222222, 0.5);
+        graphics.beginPath();
+        graphics.arc(x, y - 20, 45, Math.PI + 0.3, -0.3, false);
+        graphics.strokePath();
+        break;
+        
     }
   }
   
@@ -1631,7 +1701,7 @@ export class BootScene extends Phaser.Scene {
     ];
     const disguise = characters[Math.floor(Math.random() * characters.length)];
     
-    // Create new spy card at position (860, 480)
+    // Create new spy card at position (860, 480) - third in bottom row (centered)
     const x = 860, y = 480;
     
     const cardBg = this.add.rectangle(x, y, 180, 180, 0x050508);

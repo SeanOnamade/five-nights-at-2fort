@@ -19,10 +19,14 @@ export class PyroEnemy {
   // Current mode and state
   private mode: PyroMode = 'ROOM';
   private modeTimer: number = 0;
+  private transitionTimer: number = 0;  // Timer for mode transition cooldown
+  private pendingMode: 'ROOM' | 'INTEL' = 'INTEL';  // Mode to switch to after transition
   
   // Room mode properties
   public currentNode: NodeId = 'LOBBY';
   private teleportTimer: number = 0;
+  private lightExposureTimer: number = 0;  // Time player has been shining light on Pyro in hallway
+  private blockedHallway: 'LEFT' | 'RIGHT' | null = null;  // Hallway being lit by player (can't teleport there)
   
   // Intel mode properties
   private isInIntel: boolean = false;
@@ -93,28 +97,37 @@ export class PyroEnemy {
       playerBurned: false,
     };
     
-    // Mode toggle timer
-    this.modeTimer += delta;
-    if (this.modeTimer >= GAME_CONSTANTS.PYRO_MODE_TOGGLE_INTERVAL) {
-      this.toggleMode();
-      result.modeChanged = true;
+    // Mode toggle timer (only counts when not transitioning)
+    if (this.mode !== 'TRANSITIONING') {
+      this.modeTimer += delta;
+      if (this.modeTimer >= GAME_CONSTANTS.PYRO_MODE_TOGGLE_INTERVAL) {
+        this.startModeTransition();
+        result.modeChanged = true;
+      }
     }
     
     // Handle current mode
-    if (this.mode === 'ROOM') {
-      // Teleport frequently in Room mode (unless frozen during player teleport)
-      this.teleportTimer += delta;
-      
-      // Use faster interval when in hallways to prevent stalling/game overs
-      const teleportInterval = this.isInHallway() 
-        ? GAME_CONSTANTS.PYRO_HALLWAY_TELEPORT_INTERVAL 
-        : GAME_CONSTANTS.PYRO_ROOM_TELEPORT_INTERVAL;
-      
-      if (this.teleportTimer >= teleportInterval) {
-        this.teleportTimer = 0;
-        // Only teleport if not frozen - prevents unfair race condition
-        if (!this._teleportFrozen) {
-          this.teleportToRandomRoom();
+    if (this.mode === 'TRANSITIONING') {
+      // Pyro is despawned during transition
+      this.transitionTimer += delta;
+      if (this.transitionTimer >= GAME_CONSTANTS.PYRO_MODE_TRANSITION_TIME) {
+        this.completeTransition();
+      }
+    } else if (this.mode === 'ROOM') {
+      // In hallways, Pyro stays indefinitely until player shines light on him
+      if (this.isInHallway()) {
+        // Don't auto-teleport from hallways - player must use wrangler light
+        // Light exposure is tracked via setBeingLit() called from GameScene
+      } else {
+        // Normal room teleportation
+        this.teleportTimer += delta;
+        
+        if (this.teleportTimer >= GAME_CONSTANTS.PYRO_ROOM_TELEPORT_INTERVAL) {
+          this.teleportTimer = 0;
+          // Only teleport if not frozen - prevents unfair race condition
+          if (!this._teleportFrozen) {
+            this.teleportToRandomRoom();
+          }
         }
       }
     } else {
@@ -154,12 +167,34 @@ export class PyroEnemy {
   }
   
   /**
-   * Toggle between ROOM and INTEL modes
+   * Start transition between modes (enters cooldown/despawn state)
    */
-  private toggleMode(): void {
+  private startModeTransition(): void {
+    // Determine which mode we're going to
+    if (this.mode === 'ROOM') {
+      this.pendingMode = 'INTEL';
+    } else {
+      this.pendingMode = 'ROOM';
+    }
+    
+    // Enter transition state
+    this.mode = 'TRANSITIONING';
+    this.transitionTimer = 0;
     this.modeTimer = 0;
     
-    if (this.mode === 'ROOM') {
+    // Clear any active state from previous mode
+    this.matchLit = false;
+    this.isInIntel = false;
+    this.lightExposureTimer = 0;
+    
+    console.log(`🔥 Pyro entering transition (despawned for 10s), will become ${this.pendingMode} mode`);
+  }
+  
+  /**
+   * Complete transition and enter new mode
+   */
+  private completeTransition(): void {
+    if (this.pendingMode === 'INTEL') {
       this.mode = 'INTEL';
       this.isInIntel = false;
       this.matchLit = false;
@@ -176,11 +211,34 @@ export class PyroEnemy {
   
   /**
    * Teleport to a random room (Room mode)
+   * Respects blocked hallways (player is shining light there)
    */
   public teleportToRandomRoom(): void {
-    const availableRooms = PyroEnemy.TELEPORT_ROOMS.filter(r => r !== this.currentNode);
+    // Filter out current room and any blocked hallway
+    let availableRooms = PyroEnemy.TELEPORT_ROOMS.filter(r => r !== this.currentNode);
+    
+    // Don't teleport into a hallway the player is actively lighting
+    if (this.blockedHallway === 'LEFT') {
+      availableRooms = availableRooms.filter(r => r !== 'LEFT_HALL');
+    } else if (this.blockedHallway === 'RIGHT') {
+      availableRooms = availableRooms.filter(r => r !== 'RIGHT_HALL');
+    }
+    
+    // Safety check - if all rooms blocked somehow, just pick any
+    if (availableRooms.length === 0) {
+      availableRooms = PyroEnemy.TELEPORT_ROOMS.filter(r => r !== this.currentNode);
+    }
+    
     this.currentNode = availableRooms[Math.floor(Math.random() * availableRooms.length)];
     console.log(`🔥 Pyro teleported to ${this.currentNode}`);
+  }
+  
+  /**
+   * Set which hallway is currently blocked (player shining light there)
+   * Pyro won't teleport into a blocked hallway
+   */
+  public setBlockedHallway(hallway: 'LEFT' | 'RIGHT' | null): void {
+    this.blockedHallway = hallway;
   }
   
   /**
@@ -238,6 +296,56 @@ export class PyroEnemy {
   }
   
   /**
+   * Update light exposure when player is shining wrangler at Pyro in hallway
+   * @param isBeingLit Whether player is currently shining light on Pyro's hallway
+   * @param delta Time elapsed since last frame (ms)
+   * @returns true if Pyro was driven away by the light
+   */
+  public updateLightExposure(isBeingLit: boolean, delta: number): boolean {
+    if (!this.isInHallway()) {
+      this.lightExposureTimer = 0;
+      return false;
+    }
+    
+    if (isBeingLit) {
+      this.lightExposureTimer += delta;
+      
+      if (this.lightExposureTimer >= GAME_CONSTANTS.PYRO_HALLWAY_LIGHT_TIME) {
+        // Player has shone light on Pyro long enough - drive him away!
+        console.log('🔥 Pyro driven away by wrangler light!');
+        this.lightExposureTimer = 0;
+        this.teleportToNonHallway();
+        return true;
+      }
+    } else {
+      // Reset timer if not being lit
+      this.lightExposureTimer = 0;
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Get light exposure progress (0-1) for UI display
+   */
+  public getLightExposureProgress(): number {
+    if (!this.isInHallway()) return 0;
+    return Math.min(1, this.lightExposureTimer / GAME_CONSTANTS.PYRO_HALLWAY_LIGHT_TIME);
+  }
+  
+  /**
+   * Teleport to a random non-hallway room
+   */
+  private teleportToNonHallway(): void {
+    const nonHallwayRooms = PyroEnemy.TELEPORT_ROOMS.filter(
+      r => r !== 'LEFT_HALL' && r !== 'RIGHT_HALL' && r !== this.currentNode
+    );
+    this.currentNode = nonHallwayRooms[Math.floor(Math.random() * nonHallwayRooms.length)];
+    this.teleportTimer = 0;
+    console.log(`🔥 Pyro teleported to ${this.currentNode} (fled from light)`);
+  }
+  
+  /**
    * Check if match is currently lit (Intel mode)
    */
   public isMatchLit(): boolean {
@@ -249,6 +357,13 @@ export class PyroEnemy {
    */
   public getMode(): PyroMode {
     return this.mode;
+  }
+  
+  /**
+   * Check if Pyro is currently transitioning between modes (despawned)
+   */
+  public isTransitioning(): boolean {
+    return this.mode === 'TRANSITIONING';
   }
   
   /**

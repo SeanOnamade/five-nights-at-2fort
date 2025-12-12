@@ -190,6 +190,11 @@ export class SniperEnemy extends EnemyBase {
    * Teleport to a random room (Sniper's unique movement)
    */
   private teleportToRandomRoom(): void {
+    // Don't teleport if frozen (player is teleporting)
+    if (this._teleportFrozen) {
+      return;
+    }
+    
     // Pick a random room different from current
     const availableRooms = SniperEnemy.TELEPORT_ROOMS.filter(r => r !== this.currentNode);
     const newRoom = availableRooms[Math.floor(Math.random() * availableRooms.length)];
@@ -443,5 +448,26 @@ export class SniperEnemy extends EnemyBase {
    */
   public isActive(): boolean {
     return this.state !== 'DESPAWNED';
+  }
+  
+  /**
+   * Teleport freeze - prevents Sniper from teleporting during player teleport animation
+   * This prevents the unfair situation where Sniper teleports into the player's destination
+   * while the teleport animation is playing.
+   */
+  private _teleportFrozen: boolean = false;
+  
+  public freezeTeleport(): void {
+    this._teleportFrozen = true;
+    console.log('🎯 Sniper teleport frozen (player teleporting)');
+  }
+  
+  public unfreezeTeleport(): void {
+    this._teleportFrozen = false;
+    console.log('🎯 Sniper teleport unfrozen');
+  }
+  
+  public isTeleportFrozen(): boolean {
+    return this._teleportFrozen;
   }
 }

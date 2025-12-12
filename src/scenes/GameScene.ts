@@ -92,6 +92,8 @@ export class GameScene extends Phaser.Scene {
     "Metal regenerates over time - manage it wisely!",
     "Sniper requires 2 shots to repel, regardless of sentry level.",
     "When Heavy reaches the intel room, you have very little time to react!",
+    "Pyro blocks doorways until you shine the Wrangler light on him!",
+    "You can't shoot Pyro - he reflects attacks! Use light to drive him away.",
   ];
   
   // Input state for hold-to-aim (using native DOM events for reliability)
@@ -142,6 +144,12 @@ export class GameScene extends Phaser.Scene {
   private enemyApproachingRoom: boolean = false;
   private approachingEnemyType: string = 'an enemy'; // Track which enemy triggered the approach
   
+  // Teleport animation state (for cancellation)
+  private isTeleportAnimating: boolean = false;
+  private teleportAnimationOverlay: Phaser.GameObjects.Container | null = null;
+  private teleportAnimationCallback: Phaser.Time.TimerEvent | null = null;
+  private pendingTeleportDestination: NodeId | null = null;
+  
   // Sniper charge visual
   private sniperChargeOverlay!: Phaser.GameObjects.Rectangle;
   private _sniperChargeTimer: number = 0; // Reserved for future use
@@ -171,6 +179,8 @@ export class GameScene extends Phaser.Scene {
   // Pyro floating mask visuals (Custom Night only - visible with wrangler light)
   private pyroMaskLeft!: Phaser.GameObjects.Container;
   private pyroMaskRight!: Phaser.GameObjects.Container;
+  private pyroMaskLeftBurn!: Phaser.GameObjects.Graphics;  // White burn overlay for light exposure
+  private pyroMaskRightBurn!: Phaser.GameObjects.Graphics;
   
   // Demoman head visuals (can appear anywhere)
   private demomanHeadInRoom!: Phaser.GameObjects.Container; // In Intel room
@@ -230,6 +240,8 @@ export class GameScene extends Phaser.Scene {
   
   // Teleporter UI (Night 3+)
   private teleportButton!: Phaser.GameObjects.Container;
+  private teleportButtonBg!: Phaser.GameObjects.Rectangle;
+  private teleportButtonText!: Phaser.GameObjects.Text;
   private cameraLureButton!: Phaser.GameObjects.Container;  // Play lure from camera view
   private roomViewUI!: Phaser.GameObjects.Container;
   private roomViewHeader!: Phaser.GameObjects.Text;  // Room name header
@@ -791,7 +803,16 @@ export class GameScene extends Phaser.Scene {
     maskLeft.lineBetween(-35, -5, -45, -20);
     maskLeft.lineBetween(35, -5, 45, -20);
     
-    this.pyroMaskLeft.add([glowLeft, maskLeft]);
+    // White burn overlay (appears when player shines light on Pyro)
+    this.pyroMaskLeftBurn = this.add.graphics();
+    this.pyroMaskLeftBurn.fillStyle(0xffffff, 1);
+    this.pyroMaskLeftBurn.fillEllipse(0, 0, 75, 85);
+    this.pyroMaskLeftBurn.fillCircle(-15, -10, 14);
+    this.pyroMaskLeftBurn.fillCircle(15, -10, 14);
+    this.pyroMaskLeftBurn.fillRoundedRect(-18, 12, 36, 30, 6);
+    this.pyroMaskLeftBurn.setAlpha(0);
+    
+    this.pyroMaskLeft.add([glowLeft, maskLeft, this.pyroMaskLeftBurn]);
     this.pyroMaskLeft.setVisible(false);
     this.pyroMaskLeft.setDepth(11);
     
@@ -834,7 +855,16 @@ export class GameScene extends Phaser.Scene {
     maskRight.lineBetween(-35, -5, -45, -20);
     maskRight.lineBetween(35, -5, 45, -20);
     
-    this.pyroMaskRight.add([glowRight, maskRight]);
+    // White burn overlay (appears when player shines light on Pyro)
+    this.pyroMaskRightBurn = this.add.graphics();
+    this.pyroMaskRightBurn.fillStyle(0xffffff, 1);
+    this.pyroMaskRightBurn.fillEllipse(0, 0, 75, 85);
+    this.pyroMaskRightBurn.fillCircle(-15, -10, 14);
+    this.pyroMaskRightBurn.fillCircle(15, -10, 14);
+    this.pyroMaskRightBurn.fillRoundedRect(-18, 12, 36, 30, 6);
+    this.pyroMaskRightBurn.setAlpha(0);
+    
+    this.pyroMaskRight.add([glowRight, maskRight, this.pyroMaskRightBurn]);
     this.pyroMaskRight.setVisible(false);
     this.pyroMaskRight.setDepth(11);
     
@@ -1906,24 +1936,41 @@ export class GameScene extends Phaser.Scene {
     // Teleport button on camera map (shows when viewing a camera)
     this.teleportButton = this.add.container(1000, 570);
     
-    const tpBtnBg = this.add.rectangle(0, 0, 180, 35, 0x224466);
-    tpBtnBg.setStrokeStyle(2, 0x4488cc);
-    tpBtnBg.setInteractive({ useHandCursor: true });
+    this.teleportButtonBg = this.add.rectangle(0, 0, 180, 35, 0x224466);
+    this.teleportButtonBg.setStrokeStyle(2, 0x4488cc);
+    this.teleportButtonBg.setInteractive({ useHandCursor: true });
     
-    const tpBtnText = this.add.text(0, 0, 'TELEPORT HERE', {
+    this.teleportButtonText = this.add.text(0, 0, 'TELEPORT HERE', {
       fontFamily: 'Courier New, monospace',
       fontSize: '12px',
       color: '#88ccff',
       fontStyle: 'bold',
     }).setOrigin(0.5);
     
-    this.teleportButton.add([tpBtnBg, tpBtnText]);
+    this.teleportButton.add([this.teleportButtonBg, this.teleportButtonText]);
     this.teleportButton.setVisible(false);
     this.cameraUI.add(this.teleportButton);
     
-    tpBtnBg.on('pointerover', () => tpBtnBg.setFillStyle(0x336688));
-    tpBtnBg.on('pointerout', () => tpBtnBg.setFillStyle(0x224466));
-    tpBtnBg.on('pointerdown', () => {
+    this.teleportButtonBg.on('pointerover', () => {
+      if (this.isTeleportAnimating) {
+        this.teleportButtonBg.setFillStyle(0x664422);
+      } else {
+        this.teleportButtonBg.setFillStyle(0x336688);
+      }
+    });
+    this.teleportButtonBg.on('pointerout', () => {
+      if (this.isTeleportAnimating) {
+        this.teleportButtonBg.setFillStyle(0x553311);
+      } else {
+        this.teleportButtonBg.setFillStyle(0x224466);
+      }
+    });
+    this.teleportButtonBg.on('pointerdown', () => {
+      // If teleport animation is in progress, cancel it
+      if (this.isTeleportAnimating) {
+        this.cancelTeleport();
+        return;
+      }
       const cam = CAMERAS[this.selectedCamera];
       this.teleportToRoom(cam.node);
     });
@@ -2280,11 +2327,17 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     
-    // Freeze Pyro's teleportation during player's teleport animation
-    // This prevents the unfair situation where Pyro teleports into the destination
+    // Store pending destination (for cancel feature)
+    this.pendingTeleportDestination = node;
+    
+    // Freeze Pyro and Sniper teleportation during player's teleport animation
+    // This prevents the unfair situation where they teleport into the destination
     // while the animation is playing
     if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
       this.pyro.freezeTeleport();
+    }
+    if (this.isSniperEnabled() && this.sniper) {
+      this.sniper.freezeTeleport();
     }
     
     // Show teleport animation overlay FIRST, then check for enemies after arrival
@@ -2306,10 +2359,13 @@ export class GameScene extends Phaser.Scene {
       
       console.log(`Arrived at ${node}. Enemies: Scout=${scoutThere}, Soldier=${soldierThere}, DemoBody=${demomanBodyThere}, Heavy=${heavyThere}, Sniper=${sniperThere}, Pyro=${pyroThere}`);
       
-      // Helper to unfreeze Pyro before returning
+      // Helper to unfreeze Pyro and Sniper before returning
       const unfreezeAndReturn = () => {
         if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
           this.pyro.unfreezeTeleport();
+        }
+        if (this.isSniperEnabled() && this.sniper) {
+          this.sniper.unfreezeTeleport();
         }
       };
       
@@ -2413,9 +2469,12 @@ export class GameScene extends Phaser.Scene {
         }
       }
       
-      // Unfreeze Pyro AFTER all checks complete - prevents race condition
+      // Unfreeze Pyro and Sniper AFTER all checks complete - prevents race condition
       if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
         this.pyro.unfreezeTeleport();
+      }
+      if (this.isSniperEnabled() && this.sniper) {
+        this.sniper.unfreezeTeleport();
       }
       
       console.log(`Engineer teleported to ${node}`);
@@ -2475,12 +2534,21 @@ export class GameScene extends Phaser.Scene {
    * Show teleport animation with particle effects (1 second duration)
    */
   private showTeleportAnimation(onComplete: () => void): void {
+    // Mark animation as in progress
+    this.isTeleportAnimating = true;
+    
+    // Update button to show cancel option
+    this.updateTeleportButtonAppearance();
+    
     // Play teleport sound
     this.playTeleportSound();
     
     // Create teleport overlay
     const overlay = this.add.container(640, 360);
     overlay.setDepth(200);
+    
+    // Store reference for cancellation
+    this.teleportAnimationOverlay = overlay;
     
     // Dark flash background
     const flash = this.add.rectangle(0, 0, 1280, 720, 0x000000, 0);
@@ -2577,10 +2645,75 @@ export class GameScene extends Phaser.Scene {
     });
     
     // Complete after 1 second
-    this.time.delayedCall(1000, () => {
+    this.teleportAnimationCallback = this.time.delayedCall(1000, () => {
+      this.isTeleportAnimating = false;
+      this.teleportAnimationOverlay = null;
+      this.teleportAnimationCallback = null;
+      this.pendingTeleportDestination = null;
+      this.updateTeleportButtonAppearance();
       overlay.destroy();
       onComplete();
     });
+  }
+  
+  /**
+   * Cancel an in-progress teleport animation
+   */
+  private cancelTeleport(): void {
+    if (!this.isTeleportAnimating) return;
+    
+    console.log('Teleport cancelled!');
+    
+    // Cancel the delayed callback
+    if (this.teleportAnimationCallback) {
+      this.teleportAnimationCallback.remove();
+      this.teleportAnimationCallback = null;
+    }
+    
+    // Destroy the overlay
+    if (this.teleportAnimationOverlay) {
+      this.teleportAnimationOverlay.destroy();
+      this.teleportAnimationOverlay = null;
+    }
+    
+    // Unfreeze Pyro and Sniper
+    if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
+      this.pyro.unfreezeTeleport();
+    }
+    if (this.isSniperEnabled() && this.sniper) {
+      this.sniper.unfreezeTeleport();
+    }
+    
+    // Reset state
+    this.isTeleportAnimating = false;
+    this.pendingTeleportDestination = null;
+    
+    // Update button appearance back to normal
+    this.updateTeleportButtonAppearance();
+    
+    // Show cancel feedback
+    this.showAlert('Teleport cancelled!', 0xffaa00);
+  }
+  
+  /**
+   * Update teleport button appearance based on animation state
+   */
+  private updateTeleportButtonAppearance(): void {
+    if (!this.teleportButtonBg || !this.teleportButtonText) return;
+    
+    if (this.isTeleportAnimating) {
+      // Cancel mode - orange/warning colors
+      this.teleportButtonBg.setFillStyle(0x553311);
+      this.teleportButtonBg.setStrokeStyle(2, 0xffaa44);
+      this.teleportButtonText.setText('✕ CANCEL');
+      this.teleportButtonText.setColor('#ffaa44');
+    } else {
+      // Normal mode - blue colors
+      this.teleportButtonBg.setFillStyle(0x224466);
+      this.teleportButtonBg.setStrokeStyle(2, 0x4488cc);
+      this.teleportButtonText.setText('TELEPORT HERE');
+      this.teleportButtonText.setColor('#88ccff');
+    }
   }
   
   /**
@@ -8000,6 +8133,50 @@ export class GameScene extends Phaser.Scene {
     if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
       // Player is in Intel if not teleported away
       const playerInIntel = !this.isTeleported;
+      
+      // Tell Pyro which hallway is blocked (player shining light there)
+      // This prevents Pyro from teleporting into a lit hallway
+      const playerLightingHallway = playerInIntel && 
+                                    !this.isCameraMode &&
+                                    this.sentry.exists && 
+                                    this.sentry.isWrangled &&
+                                    this.sentry.aimedDoor !== 'NONE';
+      if (playerLightingHallway) {
+        this.pyro.setBlockedHallway(this.sentry.aimedDoor as 'LEFT' | 'RIGHT');
+      } else {
+        this.pyro.setBlockedHallway(null);
+      }
+      
+      // Check if player is shining wrangler light on Pyro in hallway
+      const pyroHallway = this.pyro.getHallway();
+      const isLightingPyro = playerInIntel && 
+                             !this.isCameraMode &&
+                             this.sentry.exists && 
+                             this.sentry.isWrangled && 
+                             pyroHallway !== null &&
+                             this.sentry.aimedDoor === pyroHallway;
+      
+      // Update light exposure and check if Pyro was driven away
+      const pyroDrivenAway = this.pyro.updateLightExposure(isLightingPyro, delta);
+      if (pyroDrivenAway) {
+        this.showAlert('Pyro fled from the light!', 0x00ff00);
+      }
+      
+      // Update Pyro mask burn overlay based on light exposure progress
+      const burnProgress = this.pyro.getLightExposureProgress();
+      if (pyroHallway === 'LEFT' && this.pyroMaskLeftBurn) {
+        // Fade in white overlay as exposure increases (0 -> 0.9 alpha)
+        this.pyroMaskLeftBurn.setAlpha(burnProgress * 0.9);
+        this.pyroMaskRightBurn?.setAlpha(0);
+      } else if (pyroHallway === 'RIGHT' && this.pyroMaskRightBurn) {
+        this.pyroMaskRightBurn.setAlpha(burnProgress * 0.9);
+        this.pyroMaskLeftBurn?.setAlpha(0);
+      } else {
+        // Reset both if Pyro not in hallway
+        this.pyroMaskLeftBurn?.setAlpha(0);
+        this.pyroMaskRightBurn?.setAlpha(0);
+      }
+      
       const pyroResult = this.pyro.update(delta, playerInIntel);
       
       // Handle match just lit warning
@@ -8090,6 +8267,7 @@ export class GameScene extends Phaser.Scene {
       const enemyApproaching = enemyInRoom || !!newApproachingEnemy;
       
       if (enemyApproaching && !this.enemyApproachingRoom) {
+        // Enemy just arrived - start the danger timer
         this.enemyApproachingRoom = true;
         this.approachingEnemyType = newApproachingEnemy || 'an enemy';
         this.teleportEscapeTimer = GAME_CONSTANTS.TELEPORT_ESCAPE_TIME;
@@ -8097,10 +8275,18 @@ export class GameScene extends Phaser.Scene {
         this.escapeWarning.setVisible(true);
         this.roomDoorwayEyes.setVisible(true);
         this.playEnemyApproachSound();
+      } else if (!enemyApproaching && this.enemyApproachingRoom) {
+        // Enemy left the area - reset the warning so it can trigger again
+        // But DON'T hide the escape warning yet - player still needs to leave
+        // Just allow future enemies to re-trigger the alert
+        console.log('Enemy left area, resetting approach detection');
+        this.enemyApproachingRoom = false;
+        this.escapeWarning.setVisible(false);
+        this.roomDoorwayEyes.setVisible(false);
+        this.stopApproachGrowl();
       }
       
-      // Eyes stay visible once triggered - only hide when returning to Intel
-      
+      // Keep the danger active while enemy is nearby
       if (this.enemyApproachingRoom) {
         this.teleportEscapeTimer -= delta;
         
