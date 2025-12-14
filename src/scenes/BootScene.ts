@@ -525,8 +525,8 @@ export class BootScene extends Phaser.Scene {
     this.tutorialContainer.add(overlay);
     
     // Main panel - wider to fit content
-    const panelWidth = 780;
-    const panelHeight = 560;
+    const panelWidth = 820;
+    const panelHeight = 580;
     const panelX = width / 2;
     const panelY = height / 2;
     
@@ -536,9 +536,9 @@ export class BootScene extends Phaser.Scene {
     this.tutorialContainer.add(panelBg);
     
     // Title
-    const titleText = this.add.text(panelX, panelY - panelHeight/2 + 25, '— SURVIVAL GUIDE —', {
+    const titleText = this.add.text(panelX, panelY - panelHeight/2 + 28, '— SURVIVAL GUIDE —', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
+      fontSize: '22px',
       color: '#ff6600',
       fontStyle: 'bold',
     }).setOrigin(0.5);
@@ -558,15 +558,15 @@ export class BootScene extends Phaser.Scene {
     
     // BASICS
     this.addSmallHeader(leftX - 140, y, 'BASICS', 0x44ff44);
-    y += 20;
+    y += 24;
     this.addLine(leftX - 140, y, 'Survive 12AM → 6AM');
-    y += 15;
+    y += 18;
     this.addLine(leftX - 140, y, 'Defend Intel Room from enemies');
-    y += 28;
+    y += 32;
     
     // CONTROLS
     this.addSmallHeader(leftX - 140, y, 'CONTROLS', 0x4488ff);
-    y += 20;
+    y += 24;
     const controls = [
       ['F', 'Wrangler ON/OFF'],
       ['A/D', 'Aim Left/Right'],
@@ -576,84 +576,239 @@ export class BootScene extends Phaser.Scene {
     ];
     controls.forEach(([key, action]) => {
       this.addKeyAction(leftX - 140, y, key, action);
-      y += 16;
+      y += 20;
     });
-    y += 18;
+    y += 20;
     
     // DEFENSE
     this.addSmallHeader(leftX - 140, y, 'SENTRY DEFENSE', 0xffaa44);
-    y += 20;
+    y += 24;
     this.addLine(leftX - 140, y, 'Wrangler ON → You aim & fire', '#aaaaaa');
-    y += 15;
+    y += 18;
     this.addLine(leftX - 140, y, 'Wrangler OFF → Auto-kills', '#aaaaaa');
-    y += 15;
+    y += 18;
     this.addLine(leftX - 140, y, '  (but sentry is destroyed)', '#777777');
-    y += 15;
+    y += 18;
     this.addLine(leftX - 140, y, 'No Sentry = YOU DIE', '#ff6666');
-    y += 25;
+    y += 28;
     
-    // Star rating at bottom left
+    // Star rating
     this.addLine(leftX - 140, y, '⭐ Rating = Sentry Lvl at 6AM', '#ffcc44');
+    y += 32;
+    
+    // TELEPORTER (N3+)
+    this.addSmallHeader(leftX - 140, y, 'N3+ TELEPORTER', 0xaa88cc);
+    y += 24;
+    this.addLine(leftX - 140, y, 'Place LURES (50 metal)', '#8877aa');
+    y += 18;
+    this.addLine(leftX - 140, y, 'Lure certain enemies away!', '#8877aa');
     
     // ===== RIGHT COLUMN =====
     y = contentY;
     
-    // ENEMIES
+    // ENEMIES header
     this.addSmallHeader(rightX - 140, y, 'ENEMIES', 0xff4444);
-    y += 22;
+    const expandHint = this.add.text(rightX + 40, y + 2, '(click to expand)', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '10px',
+      color: '#555566',
+    });
+    this.tutorialContainer.add(expandHint);
+    y += 28;
     
     const enemies = [
-      { name: 'SCOUT', color: '#9966cc', info: 'Fast · Left door' },  // Purple
-      { name: 'SOLDIER', color: '#886644', info: 'Rockets · Right door' },
+      { name: 'SCOUT', color: '#9966cc', info: 'Fast · Left door' },
+      { name: 'SOLDIER', color: '#aa8866', info: 'Rockets · Right door' },
       { name: 'DEMO', color: '#44ff44', info: 'N2+ Eye = incoming!' },
       { name: 'HEAVY', color: '#ff4444', info: 'N3+ Lure only!' },
-      { name: 'SNIPER', color: '#4488cc', info: 'N4+ Lure or 2 shots' },
-      { name: 'SPY', color: '#aa6644', info: 'N5+ See below' },
+      { name: 'SNIPER', color: '#44aaff', info: 'N4+ Lure or 2 shots' },
+      { name: 'SPY', color: '#cc8855', info: 'N5+ See below' },
+      { name: 'PYRO', color: '#ff6622', info: 'Custom · See below' },
     ];
     
     enemies.forEach(enemy => {
-      const dot = this.add.circle(rightX - 155, y + 5, 4, parseInt(enemy.color.slice(1), 16));
+      // Colored dot with glow effect
+      const dotGlow = this.add.circle(rightX - 148, y + 7, 6, parseInt(enemy.color.slice(1), 16), 0.2);
+      this.tutorialContainer.add(dotGlow);
+      const dot = this.add.circle(rightX - 148, y + 7, 4, parseInt(enemy.color.slice(1), 16));
       this.tutorialContainer.add(dot);
-      this.addLine(rightX - 143, y, enemy.name, enemy.color, true);
-      this.addLine(rightX - 65, y, enemy.info, '#777788');
-      y += 18;
+      
+      // Clickable hit area (covers name and arrow)
+      const hitArea = this.add.rectangle(rightX - 80, y + 7, 160, 20, 0x000000, 0);
+      hitArea.setInteractive({ useHandCursor: true });
+      this.tutorialContainer.add(hitArea);
+      
+      // Enemy name (larger font)
+      const nameText = this.add.text(rightX - 135, y, enemy.name, {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '14px',
+        color: enemy.color,
+        fontStyle: 'bold',
+      });
+      this.tutorialContainer.add(nameText);
+      
+      // Arrow indicator
+      const arrow = this.add.text(rightX - 50, y + 2, '▶', {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '11px',
+        color: '#444455',
+      });
+      this.tutorialContainer.add(arrow);
+      
+      // Info text (hidden by default)
+      const infoText = this.add.text(rightX - 30, y, enemy.info, {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '13px',
+        color: '#889999',
+      });
+      infoText.setVisible(false);
+      this.tutorialContainer.add(infoText);
+      
+      // Toggle on click (hit area covers name + arrow)
+      hitArea.on('pointerdown', () => {
+        const isVisible = infoText.visible;
+        infoText.setVisible(!isVisible);
+        arrow.setText(isVisible ? '▶' : '▼');
+        arrow.setColor(isVisible ? '#444455' : enemy.color);
+      });
+      
+      // Hover effect
+      hitArea.on('pointerover', () => {
+        nameText.setColor('#ffffff');
+        arrow.setColor('#777788');
+        dotGlow.setAlpha(0.5);
+      });
+      hitArea.on('pointerout', () => {
+        nameText.setColor(enemy.color);
+        dotGlow.setAlpha(0.2);
+        if (!infoText.visible) {
+          arrow.setColor('#444455');
+        }
+      });
+      
+      y += 22;
     });
-    y += 12;
+    y += 16;
     
-    // NIGHT 3+ box
-    const n3Box = this.add.rectangle(rightX - 5, y + 28, 320, 48, 0x101018);
-    n3Box.setStrokeStyle(1, 0x6644aa);
-    this.tutorialContainer.add(n3Box);
-    this.addLine(rightX - 155, y + 12, '> N3+ TELEPORTER', '#aa88cc', true);
-    this.addLine(rightX - 155, y + 28, 'Place LURES (50m)', '#8877aa');
-    this.addLine(rightX - 155, y + 42, 'Heavy/Sniper lured 3x faster', '#8877aa');
-    y += 68;
+    // SPY section base Y
+    const spyBaseY = y;
+    const spyCollapsedHeight = 28;
+    const spyExpandedHeight = 90;
     
-    // SPY box
-    const spyBox = this.add.rectangle(rightX - 5, y + 36, 320, 68, 0x18120c);
-    spyBox.setStrokeStyle(1, 0xaa7744);
-    this.tutorialContainer.add(spyBox);
-    this.addLine(rightX - 155, y + 8, '> SPY: Two modes (not both!)', '#ddaa77', true);
-    this.addLine(rightX - 155, y + 24, '• DISGUISE: Fake enemy on cams', '#aa9966');
-    this.addLine(rightX - 155, y + 40, '• SAP: May sap if you TP away', '#aa9966');
-    this.addLine(rightX - 155, y + 56, 'Sapper? Press SPACE x2!', '#ffcc88');
-    y += 78;
+    // SPY box (collapsible)
+    const spyBoxCollapsed = this.add.rectangle(rightX + 10, spyBaseY + 14, 320, 28, 0x18140c);
+    spyBoxCollapsed.setStrokeStyle(1, 0xaa7744);
+    this.tutorialContainer.add(spyBoxCollapsed);
     
-    // PYRO box (Custom Night only)
-    const pyroBox = this.add.rectangle(rightX - 5, y + 44, 320, 84, 0x18120c);
-    pyroBox.setStrokeStyle(1, 0xff6622);
-    this.tutorialContainer.add(pyroBox);
-    this.addLine(rightX - 155, y + 8, '> PYRO: Custom Night Only!', '#ff6622', true);
-    this.addLine(rightX - 155, y + 24, '• ROOM: Crackle on cams, invisible', '#dd8844');
-    this.addLine(rightX - 155, y + 40, '• HALLWAY: Shine light 2s!', '#ffcc66');
-    this.addLine(rightX - 155, y + 56, '• INTEL: Match = 10s to escape!', '#dd8844');
-    this.addLine(rightX - 155, y + 72, 'Reflects sentry shots!', '#ffaa66');
+    const spyBoxExpanded = this.add.rectangle(rightX + 10, spyBaseY + 45, 320, 90, 0x18140c);
+    spyBoxExpanded.setStrokeStyle(1, 0xaa7744);
+    spyBoxExpanded.setVisible(false);
+    this.tutorialContainer.add(spyBoxExpanded);
+    
+    // SPY header (clickable)
+    const spyHeader = this.add.text(rightX - 140, spyBaseY + 6, '▶ SPY: Two modes (not both!)', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '13px',
+      color: '#ddaa77',
+      fontStyle: 'bold',
+    });
+    this.tutorialContainer.add(spyHeader);
+    
+    // SPY details (hidden by default)
+    const spyDetails: Phaser.GameObjects.Text[] = [];
+    const spyLine1 = this.add.text(rightX - 130, spyBaseY + 30, '• DISGUISE: Fake enemy on cams', {
+      fontFamily: 'Courier New, monospace', fontSize: '12px', color: '#aa9966',
+    });
+    const spyLine2 = this.add.text(rightX - 130, spyBaseY + 48, '• SAP: May sap if you TP away', {
+      fontFamily: 'Courier New, monospace', fontSize: '12px', color: '#aa9966',
+    });
+    const spyLine3 = this.add.text(rightX - 130, spyBaseY + 66, 'Sapper? Press SPACE x2!', {
+      fontFamily: 'Courier New, monospace', fontSize: '12px', color: '#ffcc88',
+    });
+    spyDetails.push(spyLine1, spyLine2, spyLine3);
+    spyDetails.forEach(t => { t.setVisible(false); this.tutorialContainer.add(t); });
+    
+    // SPY click area
+    const spyClickArea = this.add.rectangle(rightX + 10, spyBaseY + 14, 320, 28, 0x000000, 0);
+    spyClickArea.setInteractive({ useHandCursor: true });
+    this.tutorialContainer.add(spyClickArea);
+    
+    // PYRO section - positioned right below SPY
+    const pyroBaseY = spyBaseY + spyCollapsedHeight + 6; // Small gap
+    
+    // PYRO box (collapsible)
+    const pyroBoxCollapsed = this.add.rectangle(rightX + 10, pyroBaseY + 14, 320, 28, 0x1a100c);
+    pyroBoxCollapsed.setStrokeStyle(1, 0xff6622);
+    this.tutorialContainer.add(pyroBoxCollapsed);
+    
+    const pyroBoxExpanded = this.add.rectangle(rightX + 10, pyroBaseY + 52, 320, 100, 0x1a100c);
+    pyroBoxExpanded.setStrokeStyle(1, 0xff6622);
+    pyroBoxExpanded.setVisible(false);
+    this.tutorialContainer.add(pyroBoxExpanded);
+    
+    // PYRO header (clickable)
+    const pyroHeader = this.add.text(rightX - 140, pyroBaseY + 6, '▶ PYRO: Custom Night Only!', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '13px',
+      color: '#ff6622',
+      fontStyle: 'bold',
+    });
+    this.tutorialContainer.add(pyroHeader);
+    
+    // PYRO details (hidden by default)
+    const pyroDetails: Phaser.GameObjects.Text[] = [];
+    const pyroLine1 = this.add.text(rightX - 130, pyroBaseY + 30, '• ROOM: Crackle on cams, invisible', {
+      fontFamily: 'Courier New, monospace', fontSize: '12px', color: '#dd8844',
+    });
+    const pyroLine2 = this.add.text(rightX - 130, pyroBaseY + 48, '• HALLWAY: Shine light 1.5s!', {
+      fontFamily: 'Courier New, monospace', fontSize: '12px', color: '#ffcc66',
+    });
+    const pyroLine3 = this.add.text(rightX - 130, pyroBaseY + 66, '• INTEL: Match = 10s to escape!', {
+      fontFamily: 'Courier New, monospace', fontSize: '12px', color: '#dd8844',
+    });
+    const pyroLine4 = this.add.text(rightX - 130, pyroBaseY + 84, 'Reflects sentry shots!', {
+      fontFamily: 'Courier New, monospace', fontSize: '12px', color: '#ffaa66',
+    });
+    pyroDetails.push(pyroLine1, pyroLine2, pyroLine3, pyroLine4);
+    pyroDetails.forEach(t => { t.setVisible(false); this.tutorialContainer.add(t); });
+    
+    // PYRO click area
+    const pyroClickArea = this.add.rectangle(rightX + 10, pyroBaseY + 14, 320, 28, 0x000000, 0);
+    pyroClickArea.setInteractive({ useHandCursor: true });
+    this.tutorialContainer.add(pyroClickArea);
+    
+    // All PYRO elements for repositioning
+    const pyroElements = [pyroBoxCollapsed, pyroBoxExpanded, pyroHeader, pyroClickArea, ...pyroDetails];
+    
+    // SPY click handler - toggles and moves Pyro
+    let spyExpanded = false;
+    spyClickArea.on('pointerdown', () => {
+      spyExpanded = !spyExpanded;
+      spyBoxCollapsed.setVisible(!spyExpanded);
+      spyBoxExpanded.setVisible(spyExpanded);
+      spyDetails.forEach(t => t.setVisible(spyExpanded));
+      spyHeader.setText(spyExpanded ? '▼ SPY: Two modes (not both!)' : '▶ SPY: Two modes (not both!)');
+      
+      // Move Pyro elements up or down
+      const offset = spyExpanded ? (spyExpandedHeight - spyCollapsedHeight) : -(spyExpandedHeight - spyCollapsedHeight);
+      pyroElements.forEach(el => el.setY(el.y + offset));
+    });
+    
+    // PYRO click handler
+    let pyroExpanded = false;
+    pyroClickArea.on('pointerdown', () => {
+      pyroExpanded = !pyroExpanded;
+      pyroBoxCollapsed.setVisible(!pyroExpanded);
+      pyroBoxExpanded.setVisible(pyroExpanded);
+      pyroDetails.forEach(t => t.setVisible(pyroExpanded));
+      pyroHeader.setText(pyroExpanded ? '▼ PYRO: Custom Night Only!' : '▶ PYRO: Custom Night Only!');
+    });
     
     // Close instruction
-    const closeText = this.add.text(panelX, panelY + panelHeight/2 - 15, '[ click to close ]', {
+    const closeText = this.add.text(panelX, panelY + panelHeight/2 - 15, '[ click anywhere to close ]', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#444455',
+      fontSize: '11px',
+      color: '#555566',
     }).setOrigin(0.5);
     this.tutorialContainer.add(closeText);
     
@@ -665,7 +820,7 @@ export class BootScene extends Phaser.Scene {
     const colorHex = '#' + color.toString(16).padStart(6, '0');
     const header = this.add.text(x, y, text, {
       fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
+      fontSize: '14px',
       color: colorHex,
       fontStyle: 'bold',
     });
@@ -675,7 +830,7 @@ export class BootScene extends Phaser.Scene {
   private addLine(x: number, y: number, text: string, color: string = '#999999', bold: boolean = false): void {
     const line = this.add.text(x, y, text, {
       fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
+      fontSize: '13px',
       color: color,
       fontStyle: bold ? 'bold' : 'normal',
     });
@@ -685,15 +840,15 @@ export class BootScene extends Phaser.Scene {
   private addKeyAction(x: number, y: number, key: string, action: string): void {
     const keyText = this.add.text(x, y, `[${key}]`, {
       fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
+      fontSize: '13px',
       color: '#6699bb',
       fontStyle: 'bold',
     });
     this.tutorialContainer.add(keyText);
     
-    const actionText = this.add.text(x + 55, y, action, {
+    const actionText = this.add.text(x + 65, y, action, {
       fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
+      fontSize: '13px',
       color: '#888899',
     });
     this.tutorialContainer.add(actionText);

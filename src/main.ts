@@ -50,7 +50,7 @@
  * 
  * ENEMIES:
  * - SCOUT: Fast, approaches from LEFT door
- *   Path: LOBBY → STAIRCASE → LEFT_HALL → INTEL
+ *   Path: COURTYARD → STAIRCASE → LEFT_HALL → INTEL
  *   Waits at door briefly, then attacks
  * 
  * - SOLDIER: Slow, approaches from RIGHT door

@@ -221,7 +221,7 @@ export class HeavyEnemy extends EnemyBase {
 
     // Lure is not adjacent - find path toward it
     // Simple BFS-like approach: move toward the lure through adjacency
-    // For Heavy's path (Bridge -> Lobby -> Staircase -> Left Hall), we navigate accordingly
+    // For Heavy's path (Bridge -> Courtyard -> Staircase -> Left Hall), we navigate accordingly
     const pathToLure = this.findNextStepToward(this.targetLureNode);
     if (pathToLure) {
       console.log(`Heavy navigating toward lure: ${this.currentNode} -> ${pathToLure}`);
@@ -239,7 +239,7 @@ export class HeavyEnemy extends EnemyBase {
   
   /**
    * Find the next node to move to in order to reach the target using BFS
-   * This properly handles crossing between left/right paths via LOBBY-GRATE connection
+   * This properly handles crossing between left/right paths via COURTYARD-GRATE connection
    */
   private findNextStepToward(target: NodeId): NodeId | null {
     const adjacent = ROOM_ADJACENCY[this.currentNode] || [];
@@ -310,7 +310,7 @@ export class HeavyEnemy extends EnemyBase {
 
   /**
    * Rebuild path from current node to Intel using BFS
-   * This handles the case where Heavy crossed between paths via LOBBY-GRATE
+   * This handles the case where Heavy crossed between paths via COURTYARD-GRATE
    */
   private rebuildPathToIntel(): void {
     // If current node is on original path, just continue from there
@@ -405,7 +405,7 @@ export class HeavyEnemy extends EnemyBase {
     const distanceMap: Record<NodeId, number> = {
       'SEWER': 0.05,    // Furthest spawn point
       'BRIDGE': 0.1,
-      'LOBBY': 0.25,
+      'COURTYARD': 0.25,
       'GRATE': 0.25,
       'STAIRCASE': 0.5,
       'SPIRAL': 0.5,

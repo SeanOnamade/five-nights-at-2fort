@@ -6,8 +6,8 @@ import { SCOUT_PATH, GAME_CONSTANTS } from '../types';
  * ScoutEnemy - Fast attacker that approaches from the left
  * 
  * Behavior:
- * - Spawns at LOBBY
- * - Path: LOBBY → STAIRCASE → LEFT_HALL → INTEL
+ * - Spawns at COURTYARD
+ * - Path: COURTYARD → STAIRCASE → LEFT_HALL → INTEL
  * - Moves quickly between nodes
  * - At LEFT_HALL (left doorway), waits briefly then attacks
  * - Can be driven away by wrangled sentry fire at left door
@@ -20,7 +20,7 @@ export class ScoutEnemy extends EnemyBase {
   protected waitTime = GAME_CONSTANTS.SCOUT_WAIT_TIME;
   
   constructor(scene: Phaser.Scene) {
-    super(scene, 'SCOUT', 'LOBBY', SCOUT_PATH);
+    super(scene, 'SCOUT', 'COURTYARD', SCOUT_PATH);
   }
   
   /**

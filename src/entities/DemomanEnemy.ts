@@ -27,8 +27,8 @@ export class DemomanEnemy {
   
   // State
   public state: EnemyState = 'DORMANT';
-  public currentNode: NodeId = 'LOBBY'; // Where his body is (when charging)
-  public headLocation: NodeId | 'INTEL_ROOM' = 'LOBBY'; // Where his head appears
+  public currentNode: NodeId = 'COURTYARD'; // Where his body is (when charging)
+  public headLocation: NodeId | 'INTEL_ROOM' = 'COURTYARD'; // Where his head appears
   public activeEye: 'LEFT' | 'RIGHT' | 'NONE' = 'NONE'; // Which eye is glowing
   
   // Path (set when charging starts)
@@ -85,7 +85,7 @@ export class DemomanEnemy {
    */
   private teleportHead(): void {
     const locations: (NodeId | 'INTEL_ROOM')[] = [
-      'BRIDGE', 'LOBBY', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 
+      'BRIDGE', 'COURTYARD', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 
       'LEFT_HALL', 'RIGHT_HALL', 'INTEL_ROOM'
     ];
     
@@ -316,12 +316,12 @@ export class DemomanEnemy {
   }
   
   /**
-   * Check if Demoman is in the "body visible" phase at the door (last 0.25s of 1.5s)
-   * First 1.25s is glow phase, last 0.25s is body phase
+   * Check if Demoman is in the "body visible" phase at the door (last 0.25s of 1s)
+   * First 0.75s is glow phase, last 0.25s is body phase (bonus metal window)
    */
   public isInBodyPhase(): boolean {
     if (this.state !== 'WAITING') return false;
-    return this.getAttackProgress() >= 0.833; // 83.3% = 1.25s of 1.5s
+    return this.getAttackProgress() >= 0.75; // 75% = 750ms of 1000ms
   }
 }
 

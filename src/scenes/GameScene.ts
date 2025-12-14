@@ -74,26 +74,27 @@ export class GameScene extends Phaser.Scene {
   private readonly pauseHints: string[] = [
     // User-provided hints
     "Demoman can be stalled by watching his head!",
-    "Only Scout, Soldier, Demoman, and Sniper show up in the light. Heavy does not!",
+    "Only Scout, Soldier, Pyro, Sniper, and Demoman's body show up in the Wrangler light.",
     "Scout is the fastest of the mercs.",
     "Sniper moves at random!",
-    "Spy can disguise as any enemy except Pyro! When disguised, he will not sap your sentry!",
+    "Spy can disguise as any enemy except Pyro! When disguised, he won't attempt to sap your sentry!",
     "Deterring Demoman's charge at the last second provides bonus metal! Test your luck!",
-    "Heavy's footsteps get louder the closer he is to the intel room!",
+    "Heavy's footsteps get louder the closer he is to Intel!",
     "Press Space twice to remove a Sapper!",
     "Spy and Demoman's head will not attack you when teleported.",
-    "If you don't have the metal to defend yourself, unwrangle your Sentry before an enemy attacks to save yourself!",
+    "If you don't have the metal to ward off an enemy, unwrangle your Sentry before they attack to save yourself!",
     "Spy switches mode every hour.",
+    "You can cancel a teleport by clicking the button again.",
+    "When teleporting, if an enemy is in an adjacent room, they will hear you and approach.",
     "Demo will never begin his attack while you're watching him.",
     // Additional hints
-    "The Wrangler lets you manually aim your sentry at either doorway.",
-    "Use cameras to track enemy positions across the map.",
-    "Lures can distract enemies, buying you precious time!",
-    "Metal regenerates over time - manage it wisely!",
-    "Sniper requires 2 shots to repel, regardless of sentry level.",
+    "Heavy and Sniper will destroy your camera if you stare too long.",
+    "Lures can distract certain enemies, buying you precious time!",
+    "Metal regenerates over time -- manage it wisely!",
+    "Sniper requires 2 shots to repel.",
     "When Heavy reaches the intel room, you have very little time to react!",
     "Pyro blocks doorways until you shine the Wrangler light on him!",
-    "You can't shoot Pyro - he reflects attacks! Use light to drive him away.",
+    "Pyro reflects sentry shots! Use the Wrangler light to drive him away.",
   ];
   
   // Input state for hold-to-aim (using native DOM events for reliability)
@@ -1290,7 +1291,7 @@ export class GameScene extends Phaser.Scene {
     titleBarBg.setStrokeStyle(1, 0x003311);
     this.cameraUI.add(titleBarBg);
     
-    this.cameraFeedTitle = this.add.text(420, 128, 'CAM 01 - LOBBY', {
+    this.cameraFeedTitle = this.add.text(420, 128, 'CAM 01 - COURTYARD', {
       fontFamily: 'Courier New, monospace',
       fontSize: '14px',
       color: '#00dd44',
@@ -1587,13 +1588,13 @@ export class GameScene extends Phaser.Scene {
     });
     
     // ========== MAP PANEL (RIGHT SIDE) ==========
-    // Metal frame with industrial look
-    const mapOuterFrame = this.add.rectangle(1000, 340, 310, 430, 0x1a1a20);
+    // Metal frame with industrial look - EXPANDED
+    const mapOuterFrame = this.add.rectangle(1000, 340, 370, 430, 0x1a1a20);
     mapOuterFrame.setStrokeStyle(3, 0x3a3a44);
     this.cameraUI.add(mapOuterFrame);
     
-    // Screws/bolts in corners
-    const screwPositions = [[858, 138], [1142, 138], [858, 542], [1142, 542]];
+    // Screws/bolts in corners - adjusted for wider frame
+    const screwPositions = [[828, 138], [1172, 138], [828, 542], [1172, 542]];
     screwPositions.forEach(([x, y]) => {
       const screw = this.add.circle(x, y, 5, 0x555566);
       screw.setStrokeStyle(1, 0x777788);
@@ -1605,18 +1606,18 @@ export class GameScene extends Phaser.Scene {
       this.cameraUI.add(screwSlot);
     });
     
-    // Screen bezel
-    const mapFrame = this.add.rectangle(1000, 340, 285, 400, 0x0a0a0f);
+    // Screen bezel - WIDER to fit map
+    const mapFrame = this.add.rectangle(1000, 340, 355, 400, 0x0a0a0f);
     mapFrame.setStrokeStyle(4, 0x222230);
     this.cameraUI.add(mapFrame);
     
-    // Inner screen with slight glow
-    const mapScreen = this.add.rectangle(1000, 350, 270, 370, 0x050810);
+    // Inner screen with slight glow - WIDER
+    const mapScreen = this.add.rectangle(1000, 350, 340, 370, 0x050810);
     mapScreen.setStrokeStyle(2, 0x1a3050);
     this.cameraUI.add(mapScreen);
     
-    // Title bar for map
-    const mapTitleBar = this.add.rectangle(1000, 155, 270, 24, 0x0a1525);
+    // Title bar for map - WIDER
+    const mapTitleBar = this.add.rectangle(1000, 155, 340, 24, 0x0a1525);
     mapTitleBar.setStrokeStyle(1, 0x1a3a55);
     this.cameraUI.add(mapTitleBar);
     
@@ -1628,61 +1629,78 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.cameraUI.add(mapTitle);
     
-    // Blueprint grid effect
+    // Blueprint grid effect - WIDER
     const gridGraphics = this.add.graphics();
     gridGraphics.lineStyle(1, 0x0a2035, 0.4);
-    for (let x = 865; x <= 1135; x += 15) {
+    for (let x = 830; x <= 1170; x += 15) {
       gridGraphics.lineBetween(x, 170, x, 530);
     }
     for (let y = 170; y <= 530; y += 15) {
-      gridGraphics.lineBetween(865, y, 1135, y);
+      gridGraphics.lineBetween(830, y, 1170, y);
     }
     this.cameraUI.add(gridGraphics);
     
-    // Draw the map layout with paths - VERTICAL layout (rotated 90° clockwise)
-    // Bridge at top, Intel at bottom
+    // Draw the map layout with paths - ALIGNED LAYOUT
     const mapGraphics = this.add.graphics();
-    const mapOffsetX = 870;
+    const mapOffsetX = 835;  // Shifted left for wider area
     const mapOffsetY = 175;
     const mapScale = 1.0;
     
-    // Draw vertical paths (left = Scout/Heavy path, right = Soldier path)
+    // Node positions (matching CAMERAS in types/index.ts) - spaced out bottom row
+    const staircaseX = mapOffsetX + 55;
+    const staircaseY = mapOffsetY + 30;
+    const courtyardX = mapOffsetX + 165;  // Above Spiral (adjusted)
+    const courtyardY = mapOffsetY + 30;
+    const leftHallX = mapOffsetX + 55;
+    const leftHallY = mapOffsetY + 105;
+    const rightHallX = mapOffsetX + 105;  // Spaced out
+    const rightHallY = mapOffsetY + 180;
+    const spiralX = mapOffsetX + 165;     // Spaced out
+    const spiralY = mapOffsetY + 180;
+    const grateX = mapOffsetX + 225;      // Spaced out
+    const grateY = mapOffsetY + 180;
+    const bridgeX = mapOffsetX + 285;     // Spaced out
+    const bridgeY = mapOffsetY + 180;
+    const sewerX = mapOffsetX + 225;      // Below Grate (adjusted)
+    const sewerY = mapOffsetY + 255;
+    const intelPathX = mapOffsetX + 55;   // Directly below Left Hall
+    const intelPathY = mapOffsetY + 255;  // Below the bottom row
+    
+    // Staircase to Courtyard (straight line at top)
     mapGraphics.lineStyle(2, 0x3388cc, 0.6);
+    mapGraphics.lineBetween(staircaseX, staircaseY, courtyardX, courtyardY);
     
-    // Left path (Bridge -> Lobby -> Staircase -> Left Hall -> Intel)
-    const leftX = mapOffsetX + 70;
-    mapGraphics.lineBetween(leftX, mapOffsetY + 50, leftX, mapOffsetY + 240);  // Main vertical line
+    // Staircase to Left Hall (vertical)
+    mapGraphics.lineBetween(staircaseX, staircaseY, leftHallX, leftHallY);
     
-    // Right path (Grate -> Spiral -> Right Hall -> Intel)  
-    const rightX = mapOffsetX + 190;
-    mapGraphics.lineBetween(rightX, mapOffsetY + 90, rightX, mapOffsetY + 240); // Main vertical line
-    
-    // Sewer branch - diagonal from Grate
-    const sewerX = mapOffsetX + 250;
-    const sewerY = mapOffsetY + 50;
-    mapGraphics.lineStyle(2, 0x226644, 0.5); // Greenish for sewer
-    mapGraphics.lineBetween(rightX, mapOffsetY + 90, sewerX, sewerY); // Grate to Sewer
-    
-    // Horizontal connectors
+    // Courtyard to Grate (diagonal connection)
     mapGraphics.lineStyle(2, 0x2266aa, 0.4);
-    mapGraphics.lineBetween(leftX, mapOffsetY + 90, rightX, mapOffsetY + 90);   // Lobby - Grate connection
-    // Note: Staircase-Spiral NOT connected (removed to avoid confusion)
-    mapGraphics.lineBetween(leftX, mapOffsetY + 210, rightX, mapOffsetY + 210); // Left Hall - Right Hall
+    mapGraphics.lineBetween(courtyardX, courtyardY, grateX, grateY);
     
-    // Converge to Intel
+    // Courtyard to Bridge (diagonal connection)
+    mapGraphics.lineBetween(courtyardX, courtyardY, bridgeX, bridgeY);
+    
+    // Left Hall to Intel (vertical down - directly below)
     mapGraphics.lineStyle(2, 0xff6600, 0.5);
-    const intelLineY = mapOffsetY + 270;
-    mapGraphics.lineBetween(leftX, mapOffsetY + 240, mapOffsetX + 130, intelLineY);
-    mapGraphics.lineBetween(rightX, mapOffsetY + 240, mapOffsetX + 130, intelLineY);
+    mapGraphics.lineBetween(leftHallX, leftHallY, intelPathX, intelPathY);
     
-    // Arrow indicators pointing down (toward Intel)
-    mapGraphics.lineStyle(2, 0x44aaff, 0.8);
-    // Left path arrows
-    mapGraphics.lineBetween(leftX - 5, mapOffsetY + 170, leftX, mapOffsetY + 180);
-    mapGraphics.lineBetween(leftX + 5, mapOffsetY + 170, leftX, mapOffsetY + 180);
-    // Right path arrows
-    mapGraphics.lineBetween(rightX - 5, mapOffsetY + 170, rightX, mapOffsetY + 180);
-    mapGraphics.lineBetween(rightX + 5, mapOffsetY + 170, rightX, mapOffsetY + 180);
+    // Right Hall to Intel (diagonal connection)
+    mapGraphics.lineStyle(2, 0xff6600, 0.4);
+    mapGraphics.lineBetween(rightHallX, rightHallY, intelPathX, intelPathY);
+    
+    // Left Hall to Right Hall (diagonal)
+    mapGraphics.lineStyle(2, 0x2266aa, 0.5);
+    mapGraphics.lineBetween(leftHallX, leftHallY, rightHallX, rightHallY);
+    
+    // Bottom horizontal row: Right Hall - Spiral - Grate - Bridge (more spaced out)
+    mapGraphics.lineStyle(2, 0x3388cc, 0.6);
+    mapGraphics.lineBetween(rightHallX, rightHallY, spiralX, spiralY);
+    mapGraphics.lineBetween(spiralX, spiralY, grateX, grateY);
+    mapGraphics.lineBetween(grateX, grateY, bridgeX, bridgeY);
+    
+    // Grate to Sewer (vertical down)
+    mapGraphics.lineStyle(2, 0x226644, 0.5); // Greenish for sewer
+    mapGraphics.lineBetween(grateX, grateY, sewerX, sewerY);
     
     this.cameraUI.add(mapGraphics);
     
@@ -1733,27 +1751,27 @@ export class GameScene extends Phaser.Scene {
       this.cameraUI.add(nodeContainer);
     });
     
-    // Intel Room marker (your position) - at bottom of vertical map
-    const intelX = mapOffsetX + 130;  // Center between left and right paths
-    const intelY = mapOffsetY + 290;  // Bottom of map
+    // Intel Room marker (your position) - directly below Left Hall
+    const intelMarkerX = mapOffsetX + 55;   // Same X as Left Hall
+    const intelMarkerY = mapOffsetY + 255;  // Below the bottom row, same as Sewer
     
     // Pulsing outer ring
-    const intelGlow = this.add.circle(intelX, intelY, 26, 0xff6600, 0.15);
+    const intelGlow = this.add.circle(intelMarkerX, intelMarkerY, 26, 0xff6600, 0.15);
     this.cameraUI.add(intelGlow);
     
     // Main intel icon
-    this.intelRoomIcon = this.add.circle(intelX, intelY, 20, 0x331500);
+    this.intelRoomIcon = this.add.circle(intelMarkerX, intelMarkerY, 20, 0x331500);
     this.intelRoomIcon.setStrokeStyle(3, 0xff6600);
     this.cameraUI.add(this.intelRoomIcon);
     
     // Intel briefcase icon
-    const intelIcon = this.add.text(intelX, intelY - 2, '◆', {
+    const intelIcon = this.add.text(intelMarkerX, intelMarkerY - 2, '◆', {
       fontSize: '16px',
       color: '#ff8800',
     }).setOrigin(0.5);
     this.cameraUI.add(intelIcon);
     
-    const intelLabel = this.add.text(intelX, intelY + 32, 'INTEL', {
+    const intelLabel = this.add.text(intelMarkerX, intelMarkerY + 32, 'INTEL', {
       fontFamily: 'Courier New, monospace',
       fontSize: '9px',
       color: '#ff9944',
@@ -7920,6 +7938,11 @@ export class GameScene extends Phaser.Scene {
       this.demoman.setBeingWatched(isWatchingHead);
       
       const demoResult = this.demoman.update(delta);
+      
+      // If Demoman's eye just lit (charge warning), evacuate Pyro from hallways
+      if (demoResult.eyeJustLit && this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
+        this.pyro.onDemomanChargeStart();
+      }
       
       // Update Demoman head visibility in Intel room
       this.updateDemomanHeadVisual();

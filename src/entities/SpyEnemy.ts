@@ -17,7 +17,7 @@ export class SpyEnemy {
   
   // Disguise state properties
   private currentDisguise: SpyDisguise = 'SCOUT';
-  public currentNode: NodeId = 'LOBBY';
+  public currentNode: NodeId = 'COURTYARD';
   private teleportTimer: number = 0;
   private fakeWatchTimer: number = 0;
   private isBeingWatched: boolean = false;
@@ -27,7 +27,7 @@ export class SpyEnemy {
   private sapDamageCallback: ((damage: number) => void) | null = null;
   
   // Valid rooms for Spy to appear (excludes Intel and hallways)
-  private static VALID_ROOMS: NodeId[] = ['BRIDGE', 'LOBBY', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL'];
+  private static VALID_ROOMS: NodeId[] = ['BRIDGE', 'COURTYARD', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL'];
   
   constructor() {
     // Start in a random state

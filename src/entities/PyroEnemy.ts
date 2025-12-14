@@ -23,7 +23,7 @@ export class PyroEnemy {
   private pendingMode: 'ROOM' | 'INTEL' = 'INTEL';  // Mode to switch to after transition
   
   // Room mode properties
-  public currentNode: NodeId = 'LOBBY';
+  public currentNode: NodeId = 'COURTYARD';
   private teleportTimer: number = 0;
   private lightExposureTimer: number = 0;  // Time player has been shining light on Pyro in hallway
   private blockedHallway: 'LEFT' | 'RIGHT' | null = null;  // Hallway being lit by player (can't teleport there)
@@ -34,6 +34,7 @@ export class PyroEnemy {
   private escapeTimer: number = 0;
   private matchLit: boolean = false;
   private escapeCooldown: number = 0;  // Cooldown after player escapes
+  private hasAttackedThisIntelMode: boolean = false;  // Only one attack per Intel mode
   
   // Callbacks
   private onMatchLitCallback: (() => void) | null = null;
@@ -41,7 +42,7 @@ export class PyroEnemy {
   
   // All rooms Pyro can teleport to in Room mode (including hallways, excluding Intel)
   private static readonly TELEPORT_ROOMS: NodeId[] = [
-    'LOBBY', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 'LEFT_HALL', 'RIGHT_HALL', 'BRIDGE'
+    'COURTYARD', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 'LEFT_HALL', 'RIGHT_HALL', 'BRIDGE'
   ];
   
   constructor() {
@@ -148,8 +149,8 @@ export class PyroEnemy {
           // Player didn't escape in time - they burn!
           result.playerBurned = true;
         }
-      } else if (playerInIntel && !this.isInIntel && this.escapeCooldown <= 0) {
-        // Check if Pyro should appear in Intel (only if cooldown is over)
+      } else if (playerInIntel && !this.isInIntel && this.escapeCooldown <= 0 && !this.hasAttackedThisIntelMode) {
+        // Check if Pyro should appear in Intel (only if cooldown is over AND hasn't attacked this mode)
         this.intelSpawnTimer += delta;
         if (this.intelSpawnTimer >= GAME_CONSTANTS.PYRO_INTEL_CHECK_INTERVAL) {
           this.intelSpawnTimer = 0;
@@ -157,6 +158,7 @@ export class PyroEnemy {
           // Roll for spawn chance
           if (Math.random() < GAME_CONSTANTS.PYRO_INTEL_SPAWN_CHANCE) {
             this.lightMatch();
+            this.hasAttackedThisIntelMode = true;  // Only one attack per Intel mode
             result.matchJustLit = true;
           }
         }
@@ -200,6 +202,7 @@ export class PyroEnemy {
       this.matchLit = false;
       this.escapeTimer = 0;
       this.intelSpawnTimer = 0;
+      this.hasAttackedThisIntelMode = false;  // Reset for new Intel mode cycle
       console.log('🔥 Pyro switched to INTEL mode');
     } else {
       this.mode = 'ROOM';
@@ -242,6 +245,17 @@ export class PyroEnemy {
   }
   
   /**
+   * Called when Demoman starts his charge (eye lights up)
+   * If Pyro is in a hallway, he temporarily vanishes to avoid blocking Demo's path
+   */
+  public onDemomanChargeStart(): void {
+    if (this.isInHallway()) {
+      console.log('🔥 Pyro vanished from hallway (Demoman charging)');
+      this.teleportToNonHallway();
+    }
+  }
+  
+  /**
    * Light the match in Intel room (Intel mode)
    */
   private lightMatch(): void {
@@ -257,16 +271,21 @@ export class PyroEnemy {
   
   /**
    * Called when player successfully escapes Intel during match lit phase
+   * Pyro immediately transitions back to ROOM mode (with 10s despawn transition)
    */
   public onPlayerEscaped(): void {
     if (this.matchLit) {
-      console.log('🔥 Player escaped Pyro! Pyro despawns from Intel. Cooldown started.');
+      console.log('🔥 Player escaped Pyro! Transitioning to ROOM mode.');
       this.matchLit = false;
       this.isInIntel = false;
       this.escapeTimer = 0;
       this.intelSpawnTimer = 0;
-      // Start cooldown so Pyro doesn't immediately attack again
-      this.escapeCooldown = GAME_CONSTANTS.PYRO_INTEL_ESCAPE_COOLDOWN;
+      
+      // Transition to ROOM mode - player gets 10s of safety during transition
+      this.pendingMode = 'ROOM';
+      this.mode = 'TRANSITIONING';
+      this.transitionTimer = 0;
+      this.modeTimer = 0;
     }
   }
   

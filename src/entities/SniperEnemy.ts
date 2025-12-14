@@ -41,12 +41,12 @@ export class SniperEnemy extends EnemyBase {
 
   // All rooms Sniper can teleport to (not INTEL, not halls for initial spawn)
   private static readonly TELEPORT_ROOMS: NodeId[] = [
-    'LOBBY', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 'LEFT_HALL', 'RIGHT_HALL', 'BRIDGE'
+    'COURTYARD', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 'LEFT_HALL', 'RIGHT_HALL', 'BRIDGE'
   ];
   
   // Safe spawn rooms (no halls - prevents instant death at game start)
   private static readonly SPAWN_ROOMS: NodeId[] = [
-    'LOBBY', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 'BRIDGE'
+    'COURTYARD', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 'BRIDGE'
   ];
   
   // Teleport sound callback
@@ -212,7 +212,7 @@ export class SniperEnemy extends EnemyBase {
   private hasReachedLure: boolean = false;
   
   /**
-   * Move toward lure location (navigate through adjacent rooms)
+   * Move toward lure location using BFS for shortest path
    */
   private moveTowardLure(): void {
     if (!this.targetLureNode) {
@@ -233,33 +233,58 @@ export class SniperEnemy extends EnemyBase {
       return;
     }
 
-    // Find path toward lure through adjacent rooms
+    // Find shortest path toward lure using BFS
+    const nextStep = this.findNextStepToward(this.targetLureNode);
+    if (nextStep) {
+      console.log(`Sniper navigating toward lure: ${this.currentNode} -> ${nextStep}`);
+      this.currentNode = nextStep;
+    }
+  }
+  
+  /**
+   * Find the next node to move to in order to reach the target using BFS
+   * This finds the true shortest path through the map
+   */
+  private findNextStepToward(target: NodeId): NodeId | null {
     const adjacent = ROOM_ADJACENCY[this.currentNode] || [];
     
-    // If lure is adjacent, move directly to it
-    if (adjacent.includes(this.targetLureNode)) {
-      this.currentNode = this.targetLureNode;
-      console.log(`Sniper moved to lure at ${this.currentNode}`);
-      return;
+    // If target is adjacent, return it
+    if (adjacent.includes(target)) {
+      return target;
     }
-
-    // Otherwise, move to an adjacent room that gets us closer
-    // Simple heuristic: prefer rooms that are adjacent to the target
-    for (const room of adjacent) {
-      const roomAdjacent = ROOM_ADJACENCY[room] || [];
-      if (roomAdjacent.includes(this.targetLureNode)) {
-        this.currentNode = room;
-        console.log(`Sniper moved toward lure: ${this.currentNode}`);
-        return;
+    
+    // BFS to find shortest path
+    const visited = new Set<NodeId>([this.currentNode]);
+    const queue: { node: NodeId; firstStep: NodeId }[] = [];
+    
+    // Add all adjacent nodes as starting points (but never start toward INTEL)
+    for (const adj of adjacent) {
+      if (adj !== 'INTEL') {
+        queue.push({ node: adj, firstStep: adj });
+        visited.add(adj);
       }
     }
-
-    // If no clear path, just move to a random adjacent room (but NEVER to INTEL)
-    const safeAdjacent = adjacent.filter(r => r !== 'INTEL');
-    if (safeAdjacent.length > 0) {
-      this.currentNode = safeAdjacent[Math.floor(Math.random() * safeAdjacent.length)];
-      console.log(`Sniper moved randomly toward lure: ${this.currentNode}`);
+    
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      
+      // Found target - return the first step we took to get here
+      if (current.node === target) {
+        return current.firstStep;
+      }
+      
+      // Explore neighbors
+      const neighbors = ROOM_ADJACENCY[current.node] || [];
+      for (const neighbor of neighbors) {
+        if (!visited.has(neighbor) && neighbor !== 'INTEL') { // Don't path through Intel
+          visited.add(neighbor);
+          queue.push({ node: neighbor, firstStep: current.firstStep });
+        }
+      }
     }
+    
+    // No path found
+    return null;
   }
 
   /**
@@ -471,3 +496,4 @@ export class SniperEnemy extends EnemyBase {
     return this._teleportFrozen;
   }
 }
+

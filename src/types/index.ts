@@ -13,8 +13,8 @@
  * INTEL is the player's room (destination).
  */
 export type NodeId = 
-  | 'BRIDGE'      // Heavy's spawn point (before Lobby)
-  | 'LOBBY' 
+  | 'BRIDGE'      // Heavy's spawn point (before Courtyard)
+  | 'COURTYARD' 
   | 'GRATE' 
   | 'SEWER'       // Beyond Grate - new room
   | 'STAIRCASE' 
@@ -31,31 +31,31 @@ export type DoorSide = 'LEFT' | 'RIGHT' | 'NONE';
 /**
  * Path definitions for each enemy type
  */
-export const SCOUT_PATH: NodeId[] = ['LOBBY', 'STAIRCASE', 'LEFT_HALL', 'INTEL'];
+export const SCOUT_PATH: NodeId[] = ['COURTYARD', 'STAIRCASE', 'LEFT_HALL', 'INTEL'];
 export const SOLDIER_PATH: NodeId[] = ['GRATE', 'SPIRAL', 'RIGHT_HALL', 'INTEL'];
 
 // Demoman can charge down either hallway - path determined by which eye glows
-export const DEMOMAN_PATH_LEFT: NodeId[] = ['LOBBY', 'STAIRCASE', 'LEFT_HALL', 'INTEL'];
-export const DEMOMAN_PATH_RIGHT: NodeId[] = ['LOBBY', 'STAIRCASE', 'RIGHT_HALL', 'INTEL'];
+export const DEMOMAN_PATH_LEFT: NodeId[] = ['BRIDGE', 'COURTYARD', 'STAIRCASE', 'LEFT_HALL', 'INTEL'];
+export const DEMOMAN_PATH_RIGHT: NodeId[] = ['BRIDGE', 'COURTYARD', 'STAIRCASE', 'RIGHT_HALL', 'INTEL'];
 
 // Heavy paths - Heavy can now spawn from different locations and take different routes
-export const HEAVY_PATH_LEFT: NodeId[] = ['BRIDGE', 'LOBBY', 'STAIRCASE', 'LEFT_HALL', 'INTEL'];
+export const HEAVY_PATH_LEFT: NodeId[] = ['BRIDGE', 'COURTYARD', 'STAIRCASE', 'LEFT_HALL', 'INTEL'];
 export const HEAVY_PATH_RIGHT: NodeId[] = ['SEWER', 'GRATE', 'SPIRAL', 'RIGHT_HALL', 'INTEL'];
 // All possible Heavy paths (randomly selected)
 export const HEAVY_PATHS: NodeId[][] = [HEAVY_PATH_LEFT, HEAVY_PATH_RIGHT];
 // Default for backwards compatibility
 export const HEAVY_PATH: NodeId[] = HEAVY_PATH_LEFT;
-export const SNIPER_PATH_LEFT: NodeId[] = ['LOBBY', 'STAIRCASE', 'LEFT_HALL', 'INTEL'];
+export const SNIPER_PATH_LEFT: NodeId[] = ['COURTYARD', 'STAIRCASE', 'LEFT_HALL', 'INTEL'];
 export const SNIPER_PATH_RIGHT: NodeId[] = ['GRATE', 'SPIRAL', 'RIGHT_HALL', 'INTEL'];
 
 // Room adjacency map - which rooms are adjacent to each position
-// LOBBY and GRATE are connected to allow Heavy to cross between paths when lured
+// Matches real TF2 2Fort layout with cross-connections
 export const ROOM_ADJACENCY: Record<NodeId, NodeId[]> = {
-  'BRIDGE': ['LOBBY'],
-  'LOBBY': ['BRIDGE', 'STAIRCASE', 'GRATE'],  // Connected to GRATE for path crossing
-  'GRATE': ['SPIRAL', 'SEWER', 'LOBBY'],      // Connected to LOBBY for path crossing
+  'BRIDGE': ['COURTYARD', 'GRATE'],               // Connected to both sides (like real 2Fort)
+  'COURTYARD': ['BRIDGE', 'STAIRCASE', 'GRATE'],  // Connected to GRATE for path crossing
+  'GRATE': ['SPIRAL', 'SEWER', 'COURTYARD', 'BRIDGE'],  // Connected to BRIDGE and COURTYARD
   'SEWER': ['GRATE'],             // New room beyond Grate
-  'STAIRCASE': ['LOBBY', 'LEFT_HALL'],
+  'STAIRCASE': ['COURTYARD', 'LEFT_HALL'],
   'SPIRAL': ['GRATE', 'RIGHT_HALL'],
   'LEFT_HALL': ['STAIRCASE', 'INTEL', 'RIGHT_HALL'],  // Connected to RIGHT_HALL (behind Intel)
   'RIGHT_HALL': ['SPIRAL', 'INTEL', 'LEFT_HALL'],     // Connected to LEFT_HALL (behind Intel)
@@ -164,27 +164,25 @@ export interface CameraData {
 
 /**
  * All camera locations with map positions
- * Map layout (rotated 90° clockwise - Intel at bottom):
+ * Map layout (aligned visual):
  * 
- *   BRIDGE (top)
- *      |
- *   LOBBY -------- GRATE
- *      |              |
- *   STAIRCASE ---- SPIRAL  
- *      |              |
- *   LEFT_HALL --- RIGHT_HALL
- *      |              |
- *      +--- INTEL ---+  (bottom)
+ *   STAIRCASE ----- COURTYARD -------- BRIDGE
+ *       |               |                 |
+ *   LEFT_HALL           |                 |
+ *       | \             |                 |
+ *       |   R.HALL -- SPIRAL -- GRATE ---+
+ *       |     |                   |
+ *     INTEL --+                 SEWER
  */
 export const CAMERAS: CameraData[] = [
-  { id: 1, name: 'BRIDGE', node: 'BRIDGE', mapX: 70, mapY: 30 },     // Heavy's spawn (top)
-  { id: 2, name: 'LOBBY', node: 'LOBBY', mapX: 70, mapY: 90 },       // Left path
-  { id: 3, name: 'GRATE', node: 'GRATE', mapX: 190, mapY: 90 },      // Right path
-  { id: 8, name: 'SEWER', node: 'SEWER', mapX: 250, mapY: 50 },      // Beyond Grate (new)
-  { id: 4, name: 'STAIRCASE', node: 'STAIRCASE', mapX: 70, mapY: 150 },
-  { id: 5, name: 'SPIRAL', node: 'SPIRAL', mapX: 190, mapY: 150 },
-  { id: 6, name: 'LEFT HALL', node: 'LEFT_HALL', mapX: 70, mapY: 210 },
-  { id: 7, name: 'RIGHT HALL', node: 'RIGHT_HALL', mapX: 190, mapY: 210 },
+  { id: 4, name: 'STAIRCASE', node: 'STAIRCASE', mapX: 55, mapY: 30 },       // Top left
+  { id: 2, name: 'COURTYARD', node: 'COURTYARD', mapX: 165, mapY: 30 },      // Above Spiral
+  { id: 6, name: 'LEFT HALL', node: 'LEFT_HALL', mapX: 55, mapY: 105 },      // Below Staircase
+  { id: 7, name: 'RIGHT HALL', node: 'RIGHT_HALL', mapX: 105, mapY: 180 },   // Bottom row (spaced)
+  { id: 5, name: 'SPIRAL', node: 'SPIRAL', mapX: 165, mapY: 180 },           // Below Courtyard (spaced)
+  { id: 3, name: 'GRATE', node: 'GRATE', mapX: 225, mapY: 180 },             // Right of Spiral (spaced)
+  { id: 1, name: 'BRIDGE', node: 'BRIDGE', mapX: 285, mapY: 180 },           // Far right (spaced)
+  { id: 8, name: 'SEWER', node: 'SEWER', mapX: 225, mapY: 255 },             // Below Grate
 ];
 
 /**
@@ -240,7 +238,7 @@ export const GAME_CONSTANTS = {
   // Demoman settings - NIGHT 2
   DEMOMAN_DORMANT_MIN: 20000,     // Min time head stays dormant (20 sec)
   DEMOMAN_DORMANT_MAX: 40000,     // Max time head stays dormant (40 sec)
-  DEMOMAN_CHARGE_SPEED: 500,      // Speed per node during charge (0.5 sec/node)
+  DEMOMAN_CHARGE_SPEED: 300,      // Speed per node during charge (0.3 sec/node)
   DEMOMAN_CHARGE_WARNING: 3000,   // Eye glow warning before charge (3 sec)
   DEMOMAN_CHARGE_ATTACK_DELAY: 1000, // Time at door before attacking (1 sec to react)
   DEMOMAN_HEAD_TELEPORT_DELAY: 3000, // Time before head teleports after deterred
@@ -288,7 +286,7 @@ export const GAME_CONSTANTS = {
   
   // Pyro settings - CUSTOM NIGHT ONLY
   PYRO_ROOM_TELEPORT_INTERVAL: 7000,  // Time between Pyro teleports in room mode (7 sec)
-  PYRO_HALLWAY_LIGHT_TIME: 2000,      // Time player must shine light on Pyro in hallway to drive away (2 sec)
+  PYRO_HALLWAY_LIGHT_TIME: 1500,      // Time player must shine light on Pyro in hallway to drive away (1.5 sec)
   PYRO_MODE_TOGGLE_INTERVAL: 45000,   // Time between ROOM/INTEL mode switches (45 sec)
   PYRO_MODE_TRANSITION_TIME: 10000,   // Cooldown time between mode switches (10 sec despawn)
   PYRO_INTEL_ESCAPE_TIME: 10000,      // Time to escape after match is lit (10 sec)
