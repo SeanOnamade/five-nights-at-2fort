@@ -180,7 +180,7 @@ Non-lethal saboteur. **Two modes (not both at once!):**
 |-----------|-------|
 | State Toggle | 60 sec |
 | Teleport (disguise) | 8 sec |
-| Sap Chance | 40% when player teleports |
+| Sap Chance | **100%** when player teleports |
 | Sap Damage | 30 HP/sec |
 | Sap Removal | **SPACE x2** (free!) |
 
@@ -190,7 +190,7 @@ Non-lethal saboteur. **Two modes (not both at once!):**
 - Never in doorways, never kills player
 
 **SAPPING Mode:**
-- 40% chance to sap sentry when player teleports away
+- **Always** saps sentry when player teleports away (if in SAPPING state)
 - Red device with sparks on sentry
 - Press SPACE twice to remove (free, no wrangler needed)
 
@@ -231,6 +231,60 @@ Ghostly, invisible menace. **CUSTOM NIGHT ONLY - Very difficult!**
 - Be ready to teleport immediately when match lights
 - **Lures have NO EFFECT** on Pyro
 
+**Repel Reward:**
+- Driving Pyro away with wrangler light gives **+20 metal**
+- (Compensates for 1.5s of lost dispenser time + 10 bonus)
+
+---
+
+### 💉 MEDIC
+Support enemy that makes others invincible via Übercharge. **CUSTOM NIGHT ONLY**
+
+| Parameter | Value |
+|-----------|-------|
+| Target Selection | Every 60 sec (1 in-game hour) |
+| Valid Targets | Scout, Soldier, Demoman only |
+| Visibility | **NEVER visible** - only Übered enemy has blue glow |
+
+**LORE:**
+- Medic worked with Engineer on a cure for the zombified mercenaries
+- Engineer watched at night while Medic slept (and vice versa during the day)
+- When Medic turned, his Übercharge now makes enemies unstoppable
+
+**Mechanics:**
+- Picks a random target (Scout, Soldier, or Demoman) at night start
+- Target has **blue glow** on cameras and in doorways
+- Demoman's head also has blue glow when Übered
+- Stays with target until their first attack resolves
+- After attack, waits 60 sec then picks new target
+
+**Übered Enemy Behavior:**
+| Enemy | Normal | Übered |
+|-------|--------|--------|
+| Scout | Repelled by sentry | **CANNOT BE REPELLED** |
+| Soldier | Repelled by sentry | **CANNOT BE REPELLED** (still fires rockets) |
+| Demoman | Watching freezes, repelled by sentry | Watching freezes, **CANNOT BE REPELLED** |
+
+**When Übered enemy reaches door:**
+- **Player in Intel:** DEATH (cannot repel with sentry!)
+- **Player teleported away:** Enemy retreats, sentry destroyed, Medic picks new target next hour
+
+**Escape mechanic:**
+- If Übered enemy is waiting at door and player teleports away → Enemy immediately leaves
+- Soldier stops rockets and leaves immediately when Übered and player teleports
+
+**Visual indicators:**
+- Blue glow around Übered enemy on cameras
+- Blue door highlighting when Übered enemy at door
+- Demoman's eye glows **blue** instead of green when Übered
+- Enemy label shows "(Ü)" on camera (e.g., "SCOUT(Ü)")
+
+**Counters:**
+- Watch for blue glow on cameras to identify Übered enemy
+- Teleport away BEFORE Übered enemy reaches door
+- You will lose your sentry, but survive
+- Medic requires Scout, Soldier, or Demoman to be enabled to function
+
 ---
 
 ## Defense Mechanics
@@ -256,14 +310,16 @@ Ghostly, invisible menace. **CUSTOM NIGHT ONLY - Very difficult!**
 
 ## Enemy Interaction Matrix
 
-| Enemy | Unwrangled | Wrangled L1 | Wrangled L2+ | Lure |
-|-------|------------|-------------|--------------|------|
-| Scout | Sentry dies, repels | 1 shot | 1 shot | — |
-| Soldier | Sentry dies, repels | 1 shot | 1 shot | — |
-| Demoman | Sentry dies, repels | 1 shot | 1 shot | — |
-| Heavy | **NO EFFECT** | **NO EFFECT** | **NO EFFECT** | ✓ Redirects |
-| Sniper | **NO EFFECT** | **2 shots** | **2 shots** | ✓ Stops charge |
-| Pyro | **N/A** | **SENTRY DESTROYED** | **SENTRY DESTROYED** | **NO EFFECT** |
+| Enemy | Unwrangled | Wrangled L1 | Wrangled L2+ | Lure | Übered |
+|-------|------------|-------------|--------------|------|--------|
+| Scout | Sentry dies, repels | 1 shot | 1 shot | — | **IMMUNE** |
+| Soldier | Sentry dies, repels | 1 shot | 1 shot | — | **IMMUNE** |
+| Demoman | Sentry dies, repels | 1 shot | 1 shot | — | **IMMUNE** |
+| Heavy | **NO EFFECT** | **NO EFFECT** | **NO EFFECT** | ✓ Redirects | N/A |
+| Sniper | **NO EFFECT** | **2 shots** | **2 shots** | ✓ Stops charge | N/A |
+| Pyro | **N/A** | **SENTRY DESTROYED** | **SENTRY DESTROYED** | **NO EFFECT** | N/A |
+| Spy | **N/A** | **N/A** | **N/A** | **NO EFFECT** | N/A |
+| Medic | *Support only - never attacks* | — | — | — | — |
 
 ---
 
@@ -277,4 +333,4 @@ Ghostly, invisible menace. **CUSTOM NIGHT ONLY - Very difficult!**
 
 ---
 
-*Last updated: Custom Night (Pyro) complete*
+*Last updated: Spy sap 100%, Pyro repel +20 metal*

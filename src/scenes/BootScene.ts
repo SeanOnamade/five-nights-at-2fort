@@ -203,7 +203,12 @@ export class BootScene extends Phaser.Scene {
       sniper: false,
       spy: false,
       pyro: false,
+      medic: false,
     };
+    // Ensure medic key exists for older saved settings
+    if (customNightEnemies.medic === undefined) {
+      customNightEnemies.medic = false;
+    }
     
     // Custom night UI container (created later, shown when N6 selected)
     let customNightUI: Phaser.GameObjects.Container | null = null;
@@ -310,8 +315,8 @@ export class BootScene extends Phaser.Scene {
     customNightUI = this.add.container(width / 2, nightSelY - 75);
     customNightUI.setVisible(false);
     
-    // Brighter panel for custom night (wider to fit 7 enemies including Pyro)
-    const customBg = this.add.rectangle(0, 0, 520, 60, 0x101815, 0.98);
+    // Brighter panel for custom night (wider to fit 8 enemies including Pyro and Medic)
+    const customBg = this.add.rectangle(0, 0, 580, 60, 0x101815, 0.98);
     customBg.setStrokeStyle(2, 0x44aa44);
     customNightUI.add(customBg);
     
@@ -323,7 +328,7 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5);
     customNightUI.add(customTitle);
     
-    const enemyTypes = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy', 'pyro'] as const;
+    const enemyTypes = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy', 'pyro', 'medic'] as const;
     const enemyColors: Record<string, number> = {
       scout: 0x7755aa,   // Purple for scout
       soldier: 0x6688aa,
@@ -332,6 +337,7 @@ export class BootScene extends Phaser.Scene {
       sniper: 0x5599cc,
       spy: 0x666677,
       pyro: 0xdd6622,    // Fire orange for Pyro
+      medic: 0x4488ff,   // Blue for Medic (Über color)
     };
     const enemyLabels: Record<string, string> = {
       scout: 'SCT',
@@ -341,10 +347,11 @@ export class BootScene extends Phaser.Scene {
       sniper: 'SNP',
       spy: 'SPY',
       pyro: 'PYR',
+      medic: 'MED',
     };
     
     enemyTypes.forEach((enemy, i) => {
-      const ex = -189 + i * 63;  // Centered spacing for 7 enemies
+      const ex = -217 + i * 62;  // Centered spacing for 8 enemies
       const ey = 10;
       
       // Brighter toggle button - starts OFF by default (smaller to fit 7 enemies)

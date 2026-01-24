@@ -33,6 +33,9 @@ export abstract class EnemyBase {
   protected waitTimer: number;
   protected respawnTimer: number;
   
+  // Track if attack has been reported (to avoid spamming reachedIntel every frame)
+  private hasReportedAttack: boolean = false;
+  
   // Configuration (override in subclasses)
   protected abstract moveInterval: number;
   protected abstract waitTime: number;
@@ -92,7 +95,11 @@ export abstract class EnemyBase {
         break;
         
       case 'ATTACKING':
-        result.reachedIntel = true;
+        // Only report reachedIntel ONCE (not every frame)
+        if (!this.hasReportedAttack) {
+          result.reachedIntel = true;
+          this.hasReportedAttack = true;
+        }
         break;
         
       case 'DESPAWNED':
@@ -152,6 +159,7 @@ export abstract class EnemyBase {
   public driveAway(): void {
     this.state = 'DESPAWNED';
     this.respawnTimer = 0;
+    this.hasReportedAttack = false;  // Reset for next attack
     console.log(`${this.type} driven away! Will respawn in ${GAME_CONSTANTS.ENEMY_RESPAWN_DELAY}ms`);
   }
   
@@ -165,6 +173,7 @@ export abstract class EnemyBase {
     this.moveTimer = 0;
     this.waitTimer = 0;
     this.respawnTimer = 0;
+    this.hasReportedAttack = false;  // Reset for next attack
     console.log(`${this.type} respawned at ${this.spawnNode}`);
   }
   

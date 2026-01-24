@@ -19,6 +19,7 @@ import { HeavyEnemy } from '../entities/HeavyEnemy';
 import { SniperEnemy } from '../entities/SniperEnemy';
 import { SpyEnemy } from '../entities/SpyEnemy';
 import { PyroEnemy } from '../entities/PyroEnemy';
+import { MedicEnemy, UberTarget } from '../entities/MedicEnemy';
 
 /**
  * GameScene - Main gameplay scene for Night 1
@@ -59,6 +60,16 @@ export class GameScene extends Phaser.Scene {
   private isCameraMode: boolean = false;
   private selectedCamera: number = 0;
   private wasWrangledBeforeCamera: boolean = false;  // Remember wrangler state
+  
+  // Camera boot-up delay (1s delay when raising cameras)
+  private isCameraBooting: boolean = false;
+  private cameraBootTimer: number = 0;
+  private readonly CAMERA_BOOT_DELAY: number = 1000; // 1 second boot-up time
+  private cameraBootOverlay!: Phaser.GameObjects.Container;
+  
+  // Wrangler firing cooldown (prevents spam-clicking)
+  private wranglerCooldown: number = 0;
+  private readonly WRANGLER_COOLDOWN: number = 1000; // 1 second cooldown between shots
   
   // Demoman eye glow sound
   private demoEyeGlowSoundPlaying: boolean = false;
@@ -111,6 +122,7 @@ export class GameScene extends Phaser.Scene {
   private sniper!: SniperEnemy;
   private spy!: SpyEnemy;
   private pyro!: PyroEnemy;
+  private medic!: MedicEnemy;
   
   // Night number (determines which enemies are active)
   private nightNumber: number = 1;
@@ -124,6 +136,7 @@ export class GameScene extends Phaser.Scene {
     sniper: boolean;
     spy: boolean;
     pyro: boolean;
+    medic: boolean;
   } | null = null;
   
   // Night 5+ features - Spy sapper
@@ -171,6 +184,10 @@ export class GameScene extends Phaser.Scene {
   private soldierInDoorway!: Phaser.GameObjects.Container;
   private demomanInDoorway!: Phaser.GameObjects.Container;
   private demomanApproachGlow!: Phaser.GameObjects.Graphics; // Green glow when approaching
+  
+  // Über glow effects for Medic (Custom Night only)
+  private uberGlowLeft!: Phaser.GameObjects.Graphics;
+  private uberGlowRight!: Phaser.GameObjects.Graphics;
   
   // Sniper laser sight visuals (visible without wrangler - Night 4+)
   private sniperLaserLeft!: Phaser.GameObjects.Container;
@@ -332,6 +349,11 @@ export class GameScene extends Phaser.Scene {
     return this.customEnemies ? this.customEnemies.pyro : false;
   }
   
+  private isMedicEnabled(): boolean {
+    // Medic is CUSTOM NIGHT ONLY - never appears in regular nights
+    return this.customEnemies ? this.customEnemies.medic : false;
+  }
+  
   /**
    * Reset all game state for a clean start/restart
    */
@@ -345,6 +367,7 @@ export class GameScene extends Phaser.Scene {
     this.wasWrangledBeforeCamera = false;
     this.isPaused = false;
     this.isPlayingDetectionSound = false;
+    this.wranglerCooldown = 0;
     
     // Reset native key states
     this.keyADown = false;
@@ -413,9 +436,10 @@ export class GameScene extends Phaser.Scene {
     
     // For custom night (6), use the enemy toggles; otherwise use night-based rules
     const isCustomNight = this.nightNumber === 6;
-    const customEnemies = data?.customEnemies ?? {
+    const customEnemies = {
       scout: true, soldier: true, demoman: true, 
-      heavy: true, sniper: true, spy: true, pyro: false
+      heavy: true, sniper: true, spy: true, pyro: false, medic: false,
+      ...data?.customEnemies,  // Override with passed values (backward compatible)
     };
     
     console.log(`🌙 Starting Night ${this.nightNumber}${isCustomNight ? ' (Custom)' : ''}`);
@@ -476,6 +500,26 @@ export class GameScene extends Phaser.Scene {
       // Create but immediately disable Pyro if custom night with pyro disabled
       this.pyro = new PyroEnemy();
       this.pyro.forceDespawn();
+    }
+    
+    // Only create Medic on custom night with medic enabled
+    const medicEnabled = isCustomNight ? customEnemies.medic : false;
+    this.medic = new MedicEnemy();
+    if (medicEnabled) {
+      // Determine available targets (only Scout, Soldier, Demoman that are enabled)
+      const medicTargets: UberTarget[] = [];
+      if (customEnemies.scout) medicTargets.push('SCOUT');
+      if (customEnemies.soldier) medicTargets.push('SOLDIER');
+      if (customEnemies.demoman) medicTargets.push('DEMOMAN');
+      
+      if (medicTargets.length > 0) {
+        this.medic.activate(medicTargets);
+      } else {
+        console.log('💉 Medic enabled but no valid targets (Scout/Soldier/Demoman)!');
+        this.medic.forceDespawn();
+      }
+    } else {
+      this.medic.forceDespawn();
     }
     
     // Spy callbacks are now set up when Spy is created above
@@ -611,6 +655,16 @@ export class GameScene extends Phaser.Scene {
     this.demomanApproachGlow = this.add.graphics();
     this.demomanApproachGlow.setVisible(false);
     this.demomanApproachGlow.setDepth(9);
+    
+    // Über glow effects for Medic (Custom Night)
+    // These create a pulsing blue aura around Übered enemies
+    this.uberGlowLeft = this.add.graphics();
+    this.uberGlowLeft.setVisible(false);
+    this.uberGlowLeft.setDepth(9);
+    
+    this.uberGlowRight = this.add.graphics();
+    this.uberGlowRight.setVisible(false);
+    this.uberGlowRight.setDepth(9);
     
     // Demoman's severed head (appears in Intel room or on cameras)
     this.demomanHeadInRoom = this.add.container(200, height - 300);
@@ -1945,6 +1999,82 @@ export class GameScene extends Phaser.Scene {
     });
     
     this.cameraUI.add(this.cameraWatchWarning);
+    
+    // ========== CAMERA BOOT-UP OVERLAY ==========
+    // Shown during the 1-second camera boot delay
+    this.cameraBootOverlay = this.add.container(420, 350);
+    this.cameraBootOverlay.setDepth(110); // Above other camera elements
+    
+    // Dark boot screen
+    const bootScreenBg = this.add.rectangle(0, 0, 510, 410, 0x000803, 0.95);
+    bootScreenBg.setStrokeStyle(2, 0x003311);
+    this.cameraBootOverlay.add(bootScreenBg);
+    
+    // Boot-up text title
+    const bootTitle = this.add.text(0, -100, 'CAMERA SYSTEM', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '18px',
+      color: '#00aa44',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.cameraBootOverlay.add(bootTitle);
+    
+    // Boot status text (animated)
+    const bootStatus = this.add.text(0, -60, 'INITIALIZING...', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '14px',
+      color: '#006622',
+    }).setOrigin(0.5);
+    this.cameraBootOverlay.add(bootStatus);
+    
+    // Progress bar background
+    const bootBarBg = this.add.rectangle(0, 0, 300, 20, 0x001108);
+    bootBarBg.setStrokeStyle(2, 0x003311);
+    this.cameraBootOverlay.add(bootBarBg);
+    
+    // Progress bar fill (will be animated)
+    const bootBarFill = this.add.rectangle(-147, 0, 0, 14, 0x00aa44, 0.8);
+    bootBarFill.setOrigin(0, 0.5);
+    bootBarFill.setName('bootBarFill');
+    this.cameraBootOverlay.add(bootBarFill);
+    
+    // Boot percentage text
+    const bootPercent = this.add.text(0, 35, '0%', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '12px',
+      color: '#00aa44',
+    }).setOrigin(0.5);
+    bootPercent.setName('bootPercent');
+    this.cameraBootOverlay.add(bootPercent);
+    
+    // Scanlines for boot screen (matches camera feed aesthetic)
+    const bootScanlines = this.add.graphics();
+    for (let y = -200; y < 200; y += 4) {
+      bootScanlines.lineStyle(1, 0x000000, 0.3);
+      bootScanlines.lineBetween(-250, y, 250, y);
+    }
+    this.cameraBootOverlay.add(bootScanlines);
+    
+    // Boot log messages (scrolling up effect)
+    const bootLog1 = this.add.text(0, 80, '> Connecting to network...', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '10px',
+      color: '#004422',
+    }).setOrigin(0.5);
+    const bootLog2 = this.add.text(0, 100, '> Loading camera feeds...', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '10px',
+      color: '#004422',
+    }).setOrigin(0.5);
+    const bootLog3 = this.add.text(0, 120, '> Calibrating night vision...', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '10px',
+      color: '#004422',
+    }).setOrigin(0.5);
+    this.cameraBootOverlay.add([bootLog1, bootLog2, bootLog3]);
+    
+    this.cameraBootOverlay.setVisible(false);
+    this.cameraUI.add(this.cameraBootOverlay);
   }
   
   /**
@@ -2484,6 +2614,8 @@ export class GameScene extends Phaser.Scene {
           this.showAlert('⚠ SPY SAPPING SENTRY!', 0xff4444);
           this.sapperIndicator.setVisible(true);
           this.playSapperSound();
+          // Flash screen red to make it very noticeable
+          this.cameras.main.flash(300, 255, 100, 100, false);
         }
       }
       
@@ -3027,6 +3159,11 @@ export class GameScene extends Phaser.Scene {
    * Select a camera and update the feed view
    */
   private selectCamera(index: number): void {
+    // Block camera switching during boot sequence
+    if (this.isCameraBooting) {
+      return;
+    }
+    
     this.selectedCamera = index;
     const cam = CAMERAS[index];
     this.cameraFeedTitle.setText(`CAM 0${cam.id} - ${cam.name}`);
@@ -3081,21 +3218,62 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
-   * Draw enemy silhouette for camera feed
+   * Draw blue Über glow effect for Medic's Übercharge
+   * Creates a pulsing blue aura around the target position
    */
-  private drawEnemySilhouette(graphics: Phaser.GameObjects.Graphics, type: 'SCOUT' | 'SOLDIER' | 'DEMOMAN_BODY'): void {
+  private drawUberGlow(graphics: Phaser.GameObjects.Graphics, x: number, y: number): void {
+    graphics.clear();
+    graphics.setPosition(x, y);
+    
+    // Outer glow ring (faint)
+    graphics.fillStyle(0x4488ff, 0.15);
+    graphics.fillCircle(0, 0, 120);
+    
+    // Middle glow ring
+    graphics.fillStyle(0x4488ff, 0.25);
+    graphics.fillCircle(0, 0, 90);
+    
+    // Inner glow ring (brightest)
+    graphics.fillStyle(0x66aaff, 0.35);
+    graphics.fillCircle(0, 0, 60);
+    
+    // Core glow
+    graphics.fillStyle(0x88ccff, 0.2);
+    graphics.fillCircle(0, 0, 40);
+  }
+  
+  /**
+   * Draw enemy silhouette for camera feed
+   * @param isUbered - If true, draws a bright blue Über glow behind the enemy
+   */
+  private drawEnemySilhouette(graphics: Phaser.GameObjects.Graphics, type: 'SCOUT' | 'SOLDIER' | 'DEMOMAN_BODY', isUbered: boolean = false): void {
     graphics.clear();
     
     // Shadow
     graphics.fillStyle(0x000000, 0.6);
     graphics.fillEllipse(0, 90, 120, 30);
     
+    // Draw Über glow if enemy is Übered by Medic
+    if (isUbered) {
+      // Outer pulsing blue glow
+      graphics.fillStyle(0x4488ff, 0.3);
+      graphics.fillCircle(0, 0, 100);
+      // Middle glow
+      graphics.fillStyle(0x4488ff, 0.4);
+      graphics.fillCircle(0, 0, 80);
+      // Inner bright glow
+      graphics.fillStyle(0x66aaff, 0.5);
+      graphics.fillCircle(0, 0, 60);
+    }
+    
     if (type === 'SCOUT') {
       // Scout - lean Boston speedster (UPDATED to match gallery)
       
-      // Blue glow behind
-      graphics.fillStyle(0x3366aa, 0.15);
-      graphics.fillCircle(0, 0, 75);
+      // Blue glow behind (normal - skip if Übered since we drew it above)
+      if (!isUbered) {
+        graphics.fillStyle(0x3366aa, 0.15);
+        graphics.fillCircle(0, 0, 75);
+      }
       
       // Legs - khaki pants
       graphics.fillStyle(0x8b7355, 1);
@@ -3216,9 +3394,11 @@ export class GameScene extends Phaser.Scene {
     } else if (type === 'SOLDIER') {
       // Soldier - UPDATED to match gallery sprite
       
-      // Red/orange glow behind
-      graphics.fillStyle(0xcc4422, 0.12);
-      graphics.fillCircle(0, 0, 80);
+      // Red/orange glow behind (skip if Übered - blue glow drawn above)
+      if (!isUbered) {
+        graphics.fillStyle(0xcc4422, 0.12);
+        graphics.fillCircle(0, 0, 80);
+      }
       
       // Legs - wide military stance
       graphics.fillStyle(0x3a3a4a, 1);
@@ -3346,9 +3526,11 @@ export class GameScene extends Phaser.Scene {
     } else if (type === 'DEMOMAN_BODY') {
       // Demoman - HEADLESS body with Eyelander (matches gallery)
       
-      // Ghostly green glow
-      graphics.fillStyle(0x00ff44, 0.18);
-      graphics.fillCircle(0, 10, 95);
+      // Ghostly green glow (skip if Übered - blue glow drawn above)
+      if (!isUbered) {
+        graphics.fillStyle(0x00ff44, 0.18);
+        graphics.fillCircle(0, 10, 95);
+      }
       
       // Legs
       graphics.fillStyle(0x2a2a3a, 1);
@@ -3439,9 +3621,23 @@ export class GameScene extends Phaser.Scene {
   
   /**
    * Draw Demoman's severed head for camera feed
+   * @param isUbered - If true, draws a bright blue Über glow around the head
    */
-  private drawDemomanHead(graphics: Phaser.GameObjects.Graphics): void {
+  private drawDemomanHead(graphics: Phaser.GameObjects.Graphics, isUbered: boolean = false): void {
     graphics.clear();
+    
+    // Draw Über glow if Demoman is Übered by Medic
+    if (isUbered) {
+      // Outer pulsing blue glow
+      graphics.fillStyle(0x4488ff, 0.4);
+      graphics.fillCircle(0, 0, 90);
+      // Middle glow
+      graphics.fillStyle(0x4488ff, 0.5);
+      graphics.fillCircle(0, 0, 70);
+      // Inner bright glow
+      graphics.fillStyle(0x66aaff, 0.6);
+      graphics.fillCircle(0, 0, 55);
+    }
     
     // Shadow under head
     graphics.fillStyle(0x000000, 0.4);
@@ -3472,13 +3668,21 @@ export class GameScene extends Phaser.Scene {
     graphics.fillRect(16, -35, 8, 30);
     
     // Left eye socket - dark void (or glowing if active)
+    // Use blue glow when Übered, green normally
+    const eyeGlowColor = isUbered ? 0x4488ff : 0x00ff44;
     if (this.demoman.isEyeGlowing() && this.demoman.activeEye === 'LEFT') {
-      graphics.fillStyle(0x00ff44, 0.6);
+      graphics.fillStyle(eyeGlowColor, 0.6);
       graphics.fillCircle(-18, -8, 25);
-      graphics.fillStyle(0x00ff44, 1);
+      graphics.fillStyle(eyeGlowColor, 1);
       graphics.fillCircle(-18, -8, 15);
       graphics.fillStyle(0xffffff, 1);
       graphics.fillCircle(-22, -12, 4);
+    } else if (isUbered) {
+      // Even when eye not glowing, show blue aura in socket when Übered
+      graphics.fillStyle(0x4488ff, 0.4);
+      graphics.fillCircle(-18, -8, 18);
+      graphics.fillStyle(0x000000, 1);
+      graphics.fillCircle(-18, -8, 12);
     } else {
       graphics.fillStyle(0x000000, 1);
       graphics.fillCircle(-18, -8, 15);
@@ -3486,8 +3690,12 @@ export class GameScene extends Phaser.Scene {
     
     // Right eye (under patch) glows through if active
     if (this.demoman.isEyeGlowing() && this.demoman.activeEye === 'RIGHT') {
-      graphics.fillStyle(0x00ff44, 0.8);
+      graphics.fillStyle(eyeGlowColor, 0.8);
       graphics.fillCircle(18, -8, 20);
+    } else if (isUbered) {
+      // Blue glow visible through eyepatch when Übered
+      graphics.fillStyle(0x4488ff, 0.3);
+      graphics.fillCircle(18, -8, 15);
     }
   }
   
@@ -5678,6 +5886,10 @@ export class GameScene extends Phaser.Scene {
     if (this.pyroMaskLeft) this.pyroMaskLeft.setVisible(false);
     if (this.pyroMaskRight) this.pyroMaskRight.setVisible(false);
     
+    // Hide Über glows by default
+    if (this.uberGlowLeft) this.uberGlowLeft.setVisible(false);
+    if (this.uberGlowRight) this.uberGlowRight.setVisible(false);
+    
     // Reset door colors to dark
     this.leftDoor.setFillStyle(0x000000);
     this.rightDoor.setFillStyle(0x000000);
@@ -5729,6 +5941,14 @@ export class GameScene extends Phaser.Scene {
       this.scoutInDoorway.setVisible(scoutAtDoor);
       enemyDetected = scoutAtDoor;
       
+      // Show Über glow if Scout is Übered
+      if (scoutAtDoor && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SCOUT')) {
+        this.drawUberGlow(this.uberGlowLeft, 120, 720 / 2 - 30);
+        this.uberGlowLeft.setVisible(true);
+        // Change door color to blue when Übered
+        this.leftDoor.setFillStyle(0x112244);
+      }
+      
       // Show Pyro floating mask if Pyro is in left hall (Custom Night)
       // No sound here - only visual. Sound is for cameras only.
       const pyroInLeftHall = this.isPyroEnabled() && this.pyro && 
@@ -5770,6 +5990,14 @@ export class GameScene extends Phaser.Scene {
                             (this.soldier.state === 'WAITING' || this.soldier.state === 'SIEGING');
       this.soldierInDoorway.setVisible(soldierAtDoor);
       enemyDetected = soldierAtDoor;
+      
+      // Show Über glow if Soldier is Übered
+      if (soldierAtDoor && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SOLDIER')) {
+        this.drawUberGlow(this.uberGlowRight, 1280 - 120, 720 / 2 - 30);
+        this.uberGlowRight.setVisible(true);
+        // Change door color to blue when Übered
+        this.rightDoor.setFillStyle(0x112244);
+      }
       
       // Show Pyro floating mask if Pyro is in right hall (Custom Night)
       // No sound here - only visual. Sound is for cameras only.
@@ -6215,6 +6443,13 @@ export class GameScene extends Phaser.Scene {
     if (!this.sentry.exists || !this.sentry.isWrangled) return;
     if (this.sentry.aimedDoor === 'NONE') return; // Can't fire when not aiming at a door
     
+    // Check cooldown (1 second between shots)
+    if (this.wranglerCooldown > 0) {
+      this.showAlert('COOLING DOWN...', 0xff6600);
+      this.playDeniedSound();
+      return;
+    }
+    
     // Check if we have enough metal to fire (always costs 50)
     if (this.metal < 50) {
       this.showAlert('NOT ENOUGH METAL TO FIRE!', 0xff0000);
@@ -6224,6 +6459,9 @@ export class GameScene extends Phaser.Scene {
     
     // Deduct metal cost for firing
     this.metal -= 50;
+    
+    // Start cooldown
+    this.wranglerCooldown = this.WRANGLER_COOLDOWN;
     
     // Visual feedback
     this.cameras.main.shake(100, 0.01);
@@ -6273,22 +6511,34 @@ export class GameScene extends Phaser.Scene {
       // Check Scout at left door (if enabled)
       if (this.isScoutEnabled() && this.scout.currentNode === 'LEFT_HALL' && 
           (this.scout.state === 'WAITING' || this.scout.state === 'ATTACKING')) {
-        this.scout.driveAway();
-        this.showAlert('SCOUT REPELLED!', 0x00ff00);
-        hitEnemy = true;
+        // Check if Scout is Übered (Medic) - can't be repelled!
+        if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SCOUT')) {
+          this.showAlert('ÜBERED! CANNOT REPEL!', 0x4488ff);
+          hitEnemy = true; // Still counts as hitting (spent metal)
+        } else {
+          this.scout.driveAway();
+          this.showAlert('SCOUT REPELLED!', 0x00ff00);
+          hitEnemy = true;
+        }
       }
       // Check Demoman at left door (if enabled)
       if (this.isDemomanEnabled() && this.demoman.getChargeDoor() === 'LEFT' &&
           (this.demoman.currentNode === 'LEFT_HALL')) {
-        // Bonus: +25 metal if hit during body phase (not just glow)
-        if (this.demoman.isInBodyPhase()) {
-          this.metal = Math.min(this.metal + 25, GAME_CONSTANTS.MAX_METAL);
-          this.showAlert('REPELLED LAST SECOND! +25 METAL', 0x00ff00);
+        // Check if Demoman is Übered (Medic) - can't be repelled!
+        if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN')) {
+          this.showAlert('ÜBERED! CANNOT REPEL!', 0x4488ff);
+          hitEnemy = true;
         } else {
-          this.showAlert('DEMOMAN REPELLED!', 0x00ff00);
+          // Bonus: +25 metal if hit during body phase (not just glow)
+          if (this.demoman.isInBodyPhase()) {
+            this.metal = Math.min(this.metal + 25, GAME_CONSTANTS.MAX_METAL);
+            this.showAlert('REPELLED LAST SECOND! +25 METAL', 0x00ff00);
+          } else {
+            this.showAlert('DEMOMAN REPELLED!', 0x00ff00);
+          }
+          this.demoman.deter();
+          hitEnemy = true;
         }
-        this.demoman.deter();
-        hitEnemy = true;
       }
       // Check Sniper at left door (Night 4+) - ALWAYS requires 2 shots to repel
       // Only hit Sniper if he's actually AIMING (not if lured and just passing through)
@@ -6305,22 +6555,34 @@ export class GameScene extends Phaser.Scene {
       // Check Soldier at right door (if enabled)
       if (this.isSoldierEnabled() && this.soldier.currentNode === 'RIGHT_HALL' && 
           (this.soldier.state === 'WAITING' || this.soldier.state === 'SIEGING')) {
-        this.soldier.driveAway();
-        this.showAlert('SOLDIER REPELLED!', 0x00ff00);
-        hitEnemy = true;
+        // Check if Soldier is Übered (Medic) - can't be repelled!
+        if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SOLDIER')) {
+          this.showAlert('ÜBERED! CANNOT REPEL!', 0x4488ff);
+          hitEnemy = true;
+        } else {
+          this.soldier.driveAway();
+          this.showAlert('SOLDIER REPELLED!', 0x00ff00);
+          hitEnemy = true;
+        }
       }
       // Check Demoman at right door (if enabled)
       if (this.isDemomanEnabled() && this.demoman.getChargeDoor() === 'RIGHT' &&
           (this.demoman.currentNode === 'RIGHT_HALL')) {
-        // Bonus: +25 metal if hit during body phase (not just glow)
-        if (this.demoman.isInBodyPhase()) {
-          this.metal = Math.min(this.metal + 25, GAME_CONSTANTS.MAX_METAL);
-          this.showAlert('REPELLED LAST SECOND! +25 METAL', 0x00ff00);
+        // Check if Demoman is Übered (Medic) - can't be repelled!
+        if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN')) {
+          this.showAlert('ÜBERED! CANNOT REPEL!', 0x4488ff);
+          hitEnemy = true;
         } else {
-          this.showAlert('DEMOMAN REPELLED!', 0x00ff00);
+          // Bonus: +25 metal if hit during body phase (not just glow)
+          if (this.demoman.isInBodyPhase()) {
+            this.metal = Math.min(this.metal + 25, GAME_CONSTANTS.MAX_METAL);
+            this.showAlert('REPELLED LAST SECOND! +25 METAL', 0x00ff00);
+          } else {
+            this.showAlert('DEMOMAN REPELLED!', 0x00ff00);
+          }
+          this.demoman.deter();
+          hitEnemy = true;
         }
-        this.demoman.deter();
-        hitEnemy = true;
       }
       // Check Sniper at right door (if enabled) - ALWAYS requires 2 shots to repel
       // Only hit Sniper if he's actually AIMING (not if lured and just passing through)
@@ -6378,6 +6640,12 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     
+    // Can't upgrade when cameras are up - must lower cameras first
+    if (this.isCameraMode) {
+      this.showAlert('Lower cameras first! (TAB)', 0xff6600);
+      return;
+    }
+    
     if (this.sentry.level >= 3) {
       this.showAlert('Sentry already max level!', 0xffff00);
       return;
@@ -6406,6 +6674,12 @@ export class GameScene extends Phaser.Scene {
   private repairSentry(): void {
     if (!this.sentry.exists) {
       this.showAlert('No sentry to repair!', 0xff0000);
+      return;
+    }
+    
+    // Can't repair when cameras are up - must lower cameras first
+    if (this.isCameraMode) {
+      this.showAlert('Lower cameras first! (TAB)', 0xff6600);
       return;
     }
     
@@ -6489,8 +6763,16 @@ export class GameScene extends Phaser.Scene {
     
     this.showAlert('SENTRY DESTROYED!', 0xff0000);
     
+    // Clear any active sapper (sentry is gone, so sapper is too)
+    if (this.isSpyEnabled() && this.spy.isSapping()) {
+      this.spy.removeSapper();
+      this.sapperIndicator.setVisible(false);
+      this.stopSapperSound();
+      console.log('🕵️ Sapper destroyed with sentry');
+    }
+    
     // If Soldier was sieging, he starts breach countdown
-    if (this.soldier.isSieging()) {
+    if (this.isSoldierEnabled() && this.soldier.isSieging()) {
       this.soldier.sentryDestroyed();
       this.showAlert('⚠ SOLDIER BREACHING IN 3 SECONDS! ⚠', 0xff0000);
       
@@ -6637,6 +6919,34 @@ export class GameScene extends Phaser.Scene {
     this.destroySentry();
   }
   
+  /**
+   * Handle when player escapes an Übered enemy by teleporting away
+   * The enemy retreats, sentry is destroyed, and Medic picks a new target next hour
+   */
+  private handleUberedEnemyEscaped(enemyType: UberTarget): void {
+    // Drive away the enemy (they can't wait in Intel like normal - Über ran out)
+    if (enemyType === 'SCOUT') {
+      this.scout.driveAway();
+    } else if (enemyType === 'SOLDIER') {
+      this.soldier.driveAway();
+    } else if (enemyType === 'DEMOMAN') {
+      this.demoman.deter();
+    }
+    
+    // Destroy sentry if it exists
+    if (this.sentry.exists) {
+      this.showAlert('SENTRY DESTROYED BY ÜBER!', 0x4488ff);
+      this.destroySentry();
+    }
+    
+    // Notify Medic that the attack resolved - will pick new target next hour
+    if (this.medic) {
+      this.medic.onTargetAttackResolved();
+    }
+    
+    console.log(`💉 ${enemyType} Über attack resolved - player escaped!`);
+  }
+  
   // ============================================
   // CAMERA SYSTEM
   // ============================================
@@ -6645,6 +6955,8 @@ export class GameScene extends Phaser.Scene {
     if (this.isCameraMode) {
       // Exiting camera mode - restore wrangler state if it was on before
       this.isCameraMode = false;
+      this.isCameraBooting = false;
+      this.cameraBootTimer = 0;
       this.cameraUI.setVisible(false);
       if (this.wasWrangledBeforeCamera && this.sentry.exists) {
         this.sentry.isWrangled = true;
@@ -6656,6 +6968,17 @@ export class GameScene extends Phaser.Scene {
       this.cameraUI.setVisible(true);
       this.sentry.isWrangled = false;
       this.stopDetectionSound(); // Stop scary sound when viewing cameras
+      
+      // Start camera boot-up sequence (1 second delay)
+      this.isCameraBooting = true;
+      this.cameraBootTimer = 0;
+      this.cameraBootOverlay.setVisible(true);
+      
+      // Reset boot bar to 0
+      const bootBarFill = this.cameraBootOverlay.getByName('bootBarFill') as Phaser.GameObjects.Rectangle;
+      const bootPercent = this.cameraBootOverlay.getByName('bootPercent') as Phaser.GameObjects.Text;
+      if (bootBarFill) bootBarFill.setSize(0, 14);
+      if (bootPercent) bootPercent.setText('0%');
       
       // Reset aim states (important for mobile touch zones)
       this.keyADown = false;
@@ -6822,13 +7145,31 @@ export class GameScene extends Phaser.Scene {
       });
     }
     if (demomanBodyAtCam) {
-      enemies.push({ type: 'DEMOMAN_BODY', label: 'DEMO!', color: '#44ff44' });
+      // Check if Demoman is Übered - blue glow!
+      const demoUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
+      enemies.push({ 
+        type: 'DEMOMAN_BODY', 
+        label: demoUbered ? 'DEMO(Ü)' : 'DEMO!', 
+        color: demoUbered ? '#4488ff' : '#44ff44'  // Blue when Übered
+      });
     }
     if (soldierAtCam) {
-      enemies.push({ type: 'SOLDIER', label: 'SOLDIER', color: '#cc9966' });
+      // Check if Soldier is Übered - blue glow!
+      const soldierUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SOLDIER');
+      enemies.push({ 
+        type: 'SOLDIER', 
+        label: soldierUbered ? 'SOLDIER(Ü)' : 'SOLDIER', 
+        color: soldierUbered ? '#4488ff' : '#cc9966'  // Blue when Übered
+      });
     }
     if (scoutAtCam) {
-      enemies.push({ type: 'SCOUT', label: 'SCOUT', color: '#88ccff' });
+      // Check if Scout is Übered - blue glow!
+      const scoutUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SCOUT');
+      enemies.push({ 
+        type: 'SCOUT', 
+        label: scoutUbered ? 'SCOUT(Ü)' : 'SCOUT', 
+        color: scoutUbered ? '#4488ff' : '#88ccff'  // Blue when Übered
+      });
     }
     
     // Night 5+: Add Spy disguised as an enemy (looks identical - player can't tell!)
@@ -6893,21 +7234,31 @@ export class GameScene extends Phaser.Scene {
         const graphics = container.list[0] as Phaser.GameObjects.Graphics;
         const label = container.list[container.list.length - 1] as Phaser.GameObjects.Text;
         
-        // Draw appropriate silhouette
+        // Check if this enemy is Übered (for special blue glow)
+        const isUbered = enemy.label.includes('(Ü)');
+        
+        // Draw appropriate silhouette with optional Über glow
         if (enemy.type === 'SNIPER') {
           this.drawSniperSilhouette(graphics, this.sniper.isCurrentlyLured());
         } else if (enemy.type === 'HEAVY') {
           this.drawHeavySilhouette(graphics, this.heavy.isCurrentlyLured());
         } else if (enemy.type === 'DEMOMAN_BODY') {
-          this.drawEnemySilhouette(graphics, 'DEMOMAN_BODY');
+          this.drawEnemySilhouette(graphics, 'DEMOMAN_BODY', isUbered);
         } else if (enemy.type === 'SOLDIER') {
-          this.drawEnemySilhouette(graphics, 'SOLDIER');
+          this.drawEnemySilhouette(graphics, 'SOLDIER', isUbered);
         } else if (enemy.type === 'SCOUT') {
-          this.drawEnemySilhouette(graphics, 'SCOUT');
+          this.drawEnemySilhouette(graphics, 'SCOUT', isUbered);
         }
         
-        label.setText('');  // Labels removed - use Extras screen to learn enemies
-        label.setColor(enemy.color);
+        // Show Über label if enemy is Übered, otherwise hide labels
+        if (isUbered) {
+          label.setText('ÜBERED');
+          label.setColor('#4488ff');
+          label.setFontSize('14px');
+        } else {
+          label.setText('');  // Labels removed - use Extras screen to learn enemies
+          label.setColor(enemy.color);
+        }
         
         container.setPosition(positions[i].x, positions[i].y);
         container.setVisible(true);
@@ -6923,11 +7274,19 @@ export class GameScene extends Phaser.Scene {
       const enemyGraphics = this.cameraFeedEnemy.list[0] as Phaser.GameObjects.Graphics;
       const enemyLabel = this.cameraFeedEnemy.list[2] as Phaser.GameObjects.Text;
       
-      this.drawDemomanHead(enemyGraphics);
-      // Only show real eye status if real demoman head is here
-      // Labels removed - eye glow is visible on the head itself
-      enemyLabel.setText('');
-      enemyLabel.setColor('#44aa44');
+      // Check if Demoman is Übered - draw with blue glow!
+      const demoHeadUbered = demomanHeadAtCam && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
+      this.drawDemomanHead(enemyGraphics, demoHeadUbered);
+      
+      // Show ÜBERED label if Demoman is Übered
+      if (demoHeadUbered) {
+        enemyLabel.setText('ÜBERED');
+        enemyLabel.setColor('#4488ff');
+        enemyLabel.setFontSize('16px');
+      } else {
+        enemyLabel.setText('');
+        enemyLabel.setColor('#44aa44');
+      }
       this.cameraFeedEnemy.setPosition(420, 370);
       this.cameraFeedDemoHead.setVisible(false);
     } else {
@@ -6945,10 +7304,19 @@ export class GameScene extends Phaser.Scene {
       const demoHeadGraphics = this.cameraFeedDemoHead.list[0] as Phaser.GameObjects.Graphics;
       const demoHeadLabel = this.cameraFeedDemoHead.list[1] as Phaser.GameObjects.Text;
       
-      this.drawDemomanHeadSmall(demoHeadGraphics);
-      // Labels removed - eye glow is visible on the head itself
-      demoHeadLabel.setText('');
-      demoHeadLabel.setColor('#44aa44');
+      // Check if Demoman is Übered - draw with blue glow!
+      const demoHeadUbered = demomanHeadAtCam && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
+      this.drawDemomanHeadSmall(demoHeadGraphics, demoHeadUbered);
+      
+      // Show ÜBERED label if Demoman is Übered
+      if (demoHeadUbered) {
+        demoHeadLabel.setText('ÜBERED');
+        demoHeadLabel.setColor('#4488ff');
+        demoHeadLabel.setFontSize('12px');
+      } else {
+        demoHeadLabel.setText('');
+        demoHeadLabel.setColor('#44aa44');
+      }
       
       // Position demo head to the right of other enemies
       const demoHeadX = enemies.length === 1 ? 520 : (enemies.length === 2 ? 580 : 620);
@@ -6974,9 +7342,23 @@ export class GameScene extends Phaser.Scene {
   
   /**
    * Draw a smaller version of Demoman's head for secondary display
+   * @param isUbered - If true, draws a bright blue Über glow around the head
    */
-  private drawDemomanHeadSmall(graphics: Phaser.GameObjects.Graphics): void {
+  private drawDemomanHeadSmall(graphics: Phaser.GameObjects.Graphics, isUbered: boolean = false): void {
     graphics.clear();
+    
+    // Draw Über glow if Demoman is Übered by Medic
+    if (isUbered) {
+      // Outer pulsing blue glow
+      graphics.fillStyle(0x4488ff, 0.4);
+      graphics.fillCircle(0, 0, 60);
+      // Middle glow
+      graphics.fillStyle(0x4488ff, 0.5);
+      graphics.fillCircle(0, 0, 45);
+      // Inner bright glow
+      graphics.fillStyle(0x66aaff, 0.6);
+      graphics.fillCircle(0, 0, 35);
+    }
     
     // Shadow
     graphics.fillStyle(0x000000, 0.3);
@@ -7006,11 +7388,18 @@ export class GameScene extends Phaser.Scene {
     graphics.fillCircle(12, -5, 12);
     graphics.fillRect(10, -22, 6, 18);
     
-    // Eye socket / glow
+    // Eye socket / glow - use blue when Übered
+    const eyeGlowColor = isUbered ? 0x4488ff : 0x00ff44;
     if (this.demoman.isEyeGlowing() && this.demoman.activeEye === 'LEFT') {
-      graphics.fillStyle(0x00ff44, 0.8);
+      graphics.fillStyle(eyeGlowColor, 0.8);
       graphics.fillCircle(-12, -5, 15);
-      graphics.fillStyle(0x00ff44, 1);
+      graphics.fillStyle(eyeGlowColor, 1);
+      graphics.fillCircle(-12, -5, 8);
+    } else if (isUbered) {
+      // Blue aura in socket when Übered
+      graphics.fillStyle(0x4488ff, 0.4);
+      graphics.fillCircle(-12, -5, 12);
+      graphics.fillStyle(0x000000, 1);
       graphics.fillCircle(-12, -5, 8);
     } else {
       graphics.fillStyle(0x000000, 1);
@@ -7018,8 +7407,12 @@ export class GameScene extends Phaser.Scene {
     }
     
     if (this.demoman.isEyeGlowing() && this.demoman.activeEye === 'RIGHT') {
-      graphics.fillStyle(0x00ff44, 0.6);
+      graphics.fillStyle(eyeGlowColor, 0.6);
       graphics.fillCircle(12, -5, 14);
+    } else if (isUbered) {
+      // Blue glow visible through eyepatch when Übered
+      graphics.fillStyle(0x4488ff, 0.3);
+      graphics.fillCircle(12, -5, 10);
     }
   }
   
@@ -7811,6 +8204,11 @@ export class GameScene extends Phaser.Scene {
     if (this.gameStatus !== 'PLAYING') return;
     if (this.isPaused) return;
     
+    // ---- UPDATE WRANGLER COOLDOWN ----
+    if (this.wranglerCooldown > 0) {
+      this.wranglerCooldown -= delta;
+    }
+    
     // ---- TIME PROGRESSION ----
     this.timeAccumulator += delta;
     if (this.timeAccumulator >= GAME_CONSTANTS.MS_PER_GAME_MINUTE) {
@@ -7841,6 +8239,39 @@ export class GameScene extends Phaser.Scene {
     // ---- UPDATE ENEMIES ----
     this.updateEnemies(delta);
     
+    // ---- UPDATE CAMERA BOOT TIMER ----
+    if (this.isCameraMode && this.isCameraBooting) {
+      this.cameraBootTimer += delta;
+      
+      // Update boot progress bar and percentage
+      const progress = Math.min(this.cameraBootTimer / this.CAMERA_BOOT_DELAY, 1);
+      const bootBarFill = this.cameraBootOverlay.getByName('bootBarFill') as Phaser.GameObjects.Rectangle;
+      const bootPercent = this.cameraBootOverlay.getByName('bootPercent') as Phaser.GameObjects.Text;
+      if (bootBarFill) bootBarFill.setSize(294 * progress, 14);
+      if (bootPercent) bootPercent.setText(`${Math.floor(progress * 100)}%`);
+      
+      // Grey out camera buttons during boot
+      this.cameraMapNodes.forEach((nodeContainer) => {
+        nodeContainer.setAlpha(0.3);
+        // Disable interactivity on the node background (index 1 in container)
+        const nodeBg = nodeContainer.list[1] as Phaser.GameObjects.Rectangle;
+        if (nodeBg) nodeBg.disableInteractive();
+      });
+      
+      // Boot complete after 1 second
+      if (this.cameraBootTimer >= this.CAMERA_BOOT_DELAY) {
+        this.isCameraBooting = false;
+        this.cameraBootOverlay.setVisible(false);
+        
+        // Restore camera buttons
+        this.cameraMapNodes.forEach((nodeContainer) => {
+          nodeContainer.setAlpha(1);
+          const nodeBg = nodeContainer.list[1] as Phaser.GameObjects.Rectangle;
+          if (nodeBg) nodeBg.setInteractive({ useHandCursor: true });
+        });
+      }
+    }
+    
     // ---- UPDATE CAMERA VIEW ----
     if (this.isCameraMode) {
       this.updateCameraView();
@@ -7861,31 +8292,44 @@ export class GameScene extends Phaser.Scene {
       const scoutResult = this.scout.update(delta);
       
       if (scoutResult.reachedIntel) {
-      // Scout reached Intel Room
-      if (!this.sentry.exists) {
-        // No sentry - check if player is teleported away
-        if (this.isTeleported) {
-          // Scout waits in Intel - player dies when they return
-          console.log('Scout reached Intel but player was teleported!');
-          // Scout will be at Intel - player dies when they return (handled in returnToIntel)
-        } else {
-          this.gameOver('Scout broke in with no sentry!');
-          return;
-        }
-      } else {
-        // Sentry exists
-        // If sentry is WRANGLED, player must manually fire to repel - otherwise GAME OVER
-        if (this.sentry.isWrangled) {
-          // Player was wrangling but didn't fire in time - Scout kills!
-          if (!this.isTeleported) {
-            this.gameOver('Scout attacked while sentry was wrangled!');
+        // Scout reached Intel Room
+        const scoutIsUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SCOUT');
+        
+        if (scoutIsUbered) {
+          // Übered Scout - cannot be stopped by sentry!
+          if (this.isTeleported) {
+            // Player escaped via teleporter - Scout retreats, sentry destroyed
+            console.log('💉 Übered Scout reached Intel but player escaped!');
+            this.handleUberedEnemyEscaped('SCOUT');
+          } else {
+            // Player is in Intel - Übered Scout kills!
+            this.gameOver('Übered Scout broke in! You should have teleported!');
+            return;
+          }
+        } else if (!this.sentry.exists) {
+          // No sentry - check if player is teleported away
+          if (this.isTeleported) {
+            // Scout waits in Intel - player dies when they return
+            console.log('Scout reached Intel but player was teleported!');
+            // Scout will be at Intel - player dies when they return (handled in returnToIntel)
+          } else {
+            this.gameOver('Scout broke in with no sentry!');
             return;
           }
         } else {
-          // Sentry is UNWRANGLED - trigger auto-defense (sentry destroyed, scout repelled)
-          this.triggerAutoDefense('SCOUT');
+          // Sentry exists
+          // If sentry is WRANGLED, player must manually fire to repel - otherwise GAME OVER
+          if (this.sentry.isWrangled) {
+            // Player was wrangling but didn't fire in time - Scout kills!
+            if (!this.isTeleported) {
+              this.gameOver('Scout attacked while sentry was wrangled!');
+              return;
+            }
+          } else {
+            // Sentry is UNWRANGLED - trigger auto-defense (sentry destroyed, scout repelled)
+            this.triggerAutoDefense('SCOUT');
+          }
         }
-      }
       }
     }
     
@@ -7894,8 +8338,21 @@ export class GameScene extends Phaser.Scene {
       const soldierResult = this.soldier.update(delta);
       
       if (soldierResult.reachedIntel) {
-        // Soldier reached Intel Room - only enters to KILL if no sentry
-        if (!this.sentry.exists) {
+        // Soldier reached Intel Room
+        const soldierIsUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SOLDIER');
+        
+        if (soldierIsUbered) {
+          // Übered Soldier - cannot be stopped by sentry!
+          if (this.isTeleported) {
+            // Player escaped via teleporter - Soldier retreats, sentry destroyed
+            console.log('💉 Übered Soldier reached Intel but player escaped!');
+            this.handleUberedEnemyEscaped('SOLDIER');
+          } else {
+            // Player is in Intel - Übered Soldier kills!
+            this.gameOver('Übered Soldier breached! You should have teleported!');
+            return;
+          }
+        } else if (!this.sentry.exists) {
           // No sentry - check if player is teleported away
           if (this.isTeleported) {
             // Soldier waits in Intel - player dies when they return
@@ -7954,8 +8411,20 @@ export class GameScene extends Phaser.Scene {
         // Demoman charged into Intel Room
         const chargeDoor = this.demoman.getChargeDoor();
         const doorName = chargeDoor === 'LEFT' ? 'LEFT' : 'RIGHT';
+        const demoIsUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
         
-        if (!this.sentry.exists) {
+        if (demoIsUbered) {
+          // Übered Demoman - cannot be stopped by sentry!
+          if (this.isTeleported) {
+            // Player escaped via teleporter - Demoman retreats, sentry destroyed
+            console.log('💉 Übered Demoman reached Intel but player escaped!');
+            this.handleUberedEnemyEscaped('DEMOMAN');
+          } else {
+            // Player is in Intel - Übered Demoman kills!
+            this.gameOver(`Übered Demoman charged from ${doorName}! You should have teleported!`);
+            return;
+          }
+        } else if (!this.sentry.exists) {
           // No sentry - check if player is teleported away
           if (this.isTeleported) {
             // Demoman waits in Intel - player dies when they return
@@ -7974,6 +8443,34 @@ export class GameScene extends Phaser.Scene {
           // Sentry is UNWRANGLED - auto-defense (sentry destroyed, demoman deterred)
           this.triggerAutoDefense('DEMOMAN');
         }
+      }
+    }
+    
+    // Check for Übered enemies waiting at door when player is teleported
+    // They should leave immediately instead of waiting
+    if (this.isTeleported && this.isMedicEnabled() && this.medic && !this.medic.isForceDespawned()) {
+      // Scout waiting at door while Übered
+      if (this.isScoutEnabled() && this.medic.isEnemyUbered('SCOUT') && 
+          this.scout.currentNode === 'LEFT_HALL' && 
+          (this.scout.state === 'WAITING')) {
+        console.log('💉 Übered Scout leaving - player teleported away');
+        this.handleUberedEnemyEscaped('SCOUT');
+      }
+      
+      // Soldier waiting/sieging at door while Übered
+      if (this.isSoldierEnabled() && this.medic.isEnemyUbered('SOLDIER') && 
+          this.soldier.currentNode === 'RIGHT_HALL' && 
+          (this.soldier.state === 'WAITING' || this.soldier.state === 'SIEGING')) {
+        console.log('💉 Übered Soldier leaving - player teleported away');
+        this.handleUberedEnemyEscaped('SOLDIER');
+      }
+      
+      // Demoman charging or waiting while Übered
+      // Note: Demoman uses CHARGING state, not WAITING, when rushing to the door
+      if (this.isDemomanEnabled() && this.medic.isEnemyUbered('DEMOMAN') && 
+          (this.demoman.state === 'CHARGING' || this.demoman.state === 'WAITING')) {
+        console.log('💉 Übered Demoman leaving - player teleported away');
+        this.handleUberedEnemyEscaped('DEMOMAN');
       }
     }
     
@@ -7998,17 +8495,39 @@ export class GameScene extends Phaser.Scene {
       const camState = this.cameraStates.get(selectedCam.id);
       
       // Only track watching if camera isn't destroyed
+      // During camera boot, timers are PAUSED (not watched) - this is fair to the player
       if (!camState?.destroyed) {
-        const heavyAtCam = this.isHeavyEnabled() && this.heavy.isAtNode(selectedCam.node);
-        const sniperAtCam = this.isSniperEnabled() && this.sniper.isAtNode(selectedCam.node);
-        
-        // If BOTH Heavy and Sniper are on the same camera, destruction time is HALVED (multiplier 2)
-        const watchMultiplier = (heavyAtCam && sniperAtCam) ? 2 : 1;
-        
-        this.heavy.setBeingWatched(heavyAtCam, watchMultiplier);
-        // Sniper watching (if enabled)
-        if (this.isSniperEnabled()) {
-          this.sniper.setBeingWatched(sniperAtCam, watchMultiplier);
+        if (this.isCameraBooting) {
+          // During boot: pause Heavy/Sniper timers (don't count as watched OR unwatched)
+          // By not calling setBeingWatched, their timers stay frozen
+          // We explicitly set to false so timers don't build up during boot
+          this.heavy.setBeingWatched(false);
+          if (this.isSniperEnabled()) {
+            this.sniper.setBeingWatched(false);
+          }
+        } else {
+          // Normal operation: track watching
+          const heavyAtCam = this.isHeavyEnabled() && this.heavy.isAtNode(selectedCam.node);
+          const sniperAtCam = this.isSniperEnabled() && this.sniper.isAtNode(selectedCam.node);
+          
+          // If BOTH Heavy and Sniper are on the same camera, destruction time is HALVED (multiplier 2)
+          // If enemy is LURED, add 1.5x multiplier (makes it harder to watch lured enemies)
+          let heavyMultiplier = (heavyAtCam && sniperAtCam) ? 2 : 1;
+          let sniperMultiplier = (heavyAtCam && sniperAtCam) ? 2 : 1;
+          
+          // Apply 1.5x when lured (stacks with double multiplier if both on same camera)
+          if (this.heavy.isCurrentlyLured()) {
+            heavyMultiplier *= 1.5;
+          }
+          if (this.isSniperEnabled() && this.sniper.isCurrentlyLured()) {
+            sniperMultiplier *= 1.5;
+          }
+          
+          this.heavy.setBeingWatched(heavyAtCam, heavyMultiplier);
+          // Sniper watching (if enabled)
+          if (this.isSniperEnabled()) {
+            this.sniper.setBeingWatched(sniperAtCam, sniperMultiplier);
+          }
         }
       }
     } else {
@@ -8180,9 +8699,12 @@ export class GameScene extends Phaser.Scene {
                              this.sentry.aimedDoor === pyroHallway;
       
       // Update light exposure and check if Pyro was driven away
+      // Reward = metal lost during 1.5s repel time (11.25) + 10 bonus ≈ 20 metal
       const pyroDrivenAway = this.pyro.updateLightExposure(isLightingPyro, delta);
       if (pyroDrivenAway) {
-        this.showAlert('Pyro fled from the light!', 0x00ff00);
+        this.showAlert('Pyro fled! +20 metal', 0x00ff00);
+        this.metal = Math.min(this.metal + 20, GAME_CONSTANTS.MAX_METAL);
+        this.updateHUD();
       }
       
       // Update Pyro mask burn overlay based on light exposure progress
@@ -8233,6 +8755,11 @@ export class GameScene extends Phaser.Scene {
         this.showPyroEscapeWarning(false);
         this.stopPyroCracklingAmbient();
       }
+    }
+    
+    // Update Medic (Custom Night only)
+    if (this.isMedicEnabled() && this.medic && !this.medic.isForceDespawned()) {
+      this.medic.update(delta);
     }
     
     // Update camera repair timers
@@ -8488,16 +9015,32 @@ export class GameScene extends Phaser.Scene {
     }
     
     // Update eye glow based on Demoman state
+    // Check if Übered - use blue glow instead of green
+    const isUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
+    const glowColor = isUbered ? 0x4488ff : 0x00ff44;  // Blue when Übered, green otherwise
+    
     this.demomanHeadEyeGlow.clear();
     if (eyeGlowing) {
       const eyeX = this.demoman.activeEye === 'LEFT' ? -10 : 10;
-      // Green glowing eye
-      this.demomanHeadEyeGlow.fillStyle(0x00ff44, 0.6);
+      // Glowing eye (blue when Übered, green otherwise)
+      this.demomanHeadEyeGlow.fillStyle(glowColor, 0.6);
       this.demomanHeadEyeGlow.fillCircle(eyeX, -5, 15);
-      this.demomanHeadEyeGlow.fillStyle(0x00ff44, 1);
+      this.demomanHeadEyeGlow.fillStyle(glowColor, 1);
       this.demomanHeadEyeGlow.fillCircle(eyeX, -5, 8);
       this.demomanHeadEyeGlow.fillStyle(0xffffff, 1);
       this.demomanHeadEyeGlow.fillCircle(eyeX - 2, -7, 2);
+      
+      // Add outer blue glow ring when Übered
+      if (isUbered) {
+        this.demomanHeadEyeGlow.fillStyle(0x4488ff, 0.2);
+        this.demomanHeadEyeGlow.fillCircle(0, 0, 50);
+      }
+    } else if (isUbered && headVisibleInRoom) {
+      // Even when not actively glowing, show blue Über aura around head
+      this.demomanHeadEyeGlow.fillStyle(0x4488ff, 0.15);
+      this.demomanHeadEyeGlow.fillCircle(0, 0, 45);
+      this.demomanHeadEyeGlow.fillStyle(0x4488ff, 0.25);
+      this.demomanHeadEyeGlow.fillCircle(0, 0, 30);
     }
   }
   
@@ -8540,9 +9083,13 @@ export class GameScene extends Phaser.Scene {
     // Get attack progress (0 to 1 over 1.5 seconds)
     const progress = this.demoman.getAttackProgress();
     
+    // Check if Demoman is Übered - use blue glow instead of green
+    const isUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
+    const glowColor = isUbered ? 0x4488ff : 0x00ff44;  // Blue when Übered, green otherwise
+    
     // First 0.75s (75%): approaching glow | Last 0.25s (25%): body visible
     if (progress < 0.75) {
-      // First phase (0-0.75s): Show approaching green glow, getting brighter
+      // First phase (0-0.75s): Show approaching glow, getting brighter
       // Progress 0-0.75 maps to glow intensity 0.1-0.6
       const phaseProgress = progress / 0.75; // Normalize to 0-1 for this phase
       const glowIntensity = 0.1 + phaseProgress * 0.5;
@@ -8552,20 +9099,29 @@ export class GameScene extends Phaser.Scene {
       
       // Draw approaching glow at door position
       // Outer glow
-      this.demomanApproachGlow.fillStyle(0x00ff44, glowIntensity * 0.3);
+      this.demomanApproachGlow.fillStyle(glowColor, glowIntensity * 0.3);
       this.demomanApproachGlow.fillCircle(doorX, 360, glowSize * 1.5);
       // Middle glow
-      this.demomanApproachGlow.fillStyle(0x00ff44, glowIntensity * 0.5);
+      this.demomanApproachGlow.fillStyle(glowColor, glowIntensity * 0.5);
       this.demomanApproachGlow.fillCircle(doorX, 360, glowSize);
       // Inner bright core
-      this.demomanApproachGlow.fillStyle(0x00ff44, glowIntensity);
+      this.demomanApproachGlow.fillStyle(glowColor, glowIntensity);
       this.demomanApproachGlow.fillCircle(doorX, 360, glowSize * 0.5);
       // Sword glow hint (vertical line)
-      this.demomanApproachGlow.fillStyle(0x00ff44, glowIntensity * 0.8);
+      this.demomanApproachGlow.fillStyle(glowColor, glowIntensity * 0.8);
       this.demomanApproachGlow.fillRect(doorX - 3, 360 - glowSize, 6, glowSize * 2);
     } else {
       // Second phase (0.75-1.0s): Show full body - only 0.25s to react!
       this.demomanInDoorway.setVisible(true);
+      
+      // Show Über glow behind body if Übered
+      if (isUbered) {
+        const glowGraphics = chargeDoor === 'LEFT' ? this.uberGlowLeft : this.uberGlowRight;
+        if (glowGraphics) {
+          this.drawUberGlow(glowGraphics, doorX, 720 / 2 - 30);
+          glowGraphics.setVisible(true);
+        }
+      }
     }
   }
 }

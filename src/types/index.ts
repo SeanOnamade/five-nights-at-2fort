@@ -69,7 +69,7 @@ export const ROOM_ADJACENCY: Record<NodeId, NodeId[]> = {
 /**
  * Enemy types available in the game
  */
-export type EnemyType = 'SCOUT' | 'SOLDIER' | 'DEMOMAN' | 'HEAVY' | 'SNIPER' | 'SPY' | 'PYRO';
+export type EnemyType = 'SCOUT' | 'SOLDIER' | 'DEMOMAN' | 'HEAVY' | 'SNIPER' | 'SPY' | 'PYRO' | 'MEDIC';
 
 /**
  * Spy-specific state (Night 5)
@@ -233,7 +233,7 @@ export const GAME_CONSTANTS = {
   SCOUT_MOVE_INTERVAL: 12000,     // Time between Scout moves (12 sec)
   SCOUT_WAIT_TIME: 5000,          // Time Scout waits at door before attacking (5 sec)
   SOLDIER_MOVE_INTERVAL: 15000,   // Time between Soldier moves (15 sec)
-  ENEMY_RESPAWN_DELAY: 10000,     // Time before enemy respawns (10 sec)
+  ENEMY_RESPAWN_DELAY: 8000,      // Time before enemy respawns (8 sec)
   
   // Demoman settings - NIGHT 2
   DEMOMAN_DORMANT_MIN: 20000,     // Min time head stays dormant (20 sec)
@@ -279,7 +279,7 @@ export const GAME_CONSTANTS = {
   // Spy settings - NIGHT 5
   SPY_STATE_TOGGLE_INTERVAL: 60000, // Time between state changes (60 sec = 1 in-game hour)
   SPY_TELEPORT_INTERVAL: 8000,      // How often Spy moves when disguised (8 sec)
-  SPY_SAP_CHANCE: 0.4,              // 40% chance to sap when player teleports away
+  SPY_SAP_CHANCE: 1.0,              // 100% chance to sap when player teleports away
   SPY_SAP_DAMAGE_RATE: 30,          // HP per second drain when sapping
   SPY_SAP_REMOVE_CLICKS: 2,         // SPACE presses needed to remove sapper
   SPY_FAKE_WATCH_SPEED: 1.5,        // Fake watch bar fills at 1.5x normal speed
@@ -293,5 +293,8 @@ export const GAME_CONSTANTS = {
   PYRO_INTEL_SPAWN_CHANCE: 0.15,      // 15% chance to spawn in Intel each check (reduced from 30%)
   PYRO_INTEL_CHECK_INTERVAL: 4000,    // Check for Intel spawn every 4 sec (was 2 sec)
   PYRO_INTEL_ESCAPE_COOLDOWN: 8000,   // Cooldown after player escapes before Pyro can attack again
+  
+  // Medic settings - CUSTOM NIGHT ONLY
+  MEDIC_HOUR_INTERVAL: 60000,         // Time between Über target selections (60 sec = 1 in-game hour)
 } as const;
 
