@@ -37,9 +37,15 @@ export class MedicEnemy {
   
   // Callbacks
   private onTargetChangedCallback: ((target: UberTarget | null) => void) | null = null;
+  private isEnemyValidCallback: ((target: UberTarget) => boolean) | null = null;
   
   // Available targets (set by GameScene based on which enemies are enabled)
   private availableTargets: UberTarget[] = [];
+  
+  // Waiting for a valid target to become available
+  private _waitingForValidTarget: boolean = false;
+  private validTargetCheckTimer: number = 0;
+  private readonly VALID_TARGET_CHECK_INTERVAL: number = 500; // Check every 0.5 seconds
   
   constructor() {
     console.log('💉 Medic initialized (inactive until activated)');
@@ -79,6 +85,14 @@ export class MedicEnemy {
   }
   
   /**
+   * Set callback to check if an enemy is valid for Über selection
+   * Returns false if enemy is currently attacking, charging, or at the door
+   */
+  public setIsEnemyValidCallback(callback: (target: UberTarget) => boolean): void {
+    this.isEnemyValidCallback = callback;
+  }
+  
+  /**
    * Main update loop
    * @param delta Time elapsed since last frame (ms)
    */
@@ -86,6 +100,23 @@ export class MedicEnemy {
     const result = { targetChanged: false, newTarget: null as UberTarget | null };
     
     if (!this._isActive) {
+      return result;
+    }
+    
+    // If waiting for a valid target to become available, check periodically
+    if (this._waitingForValidTarget) {
+      this.validTargetCheckTimer += delta;
+      
+      if (this.validTargetCheckTimer >= this.VALID_TARGET_CHECK_INTERVAL) {
+        this.validTargetCheckTimer = 0;
+        this.pickNewTarget();
+        
+        // If we found a target, notify
+        if (this._currentTarget && !this._waitingForValidTarget) {
+          result.targetChanged = true;
+          result.newTarget = this._currentTarget;
+        }
+      }
       return result;
     }
     
@@ -107,17 +138,35 @@ export class MedicEnemy {
   
   /**
    * Pick a new random target from available enemies
+   * Filters out enemies that are currently attacking, charging, or at the door
    */
   private pickNewTarget(): void {
     if (this.availableTargets.length === 0) {
       this._currentTarget = null;
+      this._waitingForValidTarget = false;
       console.log('💉 Medic has no available targets!');
       return;
     }
     
-    // Pick random target
-    const randomIndex = Math.floor(Math.random() * this.availableTargets.length);
-    this._currentTarget = this.availableTargets[randomIndex];
+    // Filter to only enemies that are valid (not currently attacking/charging/at door)
+    let validTargets = this.availableTargets;
+    if (this.isEnemyValidCallback) {
+      validTargets = this.availableTargets.filter(target => this.isEnemyValidCallback!(target));
+    }
+    
+    if (validTargets.length === 0) {
+      // No valid targets right now - wait and check again later
+      this._currentTarget = null;
+      this._waitingForValidTarget = true;
+      this.validTargetCheckTimer = 0;
+      console.log('💉 Medic waiting for a valid target (all are busy attacking)...');
+      return;
+    }
+    
+    // Pick random target from valid ones
+    const randomIndex = Math.floor(Math.random() * validTargets.length);
+    this._currentTarget = validTargets[randomIndex];
+    this._waitingForValidTarget = false;
     
     console.log(`💉 Medic chose new target: ${this._currentTarget}`);
     
@@ -173,6 +222,13 @@ export class MedicEnemy {
   }
   
   /**
+   * Check if Medic is waiting for a valid target to become available
+   */
+  public isWaitingForValidTarget(): boolean {
+    return this._isActive && this._waitingForValidTarget;
+  }
+  
+  /**
    * Get time until next target selection (for debugging)
    */
   public getTimeUntilNextTarget(): number {
@@ -214,6 +270,9 @@ export class MedicEnemy {
    */
   public getDebugInfo(): string {
     if (!this._isActive) return 'Medic: INACTIVE';
+    if (this._waitingForValidTarget) {
+      return 'Medic: WAITING FOR VALID TARGET';
+    }
     if (this._targetHasAttacked) {
       return `Medic: WAITING (${(this.getTimeUntilNextTarget() / 1000).toFixed(1)}s)`;
     }

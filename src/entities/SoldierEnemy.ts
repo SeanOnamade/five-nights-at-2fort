@@ -54,7 +54,8 @@ export class SoldierEnemy extends EnemyBase {
     }
     
     // Handle breach delay after sentry destroyed
-    if (this.isBreaching) {
+    // Only process if not despawned (safety check)
+    if (this.isBreaching && this.state !== 'DESPAWNED') {
       this.breachTimer += delta;
       if (this.breachTimer >= 3000) {  // 3 second delay
         this.isBreaching = false;
@@ -125,6 +126,17 @@ export class SoldierEnemy extends EnemyBase {
    */
   protected respawn(): void {
     super.respawn();
+    this.rocketTimer = 0;
+    this.breachTimer = 0;
+    this.isBreaching = false;
+  }
+  
+  /**
+   * Override driveAway to reset breach state
+   * Critical fix: prevents Soldier from continuing breach countdown after being driven away
+   */
+  public driveAway(): void {
+    super.driveAway();
     this.rocketTimer = 0;
     this.breachTimer = 0;
     this.isBreaching = false;

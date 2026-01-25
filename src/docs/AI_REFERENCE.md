@@ -171,7 +171,7 @@ Silent, long-range threat with laser sight.
 
 ---
 
-## Night 5 Enemy
+## Night 4 Enemy
 
 ### 🟤 SPY
 Non-lethal saboteur. **Two modes (not both at once!):**
@@ -196,10 +196,10 @@ Non-lethal saboteur. **Two modes (not both at once!):**
 
 ---
 
-## Custom Night Enemy
+## Night 5 Enemy
 
 ### 🔥 PYRO
-Ghostly, invisible menace. **CUSTOM NIGHT ONLY - Very difficult!**
+Ghostly, invisible menace. **Very difficult!**
 
 | Parameter | Value |
 |-----------|-------|
@@ -236,6 +236,8 @@ Ghostly, invisible menace. **CUSTOM NIGHT ONLY - Very difficult!**
 - (Compensates for 1.5s of lost dispenser time + 10 bonus)
 
 ---
+
+## Custom Night Enemy
 
 ### 💉 MEDIC
 Support enemy that makes others invincible via Übercharge. **CUSTOM NIGHT ONLY**
@@ -333,4 +335,4 @@ Support enemy that makes others invincible via Übercharge. **CUSTOM NIGHT ONLY*
 
 ---
 
-*Last updated: Spy sap 100%, Pyro repel +20 metal*
+*Last updated: Night progression revised (Spy N4, Pyro N5, Medic Custom-only)*

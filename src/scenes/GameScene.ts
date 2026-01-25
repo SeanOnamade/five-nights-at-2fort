@@ -341,12 +341,11 @@ export class GameScene extends Phaser.Scene {
   }
   
   private isSpyEnabled(): boolean {
-    return this.customEnemies ? this.customEnemies.spy : (this.nightNumber >= 5);
+    return this.customEnemies ? this.customEnemies.spy : (this.nightNumber >= 4);
   }
   
   private isPyroEnabled(): boolean {
-    // Pyro is CUSTOM NIGHT ONLY - never appears in regular nights
-    return this.customEnemies ? this.customEnemies.pyro : false;
+    return this.customEnemies ? this.customEnemies.pyro : (this.nightNumber >= 5);
   }
   
   private isMedicEnabled(): boolean {
@@ -467,8 +466,8 @@ export class GameScene extends Phaser.Scene {
     // Store custom config for use in update loop
     this.customEnemies = isCustomNight ? customEnemies : null;
     
-    // Only create Spy on Night 5+ or custom night with spy enabled
-    const spyEnabled = isCustomNight ? customEnemies.spy : (this.nightNumber >= 5);
+    // Only create Spy on Night 4+ or custom night with spy enabled
+    const spyEnabled = isCustomNight ? customEnemies.spy : (this.nightNumber >= 4);
     if (spyEnabled) {
       this.spy = new SpyEnemy();
       // Set up Spy sapper callback
@@ -490,14 +489,18 @@ export class GameScene extends Phaser.Scene {
       this.sniper.setTeleportCallback(() => this.playSniperTeleportSound());
     }
     
-    // Only create Pyro on custom night with pyro enabled
-    const pyroEnabled = isCustomNight ? customEnemies.pyro : false;
+    // Only create Pyro on Night 5+ or custom night with pyro enabled
+    const pyroEnabled = isCustomNight ? customEnemies.pyro : (this.nightNumber >= 5);
     if (pyroEnabled) {
       this.pyro = new PyroEnemy();
       // Set up Pyro callbacks
       this.pyro.setMatchLitCallback(() => this.onPyroMatchLit());
     } else if (isCustomNight && !customEnemies.pyro) {
       // Create but immediately disable Pyro if custom night with pyro disabled
+      this.pyro = new PyroEnemy();
+      this.pyro.forceDespawn();
+    } else if (this.nightNumber < 5) {
+      // Regular nights before Night 5: create but disable Pyro
       this.pyro = new PyroEnemy();
       this.pyro.forceDespawn();
     }
@@ -513,6 +516,30 @@ export class GameScene extends Phaser.Scene {
       if (customEnemies.demoman) medicTargets.push('DEMOMAN');
       
       if (medicTargets.length > 0) {
+        // Set up callback to check if an enemy is valid for Über selection
+        // Returns false if enemy is attacking, charging, or at the door
+        this.medic.setIsEnemyValidCallback((target) => {
+          switch (target) {
+            case 'SCOUT':
+              // Invalid if Scout is at door (WAITING/ATTACKING) or despawned
+              return this.scout.state === 'PATROLLING';
+            case 'SOLDIER':
+              // Invalid if Soldier is at door (WAITING/ATTACKING/SIEGING) or despawned
+              return this.soldier.state === 'PATROLLING';
+            case 'DEMOMAN':
+              // Invalid if Demoman is charging or at door
+              return this.demoman.state === 'DORMANT'; // Only valid when dormant (head watching)
+            default:
+              return true;
+          }
+        });
+        
+        // Set up callback to play Über charge sound when new target is selected
+        this.medic.setTargetChangedCallback((target) => {
+          if (target) {
+            this.playUberChargeSound();
+          }
+        });
         this.medic.activate(medicTargets);
       } else {
         console.log('💉 Medic enabled but no valid targets (Scout/Soldier/Demoman)!');
@@ -1785,8 +1812,8 @@ export class GameScene extends Phaser.Scene {
         nodeBg.setStrokeStyle(2, 0x2266aa);
       });
       
-      // Camera number
-      const camNum = this.add.text(nodeX, nodeY - 2, `${index + 1}`, {
+      // Camera number - use cam.id to match the feed title
+      const camNum = this.add.text(nodeX, nodeY - 2, `${cam.id}`, {
         fontFamily: 'Courier New, monospace',
         fontSize: '16px',
         color: '#66aaee',
@@ -2005,8 +2032,8 @@ export class GameScene extends Phaser.Scene {
     this.cameraBootOverlay = this.add.container(420, 350);
     this.cameraBootOverlay.setDepth(110); // Above other camera elements
     
-    // Dark boot screen
-    const bootScreenBg = this.add.rectangle(0, 0, 510, 410, 0x000803, 0.95);
+    // Dark boot screen (fully opaque so player can't see camera feed behind it)
+    const bootScreenBg = this.add.rectangle(0, 0, 510, 410, 0x000803, 1.0);
     bootScreenBg.setStrokeStyle(2, 0x003311);
     this.cameraBootOverlay.add(bootScreenBg);
     
@@ -3157,13 +3184,9 @@ export class GameScene extends Phaser.Scene {
   
   /**
    * Select a camera and update the feed view
+   * Note: Camera switching is allowed during boot so player can select teleport destination
    */
   private selectCamera(index: number): void {
-    // Block camera switching during boot sequence
-    if (this.isCameraBooting) {
-      return;
-    }
-    
     this.selectedCamera = index;
     const cam = CAMERAS[index];
     this.cameraFeedTitle.setText(`CAM 0${cam.id} - ${cam.name}`);
@@ -4940,6 +4963,105 @@ export class GameScene extends Phaser.Scene {
       
       thumpOsc.start(now);
       thumpOsc.stop(now + 0.15);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play Medic Übercharge sound - rising electrical charge sound
+   * Heard from anywhere to alert player that a new enemy has been Übered
+   */
+  private playUberChargeSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      const now = audioContext.currentTime;
+      const duration = 0.8;
+      
+      // === Rising electrical charge tone ===
+      // Base tone that rises in pitch
+      const chargeOsc = audioContext.createOscillator();
+      chargeOsc.type = 'sawtooth';
+      chargeOsc.frequency.setValueAtTime(150, now);
+      chargeOsc.frequency.exponentialRampToValueAtTime(600, now + duration * 0.7);
+      chargeOsc.frequency.setValueAtTime(600, now + duration * 0.7);
+      
+      // Harmonic overtone
+      const harmOsc = audioContext.createOscillator();
+      harmOsc.type = 'square';
+      harmOsc.frequency.setValueAtTime(300, now);
+      harmOsc.frequency.exponentialRampToValueAtTime(1200, now + duration * 0.7);
+      
+      // Modulation for electrical crackle effect
+      const modOsc = audioContext.createOscillator();
+      modOsc.type = 'square';
+      modOsc.frequency.setValueAtTime(30, now);
+      modOsc.frequency.linearRampToValueAtTime(60, now + duration);
+      
+      const modGain = audioContext.createGain();
+      modGain.gain.setValueAtTime(50, now);
+      
+      modOsc.connect(modGain);
+      modGain.connect(chargeOsc.frequency);
+      
+      // Main envelope - builds up then quick release
+      const mainGain = audioContext.createGain();
+      mainGain.gain.setValueAtTime(0, now);
+      mainGain.gain.linearRampToValueAtTime(0.25, now + 0.1);
+      mainGain.gain.setValueAtTime(0.25, now + duration * 0.7);
+      mainGain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+      
+      // Harmonic envelope
+      const harmGain = audioContext.createGain();
+      harmGain.gain.setValueAtTime(0, now);
+      harmGain.gain.linearRampToValueAtTime(0.1, now + 0.1);
+      harmGain.gain.setValueAtTime(0.1, now + duration * 0.7);
+      harmGain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+      
+      // Low-pass filter for warmth
+      const filter = audioContext.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(800, now);
+      filter.frequency.linearRampToValueAtTime(3000, now + duration * 0.7);
+      
+      chargeOsc.connect(mainGain);
+      harmOsc.connect(harmGain);
+      mainGain.connect(filter);
+      harmGain.connect(filter);
+      filter.connect(audioContext.destination);
+      
+      chargeOsc.start(now);
+      harmOsc.start(now);
+      modOsc.start(now);
+      
+      chargeOsc.stop(now + duration);
+      harmOsc.stop(now + duration);
+      modOsc.stop(now + duration);
+      
+      // === Final "pop" at the end ===
+      const popOsc = audioContext.createOscillator();
+      popOsc.type = 'sine';
+      popOsc.frequency.setValueAtTime(800, now + duration * 0.65);
+      popOsc.frequency.exponentialRampToValueAtTime(200, now + duration * 0.65 + 0.15);
+      
+      const popGain = audioContext.createGain();
+      popGain.gain.setValueAtTime(0.3, now + duration * 0.65);
+      popGain.gain.exponentialRampToValueAtTime(0.01, now + duration * 0.65 + 0.15);
+      
+      popOsc.connect(popGain);
+      popGain.connect(audioContext.destination);
+      
+      popOsc.start(now + duration * 0.65);
+      popOsc.stop(now + duration * 0.65 + 0.2);
+      
     } catch (e) {
       // Audio not available
     }
@@ -8250,25 +8372,15 @@ export class GameScene extends Phaser.Scene {
       if (bootBarFill) bootBarFill.setSize(294 * progress, 14);
       if (bootPercent) bootPercent.setText(`${Math.floor(progress * 100)}%`);
       
-      // Grey out camera buttons during boot
-      this.cameraMapNodes.forEach((nodeContainer) => {
-        nodeContainer.setAlpha(0.3);
-        // Disable interactivity on the node background (index 1 in container)
-        const nodeBg = nodeContainer.list[1] as Phaser.GameObjects.Rectangle;
-        if (nodeBg) nodeBg.disableInteractive();
-      });
+      // Camera buttons stay enabled during boot so player can select teleport destination
       
       // Boot complete after 1 second
       if (this.cameraBootTimer >= this.CAMERA_BOOT_DELAY) {
         this.isCameraBooting = false;
         this.cameraBootOverlay.setVisible(false);
         
-        // Restore camera buttons
-        this.cameraMapNodes.forEach((nodeContainer) => {
-          nodeContainer.setAlpha(1);
-          const nodeBg = nodeContainer.list[1] as Phaser.GameObjects.Rectangle;
-          if (nodeBg) nodeBg.setInteractive({ useHandCursor: true });
-        });
+        // Update lure button visibility now that boot is complete
+        this.updateCameraLureButton();
       }
     }
     
