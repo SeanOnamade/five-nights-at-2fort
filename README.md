@@ -6,6 +6,10 @@ Survive five nights as an Engineer defending the Intel Room from zombified TF2 m
 
 ## Play Now
 
+https://five-nights-at-2fort.vercel.app/
+
+OR
+
 ```bash
 npm install
 npm run dev
