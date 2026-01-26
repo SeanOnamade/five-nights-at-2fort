@@ -624,13 +624,13 @@ export class BootScene extends Phaser.Scene {
     y += 28;
     
     const enemies = [
-      { name: 'SCOUT', color: '#9966cc', info: 'Fast · Left door' },
-      { name: 'SOLDIER', color: '#aa8866', info: 'Rockets · Right door' },
+      { name: 'SCOUT', color: '#9966cc', info: 'Fast · Left hallway' },
+      { name: 'SOLDIER', color: '#aa8866', info: 'Rockets · Right hallway' },
       { name: 'DEMO', color: '#44ff44', info: 'N2+ Eye = incoming!' },
       { name: 'HEAVY', color: '#ff4444', info: 'N3+ Lure only!' },
       { name: 'SNIPER', color: '#44aaff', info: 'N4+ Lure or 2 shots' },
-      { name: 'SPY', color: '#cc8855', info: 'N5+ See below' },
-      { name: 'PYRO', color: '#ff6622', info: 'Custom · See below' },
+      { name: 'SPY', color: '#cc8855', info: 'N4+ See below' },
+      { name: 'PYRO', color: '#ff6622', info: 'N5+ See below' },
     ];
     
     enemies.forEach(enemy => {
@@ -726,7 +726,7 @@ export class BootScene extends Phaser.Scene {
     const spyLine1 = this.add.text(rightX - 130, spyBaseY + 30, '• DISGUISE: Fake enemy on cams', {
       fontFamily: 'Courier New, monospace', fontSize: '12px', color: '#aa9966',
     });
-    const spyLine2 = this.add.text(rightX - 130, spyBaseY + 48, '• SAP: May sap if you TP away', {
+    const spyLine2 = this.add.text(rightX - 130, spyBaseY + 48, '• SAP: Saps if you TP away', {
       fontFamily: 'Courier New, monospace', fontSize: '12px', color: '#aa9966',
     });
     const spyLine3 = this.add.text(rightX - 130, spyBaseY + 66, 'Sapper? Press SPACE x2!', {
@@ -754,7 +754,7 @@ export class BootScene extends Phaser.Scene {
     this.tutorialContainer.add(pyroBoxExpanded);
     
     // PYRO header (clickable)
-    const pyroHeader = this.add.text(rightX - 140, pyroBaseY + 6, '▶ PYRO: Custom Night Only!', {
+    const pyroHeader = this.add.text(rightX - 140, pyroBaseY + 6, '▶ PYRO: Night 5+', {
       fontFamily: 'Courier New, monospace',
       fontSize: '13px',
       color: '#ff6622',
@@ -808,7 +808,7 @@ export class BootScene extends Phaser.Scene {
       pyroBoxCollapsed.setVisible(!pyroExpanded);
       pyroBoxExpanded.setVisible(pyroExpanded);
       pyroDetails.forEach(t => t.setVisible(pyroExpanded));
-      pyroHeader.setText(pyroExpanded ? '▼ PYRO: Custom Night Only!' : '▶ PYRO: Custom Night Only!');
+      pyroHeader.setText(pyroExpanded ? '▼ PYRO: Night 5+' : '▶ PYRO: Night 5+');
     });
     
     // Close instruction
@@ -961,7 +961,7 @@ export class BootScene extends Phaser.Scene {
       { name: 'DEMOMAN', color: 0x44cc44, desc: 'Ghostly Charger', night: 2 },
       { name: 'HEAVY', color: 0xaa7744, desc: 'Unstoppable Tank', night: 3 },
       { name: 'SNIPER', color: 0x5588cc, desc: 'Long-Range Threat', night: 4 },
-      { name: 'PYRO', color: 0xff6622, desc: 'Ghostly Flame', night: 0 },  // Custom night = 0
+      { name: 'PYRO', color: 0xff6622, desc: 'Ghostly Flame', night: 5 },
     ];
     
     // Spy disguises as a random character each time gallery opens!
@@ -1876,16 +1876,16 @@ export class BootScene extends Phaser.Scene {
     this.extrasContainer.add(silhouette);
     this.spyCardElements.push(silhouette);
     
-    const nameText = this.add.text(x, y + 65, '???', {
+    const nameText = this.add.text(x, y + 65, 'SPY', {
       fontFamily: 'Courier New, monospace',
       fontSize: '20px',
-      color: '#444444',
+      color: '#bb4444',
       fontStyle: 'bold',
     }).setOrigin(0.5);
     this.extrasContainer.add(nameText);
     this.spyCardElements.push(nameText);
     
-    const nightBadge = this.add.text(x + 75, y - 75, 'N5', {
+    const nightBadge = this.add.text(x + 75, y - 75, 'N4', {
       fontFamily: 'Courier New, monospace',
       fontSize: '11px',
       color: '#444444',

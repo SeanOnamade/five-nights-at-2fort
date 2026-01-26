@@ -195,8 +195,19 @@ export class SniperEnemy extends EnemyBase {
       return;
     }
     
-    // Pick a random room different from current
-    const availableRooms = SniperEnemy.TELEPORT_ROOMS.filter(r => r !== this.currentNode);
+    // Pick a random room different from current and not the player's destination
+    let availableRooms = SniperEnemy.TELEPORT_ROOMS.filter(r => r !== this.currentNode);
+    
+    // Also exclude the player's pending destination to prevent unfair deaths
+    if (this._blockedDestination) {
+      availableRooms = availableRooms.filter(r => r !== this._blockedDestination);
+    }
+    
+    // Safety check - if somehow no rooms available, just stay put
+    if (availableRooms.length === 0) {
+      return;
+    }
+    
     const newRoom = availableRooms[Math.floor(Math.random() * availableRooms.length)];
     
     this.currentNode = newRoom;
@@ -481,6 +492,7 @@ export class SniperEnemy extends EnemyBase {
    * while the teleport animation is playing.
    */
   private _teleportFrozen: boolean = false;
+  private _blockedDestination: NodeId | null = null;
   
   public freezeTeleport(): void {
     this._teleportFrozen = true;
@@ -489,11 +501,26 @@ export class SniperEnemy extends EnemyBase {
   
   public unfreezeTeleport(): void {
     this._teleportFrozen = false;
+    this._blockedDestination = null;
     console.log('🎯 Sniper teleport unfrozen');
   }
   
   public isTeleportFrozen(): boolean {
     return this._teleportFrozen;
+  }
+  
+  /**
+   * Set a destination that Sniper cannot teleport to (player's pending destination)
+   */
+  public setBlockedDestination(node: NodeId | null): void {
+    this._blockedDestination = node;
+  }
+  
+  /**
+   * Get the blocked destination
+   */
+  public getBlockedDestination(): NodeId | null {
+    return this._blockedDestination;
   }
 }
 

@@ -245,6 +245,7 @@ export class GameScene extends Phaser.Scene {
   private cameraFeedDemoHead!: Phaser.GameObjects.Container; // Secondary display for Demo's head
   private cameraFeedEmpty!: Phaser.GameObjects.Text;
   private cameraStaticGraphics!: Phaser.GameObjects.Graphics;
+  private cameraStaticBurstOverlay!: Phaser.GameObjects.Graphics;  // Static burst when switching cameras
   private cameraLureIndicator!: Phaser.GameObjects.Container;  // Shows when lure is at this camera
   
   // Camera destroyed overlay (Night 3+)
@@ -2179,6 +2180,11 @@ export class GameScene extends Phaser.Scene {
       this.handleCameraLureAction();
     });
     
+    // Static burst overlay (added last so it renders on top of everything)
+    this.cameraStaticBurstOverlay = this.add.graphics();
+    this.cameraStaticBurstOverlay.setVisible(false);
+    this.cameraUI.add(this.cameraStaticBurstOverlay);
+    
     // Room view UI (shown when teleported)
     this.createRoomViewUI();
   }
@@ -2510,9 +2516,11 @@ export class GameScene extends Phaser.Scene {
     // while the animation is playing
     if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
       this.pyro.freezeTeleport();
+      this.pyro.setBlockedDestination(node);
     }
     if (this.isSniperEnabled() && this.sniper) {
       this.sniper.freezeTeleport();
+      this.sniper.setBlockedDestination(node);
     }
     
     // Show teleport animation overlay FIRST, then check for enemies after arrival
@@ -3194,16 +3202,63 @@ export class GameScene extends Phaser.Scene {
     // Update map node colors (highlights selected + lure)
     this.updateMapNodeColors(cam.node);
     
-    // Camera switch static burst
-    this.cameraStaticGraphics.clear();
-    this.cameraStaticGraphics.fillStyle(0xffffff, 0.4);
-    this.cameraStaticGraphics.fillRect(170, 150, 500, 400);
+    // Camera switch static burst - enhanced visual effect using dedicated overlay
+    this.cameraStaticBurstOverlay.clear();
+    this.cameraStaticBurstOverlay.setVisible(true);
     
-    // Play camera switch sound
+    // Draw multiple layers of static for authentic CRT look
+    // Layer 1: Gray flash across entire feed
+    this.cameraStaticBurstOverlay.fillStyle(0x888888, 0.7);
+    this.cameraStaticBurstOverlay.fillRect(170, 150, 500, 400);
+    
+    // Layer 2: Horizontal interference lines (blue scan lines)
+    this.cameraStaticBurstOverlay.lineStyle(3, 0x4488ff, 0.6);
+    for (let i = 0; i < 25; i++) {
+      const y = 150 + Math.random() * 400;
+      this.cameraStaticBurstOverlay.lineBetween(170, y, 670, y);
+    }
+    
+    // Layer 3: Gray/black static blocks
+    for (let i = 0; i < 80; i++) {
+      const x = 170 + Math.random() * 500;
+      const y = 150 + Math.random() * 400;
+      const size = 3 + Math.random() * 15;
+      this.cameraStaticBurstOverlay.fillStyle(Math.random() > 0.5 ? 0x000000 : 0x999999, 0.5 + Math.random() * 0.5);
+      this.cameraStaticBurstOverlay.fillRect(x, y, size, size * 0.3);
+    }
+    
+    // Layer 4: Blue interference bars
+    this.cameraStaticBurstOverlay.fillStyle(0x4488ff, 0.2);
+    this.cameraStaticBurstOverlay.fillRect(170, 200 + Math.random() * 200, 500, 20 + Math.random() * 40);
+    
+    // Play camera switch sound + static burst
     this.playCameraSwitchSound();
+    this.playCameraStaticBurst();
     
-    // Clear static after brief moment
-    this.time.delayedCall(80, () => {
+    // Animate static clearing - frame 2 (less intense)
+    this.time.delayedCall(50, () => {
+      this.cameraStaticBurstOverlay.clear();
+      this.cameraStaticBurstOverlay.fillStyle(0x777777, 0.3);
+      this.cameraStaticBurstOverlay.fillRect(170, 150, 500, 400);
+      // Fewer, thinner static lines (blue)
+      this.cameraStaticBurstOverlay.lineStyle(1, 0x6699ff, 0.4);
+      for (let i = 0; i < 10; i++) {
+        const y = 150 + Math.random() * 400;
+        this.cameraStaticBurstOverlay.lineBetween(170, y, 670, y);
+      }
+    });
+    
+    // Frame 3 - almost clear
+    this.time.delayedCall(100, () => {
+      this.cameraStaticBurstOverlay.clear();
+      this.cameraStaticBurstOverlay.fillStyle(0x666666, 0.1);
+      this.cameraStaticBurstOverlay.fillRect(170, 150, 500, 400);
+    });
+    
+    // Clear burst overlay completely
+    this.time.delayedCall(150, () => {
+      this.cameraStaticBurstOverlay.clear();
+      this.cameraStaticBurstOverlay.setVisible(false);
       this.updateCameraStatic();
     });
     
@@ -3263,6 +3318,47 @@ export class GameScene extends Phaser.Scene {
     // Core glow
     graphics.fillStyle(0x88ccff, 0.2);
     graphics.fillCircle(0, 0, 40);
+    
+    // Draw Medic ghost hovering over enemy's shoulder (upper right)
+    const ghostX = 50;  // Offset to the right
+    const ghostY = -70; // Offset up (above shoulder)
+    
+    // Ghost outer glow
+    graphics.fillStyle(0x4488ff, 0.15);
+    graphics.fillCircle(ghostX, ghostY, 35);
+    
+    // Ghost body (translucent blue)
+    graphics.fillStyle(0x4488ff, 0.4);
+    // Head
+    graphics.fillCircle(ghostX, ghostY - 10, 12);
+    // Body (triangle shape)
+    graphics.beginPath();
+    graphics.moveTo(ghostX - 15, ghostY + 5);
+    graphics.lineTo(ghostX + 15, ghostY + 5);
+    graphics.lineTo(ghostX + 10, ghostY + 35);
+    graphics.lineTo(ghostX - 10, ghostY + 35);
+    graphics.closePath();
+    graphics.fill();
+    
+    // Medic cross on chest
+    graphics.fillStyle(0xffffff, 0.6);
+    graphics.fillRect(ghostX - 2, ghostY + 10, 4, 12);
+    graphics.fillRect(ghostX - 5, ghostY + 14, 10, 4);
+    
+    // Ghost eyes (glowing)
+    graphics.fillStyle(0x88ccff, 0.8);
+    graphics.fillCircle(ghostX - 4, ghostY - 12, 3);
+    graphics.fillCircle(ghostX + 4, ghostY - 12, 3);
+    
+    // Ghostly trail/wisp effect below
+    graphics.fillStyle(0x4488ff, 0.2);
+    graphics.beginPath();
+    graphics.moveTo(ghostX - 8, ghostY + 35);
+    graphics.lineTo(ghostX + 8, ghostY + 35);
+    graphics.lineTo(ghostX + 3, ghostY + 50);
+    graphics.lineTo(ghostX - 3, ghostY + 50);
+    graphics.closePath();
+    graphics.fill();
   }
   
   /**
@@ -3287,6 +3383,47 @@ export class GameScene extends Phaser.Scene {
       // Inner bright glow
       graphics.fillStyle(0x66aaff, 0.5);
       graphics.fillCircle(0, 0, 60);
+      
+      // Draw Medic ghost hovering over enemy's shoulder (upper right)
+      const ghostX = 45;  // Offset to the right
+      const ghostY = -55; // Offset up (above shoulder)
+      
+      // Ghost outer glow
+      graphics.fillStyle(0x4488ff, 0.2);
+      graphics.fillCircle(ghostX, ghostY, 30);
+      
+      // Ghost body (translucent blue)
+      graphics.fillStyle(0x4488ff, 0.5);
+      // Head
+      graphics.fillCircle(ghostX, ghostY - 8, 10);
+      // Body (triangle shape)
+      graphics.beginPath();
+      graphics.moveTo(ghostX - 12, ghostY + 3);
+      graphics.lineTo(ghostX + 12, ghostY + 3);
+      graphics.lineTo(ghostX + 8, ghostY + 28);
+      graphics.lineTo(ghostX - 8, ghostY + 28);
+      graphics.closePath();
+      graphics.fill();
+      
+      // Medic cross on chest
+      graphics.fillStyle(0xffffff, 0.7);
+      graphics.fillRect(ghostX - 2, ghostY + 8, 4, 10);
+      graphics.fillRect(ghostX - 4, ghostY + 11, 8, 4);
+      
+      // Ghost eyes (glowing)
+      graphics.fillStyle(0x88ccff, 0.9);
+      graphics.fillCircle(ghostX - 3, ghostY - 10, 2);
+      graphics.fillCircle(ghostX + 3, ghostY - 10, 2);
+      
+      // Ghostly trail/wisp effect below
+      graphics.fillStyle(0x4488ff, 0.25);
+      graphics.beginPath();
+      graphics.moveTo(ghostX - 6, ghostY + 28);
+      graphics.lineTo(ghostX + 6, ghostY + 28);
+      graphics.lineTo(ghostX + 2, ghostY + 40);
+      graphics.lineTo(ghostX - 2, ghostY + 40);
+      graphics.closePath();
+      graphics.fill();
     }
     
     if (type === 'SCOUT') {
@@ -3660,6 +3797,35 @@ export class GameScene extends Phaser.Scene {
       // Inner bright glow
       graphics.fillStyle(0x66aaff, 0.6);
       graphics.fillCircle(0, 0, 55);
+      
+      // Draw Medic ghost hovering near head (upper right)
+      const ghostX = 55;
+      const ghostY = -40;
+      
+      // Ghost outer glow
+      graphics.fillStyle(0x4488ff, 0.2);
+      graphics.fillCircle(ghostX, ghostY, 28);
+      
+      // Ghost body (translucent blue)
+      graphics.fillStyle(0x4488ff, 0.5);
+      graphics.fillCircle(ghostX, ghostY - 6, 9);
+      graphics.beginPath();
+      graphics.moveTo(ghostX - 10, ghostY + 3);
+      graphics.lineTo(ghostX + 10, ghostY + 3);
+      graphics.lineTo(ghostX + 7, ghostY + 25);
+      graphics.lineTo(ghostX - 7, ghostY + 25);
+      graphics.closePath();
+      graphics.fill();
+      
+      // Medic cross
+      graphics.fillStyle(0xffffff, 0.7);
+      graphics.fillRect(ghostX - 2, ghostY + 7, 4, 9);
+      graphics.fillRect(ghostX - 4, ghostY + 10, 8, 3);
+      
+      // Ghost eyes
+      graphics.fillStyle(0x88ccff, 0.9);
+      graphics.fillCircle(ghostX - 3, ghostY - 8, 2);
+      graphics.fillCircle(ghostX + 3, ghostY - 8, 2);
     }
     
     // Shadow under head
@@ -5169,6 +5335,498 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
+   * Play sentry build sound - mechanical construction/wrench sounds
+   */
+  private playSentryBuildSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Series of wrench clinks and mechanical whirrs
+      const delays = [0, 0.12, 0.24, 0.36];
+      delays.forEach((delay, i) => {
+        // Metallic clink
+        const clink = audioContext.createOscillator();
+        const clinkGain = audioContext.createGain();
+        clink.connect(clinkGain);
+        clinkGain.connect(audioContext.destination);
+        
+        clink.type = 'triangle';
+        const baseFreq = 800 + i * 100; // Rising pitch
+        clink.frequency.setValueAtTime(baseFreq, audioContext.currentTime + delay);
+        clink.frequency.exponentialRampToValueAtTime(baseFreq * 0.6, audioContext.currentTime + delay + 0.08);
+        
+        clinkGain.gain.setValueAtTime(0.2, audioContext.currentTime + delay);
+        clinkGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + delay + 0.1);
+        
+        clink.start(audioContext.currentTime + delay);
+        clink.stop(audioContext.currentTime + delay + 0.1);
+      });
+      
+      // Final "powered up" confirmation
+      const powerUp = audioContext.createOscillator();
+      const powerGain = audioContext.createGain();
+      powerUp.connect(powerGain);
+      powerGain.connect(audioContext.destination);
+      
+      powerUp.type = 'sine';
+      powerUp.frequency.setValueAtTime(300, audioContext.currentTime + 0.5);
+      powerUp.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.7);
+      
+      powerGain.gain.setValueAtTime(0, audioContext.currentTime + 0.5);
+      powerGain.gain.linearRampToValueAtTime(0.25, audioContext.currentTime + 0.55);
+      powerGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.8);
+      
+      powerUp.start(audioContext.currentTime + 0.5);
+      powerUp.stop(audioContext.currentTime + 0.8);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play sentry repair sound - quick wrench hit
+   */
+  private playSentryRepairSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Single metallic wrench hit
+      const clink = audioContext.createOscillator();
+      const clinkGain = audioContext.createGain();
+      clink.connect(clinkGain);
+      clinkGain.connect(audioContext.destination);
+      
+      clink.type = 'triangle';
+      clink.frequency.setValueAtTime(1000, audioContext.currentTime);
+      clink.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.1);
+      
+      clinkGain.gain.setValueAtTime(0.2, audioContext.currentTime);
+      clinkGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15);
+      
+      clink.start(audioContext.currentTime);
+      clink.stop(audioContext.currentTime + 0.15);
+      
+      // Subtle heal chime
+      const chime = audioContext.createOscillator();
+      const chimeGain = audioContext.createGain();
+      chime.connect(chimeGain);
+      chimeGain.connect(audioContext.destination);
+      
+      chime.type = 'sine';
+      chime.frequency.setValueAtTime(880, audioContext.currentTime + 0.05);
+      
+      chimeGain.gain.setValueAtTime(0.1, audioContext.currentTime + 0.05);
+      chimeGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.2);
+      
+      chime.start(audioContext.currentTime + 0.05);
+      chime.stop(audioContext.currentTime + 0.2);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play sentry upgrade sound - powerful ratcheting/powering up
+   */
+  private playSentryUpgradeSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Rapid ratcheting sounds
+      const ratchetCount = 6;
+      for (let i = 0; i < ratchetCount; i++) {
+        const delay = i * 0.08;
+        const ratchet = audioContext.createOscillator();
+        const ratchetGain = audioContext.createGain();
+        ratchet.connect(ratchetGain);
+        ratchetGain.connect(audioContext.destination);
+        
+        ratchet.type = 'sawtooth';
+        const freq = 400 + i * 80; // Rising pitch
+        ratchet.frequency.setValueAtTime(freq, audioContext.currentTime + delay);
+        ratchet.frequency.exponentialRampToValueAtTime(freq * 0.5, audioContext.currentTime + delay + 0.05);
+        
+        ratchetGain.gain.setValueAtTime(0.15, audioContext.currentTime + delay);
+        ratchetGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + delay + 0.06);
+        
+        ratchet.start(audioContext.currentTime + delay);
+        ratchet.stop(audioContext.currentTime + delay + 0.06);
+      }
+      
+      // Big power-up surge at the end
+      const surge = audioContext.createOscillator();
+      const surge2 = audioContext.createOscillator();
+      const surgeGain = audioContext.createGain();
+      surge.connect(surgeGain);
+      surge2.connect(surgeGain);
+      surgeGain.connect(audioContext.destination);
+      
+      surge.type = 'sine';
+      surge.frequency.setValueAtTime(200, audioContext.currentTime + 0.5);
+      surge.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.8);
+      
+      surge2.type = 'triangle';
+      surge2.frequency.setValueAtTime(400, audioContext.currentTime + 0.5);
+      surge2.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.8);
+      
+      surgeGain.gain.setValueAtTime(0, audioContext.currentTime + 0.5);
+      surgeGain.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.6);
+      surgeGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.9);
+      
+      surge.start(audioContext.currentTime + 0.5);
+      surge.stop(audioContext.currentTime + 0.9);
+      surge2.start(audioContext.currentTime + 0.5);
+      surge2.stop(audioContext.currentTime + 0.9);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play wrangler aim sound - mechanical servo/click when aiming
+   */
+  private playWranglerAimSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Mechanical servo whir
+      const servo = audioContext.createOscillator();
+      const servoGain = audioContext.createGain();
+      servo.connect(servoGain);
+      servoGain.connect(audioContext.destination);
+      
+      servo.type = 'sawtooth';
+      servo.frequency.setValueAtTime(150, audioContext.currentTime);
+      servo.frequency.linearRampToValueAtTime(200, audioContext.currentTime + 0.05);
+      servo.frequency.linearRampToValueAtTime(120, audioContext.currentTime + 0.1);
+      
+      servoGain.gain.setValueAtTime(0.08, audioContext.currentTime);
+      servoGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.12);
+      
+      servo.start(audioContext.currentTime);
+      servo.stop(audioContext.currentTime + 0.12);
+      
+      // Click at end
+      const click = audioContext.createOscillator();
+      const clickGain = audioContext.createGain();
+      click.connect(clickGain);
+      clickGain.connect(audioContext.destination);
+      
+      click.type = 'square';
+      click.frequency.setValueAtTime(800, audioContext.currentTime + 0.08);
+      click.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.1);
+      
+      clickGain.gain.setValueAtTime(0.1, audioContext.currentTime + 0.08);
+      clickGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.12);
+      
+      click.start(audioContext.currentTime + 0.08);
+      click.stop(audioContext.currentTime + 0.12);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play enemy retreat sound - fading footsteps running away
+   */
+  private playEnemyRetreatSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Series of fading footsteps (running away)
+      const stepCount = 5;
+      for (let i = 0; i < stepCount; i++) {
+        const delay = i * 0.15;
+        const volume = 0.2 * (1 - i / stepCount); // Fade out
+        
+        // Thud
+        const thud = audioContext.createOscillator();
+        const thudGain = audioContext.createGain();
+        thud.connect(thudGain);
+        thudGain.connect(audioContext.destination);
+        
+        thud.type = 'sine';
+        thud.frequency.setValueAtTime(60 + i * 5, audioContext.currentTime + delay);
+        thud.frequency.exponentialRampToValueAtTime(30, audioContext.currentTime + delay + 0.08);
+        
+        thudGain.gain.setValueAtTime(volume, audioContext.currentTime + delay);
+        thudGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + delay + 0.1);
+        
+        thud.start(audioContext.currentTime + delay);
+        thud.stop(audioContext.currentTime + delay + 0.1);
+        
+        // Scuff noise
+        const noiseBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.05, audioContext.sampleRate);
+        const noiseData = noiseBuffer.getChannelData(0);
+        for (let j = 0; j < noiseData.length; j++) {
+          noiseData[j] = (Math.random() * 2 - 1) * (1 - j / noiseData.length);
+        }
+        const noise = audioContext.createBufferSource();
+        const noiseGain = audioContext.createGain();
+        noise.buffer = noiseBuffer;
+        noise.connect(noiseGain);
+        noiseGain.connect(audioContext.destination);
+        noiseGain.gain.setValueAtTime(volume * 0.3, audioContext.currentTime + delay + 0.02);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + delay + 0.07);
+        noise.start(audioContext.currentTime + delay + 0.02);
+      }
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play wrangler toggle sound - power up/down sound
+   */
+  private playWranglerToggleSound(wranglerOn: boolean): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      if (wranglerOn) {
+        // Power up sound - rising tone with electronic buzz
+        const osc1 = audioContext.createOscillator();
+        const osc2 = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        osc1.connect(gainNode);
+        osc2.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        // Main rising tone
+        osc1.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(150, audioContext.currentTime);
+        osc1.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.15);
+        
+        // Harmonic buzz
+        osc2.type = 'square';
+        osc2.frequency.setValueAtTime(300, audioContext.currentTime);
+        osc2.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.15);
+        
+        gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.2, audioContext.currentTime + 0.08);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.2);
+        
+        osc1.start(audioContext.currentTime);
+        osc1.stop(audioContext.currentTime + 0.2);
+        osc2.start(audioContext.currentTime);
+        osc2.stop(audioContext.currentTime + 0.2);
+        
+        // Confirmation beep
+        const beep = audioContext.createOscillator();
+        const beepGain = audioContext.createGain();
+        beep.connect(beepGain);
+        beepGain.connect(audioContext.destination);
+        
+        beep.type = 'sine';
+        beep.frequency.setValueAtTime(880, audioContext.currentTime + 0.15);
+        
+        beepGain.gain.setValueAtTime(0.15, audioContext.currentTime + 0.15);
+        beepGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.25);
+        
+        beep.start(audioContext.currentTime + 0.15);
+        beep.stop(audioContext.currentTime + 0.25);
+      } else {
+        // Power down sound - descending tone
+        const osc = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        osc.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(400, audioContext.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.2);
+        
+        gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.25);
+        
+        osc.start(audioContext.currentTime);
+        osc.stop(audioContext.currentTime + 0.25);
+      }
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play pause sound - UI pause effect
+   */
+  private playPauseSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Descending "pause" tone - like time stopping
+      const osc1 = audioContext.createOscillator();
+      const osc2 = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      const filter = audioContext.createBiquadFilter();
+      
+      osc1.connect(filter);
+      osc2.connect(filter);
+      filter.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(2000, audioContext.currentTime);
+      filter.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.3);
+      
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(600, audioContext.currentTime);
+      osc1.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.25);
+      
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(800, audioContext.currentTime);
+      osc2.frequency.exponentialRampToValueAtTime(250, audioContext.currentTime + 0.25);
+      
+      gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
+      
+      osc1.start(audioContext.currentTime);
+      osc1.stop(audioContext.currentTime + 0.3);
+      osc2.start(audioContext.currentTime);
+      osc2.stop(audioContext.currentTime + 0.3);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play unpause/resume sound - UI resume effect
+   */
+  private playUnpauseSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Ascending "resume" tone - like time starting again
+      const osc1 = audioContext.createOscillator();
+      const osc2 = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      osc1.connect(gainNode);
+      osc2.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(200, audioContext.currentTime);
+      osc1.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.15);
+      
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(250, audioContext.currentTime);
+      osc2.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.15);
+      
+      gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.2, audioContext.currentTime + 0.1);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.2);
+      
+      osc1.start(audioContext.currentTime);
+      osc1.stop(audioContext.currentTime + 0.2);
+      osc2.start(audioContext.currentTime);
+      osc2.stop(audioContext.currentTime + 0.2);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play camera static burst sound - brief static when switching
+   */
+  private playCameraStaticBurst(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // White noise burst
+      const bufferSize = audioContext.sampleRate * 0.1;
+      const noiseBuffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+      const data = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+      }
+      
+      const noise = audioContext.createBufferSource();
+      const gainNode = audioContext.createGain();
+      const filter = audioContext.createBiquadFilter();
+      
+      noise.buffer = noiseBuffer;
+      noise.connect(filter);
+      filter.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      filter.type = 'highpass';
+      filter.frequency.setValueAtTime(1000, audioContext.currentTime);
+      
+      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1);
+      
+      noise.start(audioContext.currentTime);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
    * Play camera destroy sound - static burst and smash
    */
   private playCameraDestroySound(): void {
@@ -5337,6 +5995,7 @@ export class GameScene extends Phaser.Scene {
       if (!this.sentry.exists) return;
       
       this.sentry.isWrangled = !this.sentry.isWrangled;
+      this.playWranglerToggleSound(this.sentry.isWrangled);
       
       // Resume dispenser hum if turning wrangler off (no longer aiming)
       if (!this.sentry.isWrangled && !this.isTeleported) {
@@ -5557,6 +6216,7 @@ export class GameScene extends Phaser.Scene {
       if (!this.sentry.exists) return;
       
       this.sentry.isWrangled = !this.sentry.isWrangled;
+      this.playWranglerToggleSound(this.sentry.isWrangled);
       
       // Resume dispenser hum if turning wrangler off (no longer aiming)
       if (!this.sentry.isWrangled && !this.isTeleported) {
@@ -5939,6 +6599,7 @@ export class GameScene extends Phaser.Scene {
     
     if (this.isPaused) {
       // Pause the game
+      this.playPauseSound();
       this.stopDetectionSound();
       this.stopDispenserHum();
       this.physics?.pause();
@@ -5948,6 +6609,7 @@ export class GameScene extends Phaser.Scene {
       this.pauseHintText.setText(randomHint);
     } else {
       // Resume
+      this.playUnpauseSound();
       this.physics?.resume();
       // Resume dispenser hum if in Intel room (plays even with cameras up)
       if (!this.isTeleported) {
@@ -5983,6 +6645,9 @@ export class GameScene extends Phaser.Scene {
     if (prevAim !== this.sentry.aimedDoor) {
       this.updateWranglerVisuals();
       this.updateHUD();
+      
+      // Play aim sound when changing aim direction
+      this.playWranglerAimSound();
       
       // Pause dispenser hum when aiming down a hallway (for focus)
       // Only pause if sentry actually exists - otherwise resume hum
@@ -6640,6 +7305,7 @@ export class GameScene extends Phaser.Scene {
         } else {
           this.scout.driveAway();
           this.showAlert('SCOUT REPELLED!', 0x00ff00);
+          this.playEnemyRetreatSound();
           hitEnemy = true;
         }
       }
@@ -6659,6 +7325,7 @@ export class GameScene extends Phaser.Scene {
             this.showAlert('DEMOMAN REPELLED!', 0x00ff00);
           }
           this.demoman.deter();
+          this.playEnemyRetreatSound();
           hitEnemy = true;
         }
       }
@@ -6669,6 +7336,7 @@ export class GameScene extends Phaser.Scene {
         const fullyRepelled = this.sniper.wardOff(this.sentry.level);
         if (fullyRepelled) {
           this.showAlert('SNIPER DRIVEN AWAY!', 0x00ff00);
+          this.playEnemyRetreatSound();
         }
         // No alert for partial hits - the sniper aiming UI already shows shots remaining
         hitEnemy = true;
@@ -6684,6 +7352,7 @@ export class GameScene extends Phaser.Scene {
         } else {
           this.soldier.driveAway();
           this.showAlert('SOLDIER REPELLED!', 0x00ff00);
+          this.playEnemyRetreatSound();
           hitEnemy = true;
         }
       }
@@ -6703,6 +7372,7 @@ export class GameScene extends Phaser.Scene {
             this.showAlert('DEMOMAN REPELLED!', 0x00ff00);
           }
           this.demoman.deter();
+          this.playEnemyRetreatSound();
           hitEnemy = true;
         }
       }
@@ -6713,6 +7383,7 @@ export class GameScene extends Phaser.Scene {
         const fullyRepelled = this.sniper.wardOff(this.sentry.level);
         if (fullyRepelled) {
           this.showAlert('SNIPER DRIVEN AWAY!', 0x00ff00);
+          this.playEnemyRetreatSound();
         }
         // No alert for partial hits - the sniper aiming UI already shows shots remaining
         hitEnemy = true;
@@ -6735,6 +7406,12 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     
+    // Can't build when cameras are up - must lower cameras first
+    if (this.isCameraMode) {
+      this.showAlert('Lower cameras first! (TAB)', 0xff6600);
+      return;
+    }
+    
     if (this.metal < GAME_CONSTANTS.BUILD_SENTRY_COST) {
       this.showAlert('Not enough metal! (100 required)', 0xff0000);
       return;
@@ -6754,6 +7431,7 @@ export class GameScene extends Phaser.Scene {
     this.updateSentryVisuals();
     this.updateHUD();
     this.showAlert('SENTRY BUILT!', 0x00ff00);
+    this.playSentryBuildSound();
   }
   
   private upgradeSentry(): void {
@@ -6791,6 +7469,7 @@ export class GameScene extends Phaser.Scene {
     this.updateSentryVisuals();
     this.updateHUD();
     this.showAlert(`SENTRY UPGRADED TO L${this.sentry.level}!`, 0x00ff00);
+    this.playSentryUpgradeSound();
   }
   
   private repairSentry(): void {
@@ -6829,6 +7508,7 @@ export class GameScene extends Phaser.Scene {
     
     this.updateHUD();
     this.showAlert(`+${Math.floor(actualRepair)} HP (-${Math.floor(actualCost)} metal)`, 0x00ff00);
+    this.playSentryRepairSound();
   }
   
   private damageSentry(amount: number): void {
@@ -7372,15 +8052,9 @@ export class GameScene extends Phaser.Scene {
           this.drawEnemySilhouette(graphics, 'SCOUT', isUbered);
         }
         
-        // Show Über label if enemy is Übered, otherwise hide labels
-        if (isUbered) {
-          label.setText('ÜBERED');
-          label.setColor('#4488ff');
-          label.setFontSize('14px');
-        } else {
-          label.setText('');  // Labels removed - use Extras screen to learn enemies
-          label.setColor(enemy.color);
-        }
+        // Hide labels - Medic ghost indicates Über status
+        label.setText('');
+        label.setColor(enemy.color);
         
         container.setPosition(positions[i].x, positions[i].y);
         container.setVisible(true);
@@ -7400,15 +8074,9 @@ export class GameScene extends Phaser.Scene {
       const demoHeadUbered = demomanHeadAtCam && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
       this.drawDemomanHead(enemyGraphics, demoHeadUbered);
       
-      // Show ÜBERED label if Demoman is Übered
-      if (demoHeadUbered) {
-        enemyLabel.setText('ÜBERED');
-        enemyLabel.setColor('#4488ff');
-        enemyLabel.setFontSize('16px');
-      } else {
-        enemyLabel.setText('');
-        enemyLabel.setColor('#44aa44');
-      }
+      // Hide label - Medic ghost indicates Über status
+      enemyLabel.setText('');
+      enemyLabel.setColor('#44aa44');
       this.cameraFeedEnemy.setPosition(420, 370);
       this.cameraFeedDemoHead.setVisible(false);
     } else {
@@ -7430,15 +8098,9 @@ export class GameScene extends Phaser.Scene {
       const demoHeadUbered = demomanHeadAtCam && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
       this.drawDemomanHeadSmall(demoHeadGraphics, demoHeadUbered);
       
-      // Show ÜBERED label if Demoman is Übered
-      if (demoHeadUbered) {
-        demoHeadLabel.setText('ÜBERED');
-        demoHeadLabel.setColor('#4488ff');
-        demoHeadLabel.setFontSize('12px');
-      } else {
-        demoHeadLabel.setText('');
-        demoHeadLabel.setColor('#44aa44');
-      }
+      // Hide label - Medic ghost indicates Über status
+      demoHeadLabel.setText('');
+      demoHeadLabel.setColor('#44aa44');
       
       // Position demo head to the right of other enemies
       const demoHeadX = enemies.length === 1 ? 520 : (enemies.length === 2 ? 580 : 620);
@@ -7480,6 +8142,35 @@ export class GameScene extends Phaser.Scene {
       // Inner bright glow
       graphics.fillStyle(0x66aaff, 0.6);
       graphics.fillCircle(0, 0, 35);
+      
+      // Draw small Medic ghost hovering near head
+      const ghostX = 38;
+      const ghostY = -25;
+      
+      // Ghost outer glow
+      graphics.fillStyle(0x4488ff, 0.2);
+      graphics.fillCircle(ghostX, ghostY, 18);
+      
+      // Ghost body (translucent blue)
+      graphics.fillStyle(0x4488ff, 0.5);
+      graphics.fillCircle(ghostX, ghostY - 4, 6);
+      graphics.beginPath();
+      graphics.moveTo(ghostX - 6, ghostY + 2);
+      graphics.lineTo(ghostX + 6, ghostY + 2);
+      graphics.lineTo(ghostX + 4, ghostY + 15);
+      graphics.lineTo(ghostX - 4, ghostY + 15);
+      graphics.closePath();
+      graphics.fill();
+      
+      // Medic cross (small)
+      graphics.fillStyle(0xffffff, 0.7);
+      graphics.fillRect(ghostX - 1, ghostY + 4, 2, 6);
+      graphics.fillRect(ghostX - 2, ghostY + 6, 4, 2);
+      
+      // Ghost eyes
+      graphics.fillStyle(0x88ccff, 0.9);
+      graphics.fillCircle(ghostX - 2, ghostY - 5, 1.5);
+      graphics.fillCircle(ghostX + 2, ghostY - 5, 1.5);
     }
     
     // Shadow

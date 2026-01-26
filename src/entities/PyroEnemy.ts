@@ -215,6 +215,7 @@ export class PyroEnemy {
   /**
    * Teleport to a random room (Room mode)
    * Respects blocked hallways (player is shining light there)
+   * Also respects blocked destination (player is teleporting there)
    */
   public teleportToRandomRoom(): void {
     // Filter out current room and any blocked hallway
@@ -225,6 +226,11 @@ export class PyroEnemy {
       availableRooms = availableRooms.filter(r => r !== 'LEFT_HALL');
     } else if (this.blockedHallway === 'RIGHT') {
       availableRooms = availableRooms.filter(r => r !== 'RIGHT_HALL');
+    }
+    
+    // Don't teleport into the player's pending destination
+    if (this._blockedDestination) {
+      availableRooms = availableRooms.filter(r => r !== this._blockedDestination);
     }
     
     // Safety check - if all rooms blocked somehow, just pick any
@@ -428,6 +434,7 @@ export class PyroEnemy {
    * while the teleport animation is playing.
    */
   private _teleportFrozen: boolean = false;
+  private _blockedDestination: NodeId | null = null;
   
   public freezeTeleport(): void {
     this._teleportFrozen = true;
@@ -436,11 +443,26 @@ export class PyroEnemy {
   
   public unfreezeTeleport(): void {
     this._teleportFrozen = false;
+    this._blockedDestination = null;
     console.log('🔥 Pyro teleport unfrozen');
   }
   
   public isTeleportFrozen(): boolean {
     return this._teleportFrozen;
+  }
+  
+  /**
+   * Set a destination that Pyro cannot teleport to (player's pending destination)
+   */
+  public setBlockedDestination(node: NodeId | null): void {
+    this._blockedDestination = node;
+  }
+  
+  /**
+   * Get the blocked destination
+   */
+  public getBlockedDestination(): NodeId | null {
+    return this._blockedDestination;
   }
 }
 
