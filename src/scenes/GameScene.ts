@@ -12,6 +12,10 @@ import {
   ROOM_ADJACENCY,
 } from '../types';
 import { isMobileDevice } from '../utils/mobile';
+import { 
+  updateSaveOnVictory, 
+  updateSaveOnNight6Complete 
+} from '../utils/saveData';
 import { ScoutEnemy } from '../entities/ScoutEnemy';
 import { SoldierEnemy } from '../entities/SoldierEnemy';
 import { DemomanEnemy } from '../entities/DemomanEnemy';
@@ -126,6 +130,27 @@ export class GameScene extends Phaser.Scene {
   
   // Night number (determines which enemies are active)
   private nightNumber: number = 1;
+  
+  // Session tracking for save system
+  private sessionDestructions: number = 0;  // Sentry destructions this night
+  private isBadEndingNight6: boolean = false;  // True if playing bad ending Night 6
+  private isCustomNightMode: boolean = false;  // True if playing custom night (extras)
+  
+  // Endless Night 6 (bad ending) tracking
+  private endlessDay: number = 7;  // Current day in endless mode (Day 7 when 6 AM first reached)
+  private hoursAfter6AM: number = 0;  // Hours elapsed after first 6 AM (for difficulty scaling)
+  private hasReached6AM: boolean = false;  // True once first 6 AM is reached
+  private endlessSurvivalMinutes: number = 0;  // Total minutes survived in endless mode
+  
+  // Medic ghost apparition (endless mode)
+  private medicGhostActive: boolean = false;
+  private medicGhostSide: 'LEFT' | 'RIGHT' | null = null;
+  private medicGhostTimer: number = 0;
+  private medicGhostDuration: number = 3000;  // How long ghost appears (3 sec)
+  private medicGhostCooldown: number = 0;  // Cooldown between ghost appearances
+  private medicGhostVisual!: Phaser.GameObjects.Container;  // Visual for ghost in doorway
+  private medicGhostAudioContext: AudioContext | null = null;  // For stopping scream
+  private medicGhostOscillators: OscillatorNode[] = [];  // Track oscillators to stop them
   
   // Custom night enemy configuration (null if not custom night)
   private customEnemies: {
@@ -354,6 +379,37 @@ export class GameScene extends Phaser.Scene {
     return this.customEnemies ? this.customEnemies.medic : false;
   }
   
+  // ============================================
+  // ENDLESS NIGHT 6 DIFFICULTY SCALING
+  // ============================================
+  
+  /**
+   * Get timer reduction for Scout/Soldier/Sniper/Heavy (in ms)
+   * -1 second per hour after 6 AM, capped at reasonable minimums
+   */
+  private getEndlessTimerReduction(): number {
+    if (!this.isBadEndingNight6 || !this.hasReached6AM) return 0;
+    return this.hoursAfter6AM * 1000;  // 1 second per hour
+  }
+  
+  /**
+   * Get Demoman speed multiplier for endless mode
+   * Starts at 1.0, increases by 0.2 per hour after 6 AM (1.2x, 1.4x, 1.6x, etc.)
+   */
+  private getDemomanSpeedMultiplier(): number {
+    if (!this.isBadEndingNight6 || !this.hasReached6AM) return 1.0;
+    return 1.0 + (this.hoursAfter6AM * 0.2);
+  }
+  
+  /**
+   * Get Pyro teleport interval reduction for endless mode (in ms)
+   * Reduces teleport interval by 500ms per hour after 6 AM
+   */
+  private getPyroTeleportReduction(): number {
+    if (!this.isBadEndingNight6 || !this.hasReached6AM) return 0;
+    return this.hoursAfter6AM * 500;  // 0.5 seconds per hour
+  }
+
   /**
    * Reset all game state for a clean start/restart
    */
@@ -401,6 +457,16 @@ export class GameScene extends Phaser.Scene {
     // Reset sapper state for Night 5
     this.sapperRemoveClicks = 0;
     this.sapperRemoveTimeout = 0;
+    
+    // Reset endless Night 6 state (Day 7 when first 6 AM is reached)
+    this.endlessDay = 7;
+    this.hoursAfter6AM = 0;
+    this.hasReached6AM = false;
+    this.endlessSurvivalMinutes = 0;
+    this.medicGhostActive = false;
+    this.medicGhostSide = null;
+    this.medicGhostTimer = 0;
+    this.medicGhostCooldown = 0;
   }
   
   /**
@@ -430,12 +496,47 @@ export class GameScene extends Phaser.Scene {
         sniper: boolean;
         spy: boolean;
         pyro: boolean;
+        medic?: boolean;
       };
+      isBadEndingNight6?: boolean;
+      isCustomNight?: boolean;
+      previewEnding?: 'good' | 'badIntro' | 'dark';  // For endings preview
     } | undefined;
-    this.nightNumber = data?.night ?? 1;
     
-    // For custom night (6), use the enemy toggles; otherwise use night-based rules
-    const isCustomNight = this.nightNumber === 6;
+    // Handle endings preview mode
+    if (data?.previewEnding) {
+      this.gameStatus = 'WON';  // Prevent game from running
+      this.createEndScreen();
+      
+      // Show the requested ending
+      if (data.previewEnding === 'good') {
+        this.showGoodEnding();
+      } else if (data.previewEnding === 'badIntro') {
+        this.showBadEndingIntro();
+      } else if (data.previewEnding === 'dark') {
+        // Set up minimal state for dark ending
+        this.isBadEndingNight6 = true;
+        this.endlessDay = 2;  // Show some survival time
+        this.endlessSurvivalMinutes = 183;  // 3 hours 3 minutes
+        this.endScreen.removeAll(true);
+        this.endScreen.setVisible(true);
+        const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.95);
+        this.endScreen.add(overlay);
+        this.showEndlessDarkEnding('Preview mode');
+      }
+      return;  // Skip normal game initialization
+    }
+    
+    this.nightNumber = data?.night ?? 1;
+    this.isBadEndingNight6 = data?.isBadEndingNight6 ?? false;
+    this.isCustomNightMode = data?.isCustomNight ?? false;
+    this.sessionDestructions = 0;  // Reset for this session
+    
+    // For custom night (night 7) or bad ending night 6, use the enemy toggles
+    const isCustomNight = this.nightNumber === 7 || this.isBadEndingNight6 || (this.nightNumber === 6 && !this.isBadEndingNight6);
+    
+    // Display night number (7 shows as "Custom", 6 shows as "6")
+    const displayNightNumber = this.nightNumber === 7 ? 'Custom' : this.nightNumber;
     const customEnemies = {
       scout: true, soldier: true, demoman: true, 
       heavy: true, sniper: true, spy: true, pyro: false, medic: false,
@@ -470,7 +571,19 @@ export class GameScene extends Phaser.Scene {
     // Only create Spy on Night 4+ or custom night with spy enabled
     const spyEnabled = isCustomNight ? customEnemies.spy : (this.nightNumber >= 4);
     if (spyEnabled) {
-      this.spy = new SpyEnemy();
+      // In Custom Night, Spy can only disguise as enabled enemies
+      // In regular nights, all disguises are available
+      let spyDisguises: ('SCOUT' | 'SOLDIER' | 'DEMOMAN_HEAD' | 'HEAVY' | 'SNIPER')[] | undefined;
+      if (isCustomNight) {
+        spyDisguises = [];
+        if (customEnemies.scout) spyDisguises.push('SCOUT');
+        if (customEnemies.soldier) spyDisguises.push('SOLDIER');
+        if (customEnemies.demoman) spyDisguises.push('DEMOMAN_HEAD');
+        if (customEnemies.heavy) spyDisguises.push('HEAVY');
+        if (customEnemies.sniper) spyDisguises.push('SNIPER');
+        // If empty, Spy will be in sapping-only mode (no camera appearances)
+      }
+      this.spy = new SpyEnemy(spyDisguises);
       // Set up Spy sapper callback
       this.spy.setSapDamageCallback((damage) => this.onSpySapDamage(damage));
     }
@@ -543,8 +656,9 @@ export class GameScene extends Phaser.Scene {
         });
         this.medic.activate(medicTargets);
       } else {
-        console.log('💉 Medic enabled but no valid targets (Scout/Soldier/Demoman)!');
-        this.medic.forceDespawn();
+        // No valid targets - Medic will only appear as a ghost in doorways
+        console.log('💉 Medic enabled but no valid targets - ghost mode only!');
+        this.medic.activate([]);  // Activate with empty targets for ghost-only mode
       }
     } else {
       this.medic.forceDespawn();
@@ -693,6 +807,16 @@ export class GameScene extends Phaser.Scene {
     this.uberGlowRight = this.add.graphics();
     this.uberGlowRight.setVisible(false);
     this.uberGlowRight.setDepth(9);
+    
+    // Medic ghost apparition (Endless Night 6 only - psychological horror)
+    // Appears randomly in doorways when Medic isn't ubering, totally harmless
+    this.medicGhostVisual = this.add.container(120, height / 2 - 30);
+    const medicGhostGraphics = this.add.graphics();
+    this.drawMedicGhostSilhouette(medicGhostGraphics);
+    this.medicGhostVisual.add(medicGhostGraphics);
+    this.medicGhostVisual.setVisible(false);
+    this.medicGhostVisual.setAlpha(0.35);  // Translucent - ghostly
+    this.medicGhostVisual.setDepth(8);  // Behind real enemies
     
     // Demoman's severed head (appears in Intel room or on cameras)
     this.demomanHeadInRoom = this.add.container(200, height - 300);
@@ -1467,15 +1591,16 @@ export class GameScene extends Phaser.Scene {
     
     this.cameraUI.add(feedGraphics);
     
-    // "No activity" text (shown when no enemy) with pulsing effect
-    this.cameraFeedEmpty = this.add.text(420, 350, '- CLEAR -', {
+    // "No activity" text (hidden - doorways just show darkness)
+    this.cameraFeedEmpty = this.add.text(420, 350, '', {
       fontFamily: 'Courier New, monospace',
       fontSize: '18px',
       color: '#1a4422',
     }).setOrigin(0.5);
+    this.cameraFeedEmpty.setVisible(false);  // Never show "CLEAR" text
     this.cameraUI.add(this.cameraFeedEmpty);
     
-    // Pulse the clear text subtly
+    // (Removed clear text pulsing - no longer used)
     this.tweens.add({
       targets: this.cameraFeedEmpty,
       alpha: 0.4,
@@ -1909,6 +2034,12 @@ export class GameScene extends Phaser.Scene {
     // Create camera destroyed overlay (Night 3+)
     this.createCameraDestroyedOverlay();
     
+    // Static burst overlay for camera switching (all nights)
+    // Added last in createCameraUI so it renders on top of everything
+    this.cameraStaticBurstOverlay = this.add.graphics();
+    this.cameraStaticBurstOverlay.setVisible(false);
+    this.cameraUI.add(this.cameraStaticBurstOverlay);
+    
     // Create teleporter UI (Night 3+)
     if (this.nightNumber >= 3) {
       this.createTeleporterUI();
@@ -2179,11 +2310,6 @@ export class GameScene extends Phaser.Scene {
     lureBtnBg.on('pointerdown', () => {
       this.handleCameraLureAction();
     });
-    
-    // Static burst overlay (added last so it renders on top of everything)
-    this.cameraStaticBurstOverlay = this.add.graphics();
-    this.cameraStaticBurstOverlay.setVisible(false);
-    this.cameraUI.add(this.cameraStaticBurstOverlay);
     
     // Room view UI (shown when teleported)
     this.createRoomViewUI();
@@ -3195,6 +3321,11 @@ export class GameScene extends Phaser.Scene {
    * Note: Camera switching is allowed during boot so player can select teleport destination
    */
   private selectCamera(index: number): void {
+    // Don't do anything if clicking the camera we're already on
+    if (this.selectedCamera === index) {
+      return;
+    }
+    
     this.selectedCamera = index;
     const cam = CAMERAS[index];
     this.cameraFeedTitle.setText(`CAM 0${cam.id} - ${cam.name}`);
@@ -4202,6 +4333,112 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
+   * Draw Medic ghost silhouette for endless Night 6
+   * Ghostly, translucent figure meant to psyche out the player
+   * White/blue ethereal appearance with medical cross
+   */
+  private drawMedicGhostSilhouette(graphics: Phaser.GameObjects.Graphics): void {
+    graphics.clear();
+    
+    // Ethereal glow background
+    graphics.fillStyle(0x6688cc, 0.15);
+    graphics.fillCircle(0, 0, 80);
+    graphics.fillStyle(0x88aaee, 0.1);
+    graphics.fillCircle(0, 0, 100);
+    
+    // Ghost body - wispy, ethereal (white/blue tones)
+    // Main body - elongated and ghostly
+    graphics.fillStyle(0xccddff, 0.6);
+    graphics.beginPath();
+    graphics.moveTo(-25, -30);
+    graphics.lineTo(25, -30);
+    graphics.lineTo(20, 50);
+    graphics.lineTo(-20, 50);
+    graphics.closePath();
+    graphics.fillPath();
+    
+    // LEFT ARM - reaching out slightly
+    graphics.fillStyle(0xccddff, 0.55);
+    // Upper arm
+    graphics.beginPath();
+    graphics.moveTo(-25, -25);
+    graphics.lineTo(-30, -20);
+    graphics.lineTo(-45, 5);
+    graphics.lineTo(-38, 10);
+    graphics.closePath();
+    graphics.fillPath();
+    // Forearm
+    graphics.beginPath();
+    graphics.moveTo(-45, 5);
+    graphics.lineTo(-38, 10);
+    graphics.lineTo(-50, 35);
+    graphics.lineTo(-58, 30);
+    graphics.closePath();
+    graphics.fillPath();
+    // Hand
+    graphics.fillStyle(0xddeeff, 0.6);
+    graphics.fillCircle(-54, 35, 8);
+    
+    // RIGHT ARM - holding syringe, extended forward
+    graphics.fillStyle(0xccddff, 0.55);
+    // Upper arm
+    graphics.beginPath();
+    graphics.moveTo(25, -25);
+    graphics.lineTo(30, -20);
+    graphics.lineTo(40, 0);
+    graphics.lineTo(33, 5);
+    graphics.closePath();
+    graphics.fillPath();
+    // Forearm - angled toward viewer
+    graphics.beginPath();
+    graphics.moveTo(40, 0);
+    graphics.lineTo(33, 5);
+    graphics.lineTo(28, -5);
+    graphics.lineTo(35, -10);
+    graphics.closePath();
+    graphics.fillPath();
+    // Hand gripping syringe
+    graphics.fillStyle(0xddeeff, 0.6);
+    graphics.fillCircle(30, -5, 7);
+    
+    // Wispy bottom (ghost trail)
+    graphics.fillStyle(0xaabbee, 0.4);
+    graphics.beginPath();
+    graphics.moveTo(-20, 50);
+    graphics.lineTo(20, 50);
+    graphics.lineTo(15, 75);
+    graphics.lineTo(5, 65);
+    graphics.lineTo(-5, 80);
+    graphics.lineTo(-10, 60);
+    graphics.lineTo(-18, 70);
+    graphics.closePath();
+    graphics.fillPath();
+    
+    // Head - ghostly
+    graphics.fillStyle(0xddeeff, 0.7);
+    graphics.fillCircle(0, -45, 20);
+    
+    // Medical cross on chest (red, iconic)
+    graphics.fillStyle(0xff4444, 0.8);
+    graphics.fillRect(-4, -15, 8, 30);
+    graphics.fillRect(-12, -3, 24, 8);
+    
+    // Eyes - empty, glowing
+    graphics.fillStyle(0x4488ff, 0.9);
+    graphics.fillCircle(-7, -50, 4);
+    graphics.fillCircle(7, -50, 4);
+    
+    // Syringe in right hand
+    graphics.fillStyle(0xcccccc, 0.7);
+    graphics.fillRect(32, -10, 25, 5);
+    graphics.fillStyle(0xaaddff, 0.5);
+    graphics.fillRect(36, -8, 15, 2);
+    // Needle tip
+    graphics.fillStyle(0x888888, 0.8);
+    graphics.fillRect(57, -9, 8, 3);
+  }
+  
+  /**
    * Play victory chime - triumphant fanfare
    */
   private playVictoryChime(): void {
@@ -4252,6 +4489,305 @@ export class GameScene extends Phaser.Scene {
         sparkle.start(t);
         sparkle.stop(t + 0.2);
       }
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play 6 AM bell chime - somber church bell for endless Night 6
+   * Plays at each 6 AM to mock the player that the night isn't ending
+   */
+  private play6AMBellChime(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Deep, somber church bell (6 chimes for 6 AM)
+      for (let i = 0; i < 6; i++) {
+        const startTime = audioContext.currentTime + i * 0.8;
+        
+        // Main bell tone (low)
+        const bellOsc = audioContext.createOscillator();
+        const bellGain = audioContext.createGain();
+        bellOsc.connect(bellGain);
+        bellGain.connect(audioContext.destination);
+        
+        bellOsc.type = 'sine';
+        bellOsc.frequency.value = 220;  // A3 - deep bell
+        
+        bellGain.gain.setValueAtTime(0, startTime);
+        bellGain.gain.linearRampToValueAtTime(0.3, startTime + 0.02);
+        bellGain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.7);
+        
+        bellOsc.start(startTime);
+        bellOsc.stop(startTime + 0.8);
+        
+        // Overtone (higher)
+        const overOsc = audioContext.createOscillator();
+        const overGain = audioContext.createGain();
+        overOsc.connect(overGain);
+        overGain.connect(audioContext.destination);
+        
+        overOsc.type = 'sine';
+        overOsc.frequency.value = 440;  // A4 - overtone
+        
+        overGain.gain.setValueAtTime(0, startTime);
+        overGain.gain.linearRampToValueAtTime(0.15, startTime + 0.02);
+        overGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.5);
+        
+        overOsc.start(startTime);
+        overOsc.stop(startTime + 0.6);
+      }
+      
+      console.log('🔔 6 AM bell chimes... but the night continues');
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play give up sound - melancholic descending sigh
+   */
+  private playGiveUpSound(): void {
+    try {
+      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      
+      // Descending minor "sigh" - like giving up hope
+      const notes = [
+        { freq: 440, time: 0, dur: 0.35 },      // A4
+        { freq: 392, time: 0.25, dur: 0.35 },   // G4
+        { freq: 330, time: 0.5, dur: 0.35 },    // E4
+        { freq: 294, time: 0.75, dur: 0.6 },    // D4 (sad resolve - A minor feel)
+      ];
+      
+      notes.forEach(note => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        
+        osc.type = 'triangle';  // Softer, sadder tone
+        osc.frequency.value = note.freq;
+        
+        const startTime = audioContext.currentTime + note.time;
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.18, startTime + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + note.dur);
+        
+        osc.start(startTime);
+        osc.stop(startTime + note.dur + 0.1);
+      });
+      
+      // Add a quiet low drone underneath for weight
+      const drone = audioContext.createOscillator();
+      const droneGain = audioContext.createGain();
+      drone.connect(droneGain);
+      droneGain.connect(audioContext.destination);
+      
+      drone.type = 'sine';
+      drone.frequency.value = 110;  // A2 - low drone (matches A minor)
+      
+      droneGain.gain.setValueAtTime(0, audioContext.currentTime);
+      droneGain.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.2);
+      droneGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1.2);
+      
+      drone.start(audioContext.currentTime);
+      drone.stop(audioContext.currentTime + 1.3);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play good ending sound - triumphant, celebratory fanfare
+   */
+  private playGoodEndingSound(): void {
+    try {
+      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      
+      // Triumphant fanfare - ascending major chord progression
+      const notes = [
+        { freq: 523.25, time: 0, dur: 0.25 },     // C5
+        { freq: 659.25, time: 0.2, dur: 0.25 },   // E5
+        { freq: 783.99, time: 0.4, dur: 0.25 },   // G5
+        { freq: 1046.50, time: 0.6, dur: 0.6 },   // C6
+        // Harmony layer
+        { freq: 392.00, time: 0, dur: 0.8 },      // G4 (bass)
+        { freq: 523.25, time: 0.6, dur: 0.6 },    // C5 (harmony)
+      ];
+      
+      notes.forEach(note => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        
+        osc.type = 'sine';
+        osc.frequency.value = note.freq;
+        
+        const startTime = audioContext.currentTime + note.time;
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.2, startTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + note.dur);
+        
+        osc.start(startTime);
+        osc.stop(startTime + note.dur + 0.1);
+      });
+      
+      // Victory sparkles
+      for (let i = 0; i < 8; i++) {
+        const sparkle = audioContext.createOscillator();
+        const sparkleGain = audioContext.createGain();
+        sparkle.connect(sparkleGain);
+        sparkleGain.connect(audioContext.destination);
+        
+        sparkle.type = 'sine';
+        sparkle.frequency.value = 1500 + Math.random() * 2500;
+        
+        const t = audioContext.currentTime + 0.8 + i * 0.08;
+        sparkleGain.gain.setValueAtTime(0.06, t);
+        sparkleGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+        
+        sparkle.start(t);
+        sparkle.stop(t + 0.15);
+      }
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play bad ending intro sound - ominous, creepy atmosphere
+   */
+  private playBadEndingIntroSound(): void {
+    try {
+      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      
+      // Deep, ominous drone
+      const drone = audioContext.createOscillator();
+      const droneGain = audioContext.createGain();
+      drone.connect(droneGain);
+      droneGain.connect(audioContext.destination);
+      
+      drone.type = 'sawtooth';
+      drone.frequency.value = 55;  // A1 - very low
+      
+      droneGain.gain.setValueAtTime(0, audioContext.currentTime);
+      droneGain.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 1);
+      droneGain.gain.setValueAtTime(0.15, audioContext.currentTime + 3);
+      droneGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 5);
+      
+      drone.start(audioContext.currentTime);
+      drone.stop(audioContext.currentTime + 5);
+      
+      // Dissonant accents
+      const accents = [
+        { freq: 116.54, time: 0.5 },  // Bb2
+        { freq: 138.59, time: 1.5 },  // C#3
+        { freq: 103.83, time: 2.5 },  // Ab2
+      ];
+      
+      accents.forEach(accent => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        
+        osc.type = 'sine';
+        osc.frequency.value = accent.freq;
+        
+        const t = audioContext.currentTime + accent.time;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.1, t + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 1);
+        
+        osc.start(t);
+        osc.stop(t + 1.2);
+      });
+      
+      // Heartbeat-like pulse
+      for (let i = 0; i < 4; i++) {
+        const beat = audioContext.createOscillator();
+        const beatGain = audioContext.createGain();
+        beat.connect(beatGain);
+        beatGain.connect(audioContext.destination);
+        
+        beat.type = 'sine';
+        beat.frequency.value = 40;
+        
+        const t = audioContext.currentTime + 3.5 + i * 0.8;
+        beatGain.gain.setValueAtTime(0.2, t);
+        beatGain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+        
+        beat.start(t);
+        beat.stop(t + 0.4);
+      }
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Play dark ending sound - melancholic, lonely melody
+   */
+  private playDarkEndingSound(): void {
+    try {
+      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      
+      // Slow, sad minor melody
+      const notes = [
+        { freq: 329.63, time: 0, dur: 0.8 },      // E4
+        { freq: 293.66, time: 0.7, dur: 0.8 },    // D4
+        { freq: 261.63, time: 1.4, dur: 0.8 },    // C4
+        { freq: 246.94, time: 2.1, dur: 1.2 },    // B3
+        { freq: 220.00, time: 3.0, dur: 1.5 },    // A3 (resolve)
+      ];
+      
+      notes.forEach(note => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        
+        osc.type = 'sine';
+        osc.frequency.value = note.freq;
+        
+        const startTime = audioContext.currentTime + note.time;
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.15, startTime + 0.05);
+        gain.gain.setValueAtTime(0.15, startTime + note.dur * 0.7);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + note.dur);
+        
+        osc.start(startTime);
+        osc.stop(startTime + note.dur + 0.1);
+      });
+      
+      // Quiet ambient pad underneath
+      const pad = audioContext.createOscillator();
+      const padGain = audioContext.createGain();
+      pad.connect(padGain);
+      padGain.connect(audioContext.destination);
+      
+      pad.type = 'sine';
+      pad.frequency.value = 110;  // A2
+      
+      padGain.gain.setValueAtTime(0, audioContext.currentTime);
+      padGain.gain.linearRampToValueAtTime(0.08, audioContext.currentTime + 0.5);
+      padGain.gain.setValueAtTime(0.08, audioContext.currentTime + 4);
+      padGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 5);
+      
+      pad.start(audioContext.currentTime);
+      pad.stop(audioContext.currentTime + 5);
     } catch (e) {
       // Audio not available
     }
@@ -6502,8 +7038,9 @@ export class GameScene extends Phaser.Scene {
     const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.8);
     this.pauseMenu.add(overlay);
     
-    // Main pause panel (center)
-    const panel = this.add.rectangle(640, 360, 400, 350, 0x1a1a2a);
+    // Main pause panel (center) - taller for endless Night 6 to fit Give Up button
+    const panelHeight = this.isBadEndingNight6 ? 420 : 350;
+    const panel = this.add.rectangle(640, 360, 400, panelHeight, 0x1a1a2a);
     panel.setStrokeStyle(3, 0xff6600);
     this.pauseMenu.add(panel);
     
@@ -6572,6 +7109,33 @@ export class GameScene extends Phaser.Scene {
       color: '#8888ff',
     }).setOrigin(0.5);
     this.pauseMenu.add(menuText);
+    
+    // Give Up button (Endless Night 6 only) - Pyro jumpscare then dark ending
+    if (this.isBadEndingNight6) {
+      const giveUpBtn = this.add.rectangle(640, buttonsStartY + 165, 250, 45, 0x442244);
+      giveUpBtn.setStrokeStyle(2, 0xaa44aa);
+      giveUpBtn.setInteractive({ useHandCursor: true });
+      giveUpBtn.on('pointerover', () => giveUpBtn.setFillStyle(0x663366));
+      giveUpBtn.on('pointerout', () => giveUpBtn.setFillStyle(0x442244));
+      giveUpBtn.on('pointerdown', () => {
+        // Player gives up - Pyro jumpscare, then dark ending
+        this.isPaused = false;
+        this.pauseMenu.setVisible(false);
+        this.stopAllGameSounds();
+        this.gameStatus = 'LOST';
+        
+        // Show Pyro jumpscare first!
+        this.showGiveUpJumpscare();
+      });
+      this.pauseMenu.add(giveUpBtn);
+      
+      const giveUpText = this.add.text(640, buttonsStartY + 165, 'GIVE UP', {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '16px',
+        color: '#ff88ff',
+      }).setOrigin(0.5);
+      this.pauseMenu.add(giveUpText);
+    }
     
     // Hint background (bottom)
     const hintBg = this.add.rectangle(640, 620, 500, 55, 0x0a0a14, 0.95);
@@ -7325,6 +7889,10 @@ export class GameScene extends Phaser.Scene {
             this.showAlert('DEMOMAN REPELLED!', 0x00ff00);
           }
           this.demoman.deter();
+          // Allow Pyro to teleport to this hallway again
+          if (this.isPyroEnabled() && this.pyro) {
+            this.pyro.onDemomanChargeEnd();
+          }
           this.playEnemyRetreatSound();
           hitEnemy = true;
         }
@@ -7372,6 +7940,10 @@ export class GameScene extends Phaser.Scene {
             this.showAlert('DEMOMAN REPELLED!', 0x00ff00);
           }
           this.demoman.deter();
+          // Allow Pyro to teleport to this hallway again
+          if (this.isPyroEnabled() && this.pyro) {
+            this.pyro.onDemomanChargeEnd();
+          }
           this.playEnemyRetreatSound();
           hitEnemy = true;
         }
@@ -7540,6 +8112,12 @@ export class GameScene extends Phaser.Scene {
     this.sentry.hp = 0;
     this.sentry.isWrangled = false;
     this.sentry.aimedDoor = 'NONE';
+    
+    // Track destruction for save system (only during story nights 1-5)
+    if (!this.isCustomNightMode && this.nightNumber <= 5) {
+      this.sessionDestructions++;
+      console.log(`🔧 Sentry destroyed! Session destructions: ${this.sessionDestructions}`);
+    }
     
     this.sentryGraphic.setVisible(false);
     this.aimBeam.setVisible(false);
@@ -7713,6 +8291,10 @@ export class GameScene extends Phaser.Scene {
       this.scout.driveAway();
     } else if (enemyType === 'DEMOMAN') {
       this.demoman.deter();
+      // Allow Pyro to teleport to hallways again
+      if (this.isPyroEnabled() && this.pyro) {
+        this.pyro.onDemomanChargeEnd();
+      }
     } else {
       this.soldier.driveAway();
     }
@@ -7733,6 +8315,10 @@ export class GameScene extends Phaser.Scene {
       this.soldier.driveAway();
     } else if (enemyType === 'DEMOMAN') {
       this.demoman.deter();
+      // Allow Pyro to teleport to hallways again
+      if (this.isPyroEnabled() && this.pyro) {
+        this.pyro.onDemomanChargeEnd();
+      }
     }
     
     // Destroy sentry if it exists
@@ -7770,6 +8356,19 @@ export class GameScene extends Phaser.Scene {
       this.cameraUI.setVisible(true);
       this.sentry.isWrangled = false;
       this.stopDetectionSound(); // Stop scary sound when viewing cameras
+      
+      // Initialize shared audio context on user gesture (camera button click)
+      // This ensures camera switch static works on Night 1+ (browser autoplay policy)
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        try {
+          this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        } catch (e) {
+          // Audio not available
+        }
+      }
+      if (this.sharedAudioContext && this.sharedAudioContext.state === 'suspended') {
+        this.sharedAudioContext.resume();
+      }
       
       // Start camera boot-up sequence (1 second delay)
       this.isCameraBooting = true;
@@ -8740,7 +9339,13 @@ export class GameScene extends Phaser.Scene {
     // Only show hour (not minutes) to prevent predicting Scout/Soldier arrival
     const hours24 = Math.floor(this.gameMinutes / 60);
     const displayHours = hours24 === 0 ? 12 : hours24;  // 00:XX becomes 12:XX
-    this.timeText.setText(`${displayHours} AM`); // No padding - "1 AM" not "01 AM"
+    
+    // For endless Night 6, only show day after first 6 AM
+    if (this.isBadEndingNight6 && this.hasReached6AM) {
+      this.timeText.setText(`DAY ${this.endlessDay} - ${displayHours} AM`);
+    } else {
+      this.timeText.setText(`${displayHours} AM`); // No padding - "1 AM" not "01 AM"
+    }
     
     // Metal
     this.metalText.setText(`METAL: ${Math.floor(this.metal)}/${GAME_CONSTANTS.MAX_METAL}`);
@@ -8859,9 +9464,81 @@ export class GameScene extends Phaser.Scene {
     });
   }
   
+  /**
+   * Show Pyro jumpscare for Give Up, then transition to dark ending
+   */
+  private showGiveUpJumpscare(): void {
+    // Play jumpscare sound
+    this.playJumpscareSound();
+    
+    // Screen shake for impact
+    this.cameras.main.shake(300, 0.03);
+    
+    // Create jumpscare container
+    this.endScreen.removeAll(true);
+    this.endScreen.setVisible(true);
+    
+    // Dark flash
+    const flash = this.add.rectangle(640, 360, 1280, 720, 0x000000, 1);
+    this.endScreen.add(flash);
+    
+    // Create Pyro jumpscare graphic
+    const jumpscareContainer = this.add.container(640, 360);
+    this.endScreen.add(jumpscareContainer);
+    
+    // Draw Pyro for the jumpscare (isPyro = true)
+    const enemyGraphics = this.add.graphics();
+    this.drawJumpscareSilhouette(enemyGraphics, false, false, false, false, false, true);
+    jumpscareContainer.add(enemyGraphics);
+    
+    // Start small and zoom in fast
+    jumpscareContainer.setScale(0.1);
+    jumpscareContainer.setAlpha(0);
+    
+    // Jumpscare zoom animation
+    this.tweens.add({
+      targets: jumpscareContainer,
+      scale: 2.5,
+      alpha: 1,
+      duration: 200,
+      ease: 'Power2',
+      onComplete: () => {
+        // Shake while zoomed
+        this.tweens.add({
+          targets: jumpscareContainer,
+          x: 640 + Phaser.Math.Between(-20, 20),
+          y: 360 + Phaser.Math.Between(-20, 20),
+          duration: 50,
+          repeat: 5,
+          yoyo: true,
+          onComplete: () => {
+            // Fade to dark ending
+            this.tweens.add({
+              targets: jumpscareContainer,
+              alpha: 0,
+              duration: 300,
+              onComplete: () => {
+                // Show dark ending with sad chime on menu return
+                const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.95);
+                this.endScreen.add(overlay);
+                this.showEndlessDarkEnding('You gave up...', false, true);  // playSadChimeOnReturn = true
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+
   private showGameOverScreen(reason: string): void {
     const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.95);
     this.endScreen.add(overlay);
+    
+    // For endless Night 6, show the dark ending with survival stats
+    if (this.isBadEndingNight6) {
+      this.showEndlessDarkEnding(reason);
+      return;
+    }
     
     // Show time of death (12-hour format)
     const hours24 = Math.floor(this.gameMinutes / 60);
@@ -8917,6 +9594,272 @@ export class GameScene extends Phaser.Scene {
     });
   }
   
+  /**
+   * Show the dark ending for endless Night 6 with survival stats
+   * This is the "bad ending" - player was trapped in an endless night and eventually fell
+   * @param skipSound - If true, don't play the dark ending sound (e.g., when give up sound already played)
+   * @param playSadChimeOnReturn - If true, play the give up sound when returning to menu
+   */
+  private showEndlessDarkEnding(reason: string, skipSound: boolean = false, playSadChimeOnReturn: boolean = false): void {
+    if (!skipSound) {
+      this.playDarkEndingSound();  // Melancholic melody
+    }
+    
+    // Store flag for menu return
+    const shouldPlaySadChime = playSadChimeOnReturn;
+    
+    // Update save - mark game completed (unlocks everything)
+    updateSaveOnNight6Complete();
+    
+    // Calculate survival stats
+    const totalMinutes = this.endlessSurvivalMinutes;
+    // Days survived = endlessDay - 6 (Night 6 starts, Day 7 = 1 day survived, etc.)
+    const survivalDays = this.hasReached6AM ? (this.endlessDay - 6) : 0;
+    const survivalHours = Math.floor(totalMinutes / 60);
+    const survivalMins = totalMinutes % 60;
+    
+    // Format survival time (with proper singular/plural)
+    const hourWord = survivalHours === 1 ? 'hour' : 'hours';
+    const minWord = survivalMins === 1 ? 'minute' : 'minutes';
+    const dayWord = survivalDays === 1 ? 'day' : 'days';
+    const hoursInDay = survivalHours % 24;
+    const hoursInDayWord = hoursInDay === 1 ? 'hour' : 'hours';
+    const minsInHour = survivalMins;
+    const minsInHourWord = minsInHour === 1 ? 'minute' : 'minutes';
+    
+    let survivalStr = '';
+    if (survivalDays > 0) {
+      // Multiple days - show days, hours, and minutes
+      survivalStr = `${survivalDays} ${dayWord}, ${hoursInDay} ${hoursInDayWord}, ${minsInHour} ${minsInHourWord}`;
+    } else if (survivalHours > 0) {
+      survivalStr = `${survivalHours} ${hourWord}, ${survivalMins} ${minWord}`;
+    } else {
+      survivalStr = `${survivalMins} ${minWord}`;
+    }
+    
+    // Dark, somber ending screen
+    const title = this.add.text(640, 100, 'THE END', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '64px',
+      color: '#553333',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.endScreen.add(title);
+    
+    const subtitle = this.add.text(640, 170, 'You survived...', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '28px',
+      color: '#666666',
+    }).setOrigin(0.5);
+    this.endScreen.add(subtitle);
+    
+    // Survival time - the "badge of honor"
+    const survivalText = this.add.text(640, 230, survivalStr, {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '42px',
+      color: '#aa8800',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.endScreen.add(survivalText);
+    
+    const cost = this.add.text(640, 290, 'but at what cost?', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '24px',
+      color: '#555555',
+    }).setOrigin(0.5);
+    this.endScreen.add(cost);
+    
+    // Lonely Engineer silhouette - sitting alone, defeated
+    const graphics = this.add.graphics();
+    
+    // Dark room backdrop with subtle gradient
+    graphics.fillStyle(0x080810, 0.95);
+    graphics.fillRect(340, 305, 600, 230);
+    
+    // Atmospheric spotlight from above - warm but dim
+    graphics.fillStyle(0x443322, 0.08);
+    graphics.fillCircle(640, 300, 150);
+    graphics.fillStyle(0x554433, 0.12);
+    graphics.fillCircle(640, 340, 100);
+    graphics.fillStyle(0x665544, 0.18);
+    graphics.fillCircle(640, 370, 60);
+    graphics.fillStyle(0x776655, 0.25);
+    graphics.fillCircle(640, 390, 35);
+    
+    const engX = 640;
+    const engY = 430;
+    
+    // Shadow beneath (drawn first)
+    graphics.fillStyle(0x000000, 0.5);
+    graphics.fillEllipse(engX, engY + 75, 100, 18);
+    
+    // LEGS - Engineer's work pants, sitting on crate/ground
+    graphics.fillStyle(0x2a2a3a, 1);
+    // Left leg bent
+    graphics.beginPath();
+    graphics.moveTo(engX - 40, engY + 30);
+    graphics.lineTo(engX - 15, engY + 30);
+    graphics.lineTo(engX - 20, engY + 65);
+    graphics.lineTo(engX - 50, engY + 65);
+    graphics.closePath();
+    graphics.fillPath();
+    // Right leg extended slightly
+    graphics.beginPath();
+    graphics.moveTo(engX + 5, engY + 30);
+    graphics.lineTo(engX + 35, engY + 30);
+    graphics.lineTo(engX + 55, engY + 65);
+    graphics.lineTo(engX + 20, engY + 65);
+    graphics.closePath();
+    graphics.fillPath();
+    
+    // Work boots
+    graphics.fillStyle(0x222230, 1);
+    graphics.fillRoundedRect(engX - 55, engY + 60, 25, 12, 3);
+    graphics.fillRoundedRect(engX + 35, engY + 60, 28, 12, 3);
+    
+    // TORSO - RED team shirt (but dim in shadow)
+    graphics.fillStyle(0x3a2a2a, 1);
+    graphics.beginPath();
+    graphics.moveTo(engX - 35, engY - 35);
+    graphics.lineTo(engX + 30, engY - 35);
+    graphics.lineTo(engX + 35, engY + 35);
+    graphics.lineTo(engX - 40, engY + 35);
+    graphics.closePath();
+    graphics.fillPath();
+    
+    // Overalls straps
+    graphics.fillStyle(0x252535, 1);
+    graphics.fillRect(engX - 25, engY - 30, 8, 50);
+    graphics.fillRect(engX + 12, engY - 30, 8, 50);
+    
+    // LEFT ARM - resting on knee, holding wrench
+    graphics.fillStyle(0x3a2a2a, 1);
+    graphics.beginPath();
+    graphics.moveTo(engX - 35, engY - 25);
+    graphics.lineTo(engX - 45, engY - 15);
+    graphics.lineTo(engX - 55, engY + 15);
+    graphics.lineTo(engX - 45, engY + 20);
+    graphics.closePath();
+    graphics.fillPath();
+    // Gloved hand
+    graphics.fillStyle(0x3a3a4a, 1);
+    graphics.fillCircle(engX - 52, engY + 18, 10);
+    // Wrench (iconic!)
+    graphics.fillStyle(0x444450, 1);
+    graphics.fillRect(engX - 75, engY + 10, 30, 6);
+    graphics.fillStyle(0x3a3a45, 1);
+    graphics.fillRect(engX - 78, engY + 5, 8, 16);
+    
+    // RIGHT ARM - up to face, defeated pose
+    graphics.fillStyle(0x3a2a2a, 1);
+    graphics.beginPath();
+    graphics.moveTo(engX + 25, engY - 25);
+    graphics.lineTo(engX + 35, engY - 35);
+    graphics.lineTo(engX + 25, engY - 55);
+    graphics.lineTo(engX + 15, engY - 45);
+    graphics.closePath();
+    graphics.fillPath();
+    // Gunslinger (robotic hand) touching face
+    graphics.fillStyle(0x4a4a55, 1);
+    graphics.fillCircle(engX + 22, engY - 58, 9);
+    graphics.fillStyle(0x555560, 1);
+    graphics.fillCircle(engX + 22, engY - 58, 6);
+    
+    // HEAD - slightly tilted down in despair
+    graphics.fillStyle(0x4a4a5a, 1);
+    graphics.fillCircle(engX + 5, engY - 65, 24);
+    
+    // Neck
+    graphics.fillStyle(0x4a4a5a, 1);
+    graphics.fillRect(engX - 5, engY - 45, 15, 12);
+    
+    // HARDHAT - Engineer's iconic yellow hardhat (dimmed)
+    // Brim first
+    graphics.fillStyle(0x4a4535, 1);
+    graphics.fillEllipse(engX + 5, engY - 80, 35, 8);
+    // Dome
+    graphics.fillStyle(0x555540, 1);
+    graphics.beginPath();
+    graphics.arc(engX + 5, engY - 82, 26, Math.PI, 0, false);
+    graphics.closePath();
+    graphics.fillPath();
+    // Highlight on dome
+    graphics.fillStyle(0x666650, 0.5);
+    graphics.beginPath();
+    graphics.arc(engX + 5, engY - 85, 18, Math.PI * 1.2, Math.PI * 1.8, false);
+    graphics.closePath();
+    graphics.fillPath();
+    // Hardhat light (dim, not powered)
+    graphics.fillStyle(0x444438, 1);
+    graphics.fillCircle(engX + 5, engY - 100, 7);
+    graphics.fillStyle(0x333330, 1);
+    graphics.fillCircle(engX + 5, engY - 100, 4);
+    
+    // GOGGLES - pushed up on forehead (iconic Engineer look)
+    graphics.fillStyle(0x333340, 1);
+    graphics.fillRoundedRect(engX - 18, engY - 82, 42, 10, 3);
+    // Goggle lenses
+    graphics.fillStyle(0x222235, 1);
+    graphics.fillCircle(engX - 8, engY - 77, 7);
+    graphics.fillCircle(engX + 14, engY - 77, 7);
+    // Lens reflection (very subtle)
+    graphics.fillStyle(0x334455, 0.3);
+    graphics.fillCircle(engX - 10, engY - 79, 3);
+    graphics.fillCircle(engX + 12, engY - 79, 3);
+    
+    // Face details (in shadow but visible)
+    // Brow/eye area (shadowed)
+    graphics.fillStyle(0x3a3a4a, 1);
+    graphics.fillRect(engX - 12, engY - 70, 30, 8);
+    
+    // Slight stubble/jaw
+    graphics.fillStyle(0x404050, 1);
+    graphics.fillEllipse(engX + 5, engY - 50, 18, 12);
+    
+    this.endScreen.add(graphics);
+    
+    // Death reason (smaller, at bottom)
+    const deathReason = this.add.text(640, 560, reason, {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '18px',
+      color: '#664444',
+    }).setOrigin(0.5);
+    this.endScreen.add(deathReason);
+    
+    const prompt = this.add.text(640, 620, 'SPACE or CLICK to return to menu', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '16px',
+      color: '#444444',
+    }).setOrigin(0.5);
+    this.endScreen.add(prompt);
+    
+    this.tweens.add({
+      targets: prompt,
+      alpha: 0.3,
+      duration: 1000,
+      yoyo: true,
+      repeat: -1,
+    });
+    
+    this.endScreen.setVisible(true);
+    
+    console.log(`🌙 Endless Night 6 ended. Survived ${survivalStr} (${survivalDays} days)`);
+    
+    // Return to menu on space or click
+    this.input.keyboard?.once('keydown-SPACE', () => {
+      if (shouldPlaySadChime) {
+        this.playGiveUpSound();
+      }
+      this.scene.start('BootScene');
+    });
+    this.input.once('pointerdown', () => {
+      if (shouldPlaySadChime) {
+        this.playGiveUpSound();
+      }
+      this.scene.start('BootScene');
+    });
+  }
+  
   private victory(): void {
     if (this.gameStatus !== 'PLAYING') return;
     
@@ -8928,7 +9871,38 @@ export class GameScene extends Phaser.Scene {
     // Update HUD to show 06 AM (consistent with gameplay display)
     this.timeText.setText('06 AM');
     
-    // Show end screen
+    // Handle different victory scenarios
+    if (this.isCustomNightMode) {
+      // Custom Night - just show standard victory, no save updates
+      this.showStandardVictoryScreen();
+    } else if (this.isBadEndingNight6) {
+      // Survived Night 6 (bad ending path) - show dark ending
+      updateSaveOnNight6Complete();
+      this.showDarkEnding();
+    } else {
+      // Story nights 1-5 - save progress and check for endings
+      const { triggeredBadEnding, triggeredGoodEnding } = updateSaveOnVictory(
+        this.nightNumber, 
+        this.sessionDestructions
+      );
+      
+      if (triggeredGoodEnding) {
+        // Night 5 complete with <5 destructions - Good ending!
+        this.showGoodEnding();
+      } else if (triggeredBadEnding) {
+        // Night 5 complete with 5+ destructions - Bad ending path
+        this.showBadEndingIntro();
+      } else {
+        // Nights 1-4: standard victory screen
+        this.showStandardVictoryScreen();
+      }
+    }
+  }
+  
+  /**
+   * Show standard night complete victory screen
+   */
+  private showStandardVictoryScreen(): void {
     this.endScreen.removeAll(true);
     
     const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.9);
@@ -8942,7 +9916,8 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.endScreen.add(time);
     
-    const title = this.add.text(640, 300, `NIGHT ${this.nightNumber} COMPLETE!`, {
+    const displayNight = this.nightNumber === 7 ? 'CUSTOM' : this.nightNumber;
+    const title = this.add.text(640, 300, `NIGHT ${displayNight} COMPLETE!`, {
       fontFamily: 'Courier New, monospace',
       fontSize: '48px',
       color: '#00ff00',
@@ -8983,7 +9958,7 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.endScreen.add(levelText);
     
-    const menuPrompt = this.add.text(640, 580, 'SPACE or CLICK to return to menu', {
+    const menuPrompt = this.add.text(640, 580, 'SPACE or CLICK to continue', {
       fontFamily: 'Courier New, monospace',
       fontSize: '20px',
       color: '#888888',
@@ -9001,6 +9976,345 @@ export class GameScene extends Phaser.Scene {
     this.endScreen.setVisible(true);
     
     // Return to menu on space or click
+    this.input.keyboard?.once('keydown-SPACE', () => {
+      this.scene.start('BootScene');
+    });
+    this.input.once('pointerdown', () => {
+      this.scene.start('BootScene');
+    });
+  }
+  
+  /**
+   * Show good ending - peaceful scene with all mercs celebrating
+   */
+  private showGoodEnding(): void {
+    this.playGoodEndingSound();  // Triumphant fanfare
+    
+    this.endScreen.removeAll(true);
+    
+    const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.95);
+    this.endScreen.add(overlay);
+    
+    // Peaceful blue/warm gradient feel
+    const gradientOverlay = this.add.rectangle(640, 360, 1280, 720, 0x1a2a4a, 0.3);
+    this.endScreen.add(gradientOverlay);
+    
+    const time = this.add.text(640, 80, '6:00 AM', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '48px',
+      color: '#ffcc00',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.endScreen.add(time);
+    
+    const title = this.add.text(640, 140, 'The nightmare is over.', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '32px',
+      color: '#88ff88',
+    }).setOrigin(0.5);
+    this.endScreen.add(title);
+    
+    const subtitle = this.add.text(640, 180, 'You held the line, Engineer.', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '24px',
+      color: '#66cc66',
+    }).setOrigin(0.5);
+    this.endScreen.add(subtitle);
+    
+    // Draw all 9 mercs celebrating (simplified silhouettes)
+    this.drawCelebratingMercs();
+    
+    const theEnd = this.add.text(640, 520, 'THE END', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '56px',
+      color: '#ffffff',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.endScreen.add(theEnd);
+    
+    // Credits
+    const credits = this.add.text(640, 590, '- Thank you for playing -', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '18px',
+      color: '#888888',
+    }).setOrigin(0.5);
+    this.endScreen.add(credits);
+    
+    const prompt = this.add.text(640, 650, 'SPACE or CLICK to return to menu', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '16px',
+      color: '#555555',
+    }).setOrigin(0.5);
+    this.endScreen.add(prompt);
+    
+    this.tweens.add({
+      targets: prompt,
+      alpha: 0.3,
+      duration: 1000,
+      yoyo: true,
+      repeat: -1,
+    });
+    
+    this.endScreen.setVisible(true);
+    
+    this.input.keyboard?.once('keydown-SPACE', () => {
+      this.scene.start('BootScene');
+    });
+    this.input.once('pointerdown', () => {
+      this.scene.start('BootScene');
+    });
+  }
+  
+  /**
+   * Draw celebrating mercs for good ending
+   */
+  private drawCelebratingMercs(): void {
+    const graphics = this.add.graphics();
+    const baseY = 380;
+    const spacing = 120;
+    const startX = 640 - (spacing * 4);
+    
+    // Simple celebratory silhouettes for each merc
+    const mercColors = [
+      0x9966cc, // Scout
+      0xaa5544, // Soldier  
+      0x44cc44, // Demoman
+      0xaa7744, // Heavy
+      0x5588cc, // Sniper
+      0x666677, // Spy
+      0xff6622, // Pyro
+      0x4488ff, // Medic
+      0xff6600, // Engineer (center, golden)
+    ];
+    
+    mercColors.forEach((color, i) => {
+      const x = startX + i * spacing;
+      const isEngineer = i === 8;
+      
+      // Glow behind
+      graphics.fillStyle(color, 0.2);
+      graphics.fillCircle(x, baseY - 20, 50);
+      
+      // Body silhouette
+      graphics.fillStyle(color, 0.8);
+      graphics.fillCircle(x, baseY - 40, 25); // Head
+      graphics.fillRoundedRect(x - 20, baseY - 10, 40, 50, 8); // Body
+      
+      // Arms up in celebration
+      graphics.fillRect(x - 35, baseY - 30, 15, 35); // Left arm
+      graphics.fillRect(x + 20, baseY - 30, 15, 35); // Right arm
+      
+      // Engineer gets special treatment
+      if (isEngineer) {
+        graphics.fillStyle(0xffcc00, 0.5);
+        graphics.fillCircle(x, baseY - 20, 60);
+      }
+    });
+    
+    this.endScreen.add(graphics);
+  }
+  
+  /**
+   * Show bad ending intro - Medic gone mad screen before Night 6
+   */
+  private showBadEndingIntro(): void {
+    this.playBadEndingIntroSound();  // Ominous drone
+    
+    this.endScreen.removeAll(true);
+    
+    const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.98);
+    this.endScreen.add(overlay);
+    
+    // Red tint for ominous feel
+    const redOverlay = this.add.rectangle(640, 360, 1280, 720, 0x330000, 0.3);
+    this.endScreen.add(redOverlay);
+    
+    // Story text - appearing line by line
+    const lines = [
+      'The constant gunfire...',
+      'The explosions...',
+      '',
+      'The sentry\'s destruction echoed through',
+      'the base, night after night.',
+      '',
+      'Medic couldn\'t take it anymore.',
+      '',
+      'He\'s thrown himself to the monsters.',
+      'He\'s become one of them.',
+    ];
+    
+    let y = 180;
+    lines.forEach((line, i) => {
+      if (line === '') {
+        y += 20;
+        return;
+      }
+      
+      const text = this.add.text(640, y, line, {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '24px',
+        color: i >= 6 ? '#ff4444' : '#aaaaaa',
+      }).setOrigin(0.5).setAlpha(0);
+      this.endScreen.add(text);
+      
+      // Fade in each line
+      this.tweens.add({
+        targets: text,
+        alpha: 1,
+        duration: 500,
+        delay: i * 400,
+      });
+      
+      y += 35;
+    });
+    
+    // Night 6 announcement
+    const night6 = this.add.text(640, 550, 'NIGHT 6', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '64px',
+      color: '#ff0000',
+      fontStyle: 'bold',
+    }).setOrigin(0.5).setAlpha(0);
+    this.endScreen.add(night6);
+    
+    this.tweens.add({
+      targets: night6,
+      alpha: 1,
+      duration: 1000,
+      delay: 4500,
+    });
+    
+    const prompt = this.add.text(640, 620, 'SPACE or CLICK to begin', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '18px',
+      color: '#666666',
+    }).setOrigin(0.5).setAlpha(0);
+    this.endScreen.add(prompt);
+    
+    this.tweens.add({
+      targets: prompt,
+      alpha: 1,
+      duration: 500,
+      delay: 5500,
+      onComplete: () => {
+        this.tweens.add({
+          targets: prompt,
+          alpha: 0.3,
+          duration: 800,
+          yoyo: true,
+          repeat: -1,
+        });
+      }
+    });
+    
+    this.endScreen.setVisible(true);
+    
+    // Start Night 6 on input (after delay)
+    this.time.delayedCall(5500, () => {
+      const startNight6 = () => {
+        this.cameras.main.fadeOut(800, 0, 0, 0);
+        this.time.delayedCall(800, () => {
+          this.scene.start('GameScene', { 
+            night: 6,
+            isBadEndingNight6: true,
+            customEnemies: {
+              scout: true,
+              soldier: true,
+              demoman: true,
+              heavy: true,
+              sniper: true,
+              spy: true,
+              pyro: true,
+              medic: true
+            }
+          });
+        });
+      };
+      
+      this.input.keyboard?.once('keydown-SPACE', startNight6);
+      this.input.once('pointerdown', startNight6);
+    });
+  }
+  
+  /**
+   * Show dark ending after surviving Night 6
+   */
+  private showDarkEnding(): void {
+    this.endScreen.removeAll(true);
+    
+    const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.98);
+    this.endScreen.add(overlay);
+    
+    const time = this.add.text(640, 150, '6:00 AM', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '56px',
+      color: '#aa8800',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.endScreen.add(time);
+    
+    const survived = this.add.text(640, 230, 'You survived...', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '32px',
+      color: '#888888',
+    }).setOrigin(0.5);
+    this.endScreen.add(survived);
+    
+    const cost = this.add.text(640, 280, 'but at what cost?', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '28px',
+      color: '#666666',
+    }).setOrigin(0.5);
+    this.endScreen.add(cost);
+    
+    // Lonely Engineer silhouette
+    const graphics = this.add.graphics();
+    
+    // Dark room with single figure
+    graphics.fillStyle(0x111122, 0.8);
+    graphics.fillRect(440, 320, 400, 200);
+    
+    // Engineer silhouette - alone, hunched
+    graphics.fillStyle(0x333344, 1);
+    graphics.fillCircle(640, 380, 30); // Head
+    graphics.fillRoundedRect(610, 400, 60, 80, 10); // Body
+    // Hardhat
+    graphics.fillStyle(0x444455, 1);
+    graphics.fillEllipse(640, 360, 40, 15);
+    
+    // Single dim light above
+    graphics.fillStyle(0x554422, 0.3);
+    graphics.fillCircle(640, 320, 80);
+    graphics.fillStyle(0x665533, 0.5);
+    graphics.fillCircle(640, 340, 40);
+    
+    this.endScreen.add(graphics);
+    
+    const theEnd = this.add.text(640, 550, 'THE END', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '48px',
+      color: '#553333',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.endScreen.add(theEnd);
+    
+    const prompt = this.add.text(640, 650, 'SPACE or CLICK to return to menu', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '16px',
+      color: '#444444',
+    }).setOrigin(0.5);
+    this.endScreen.add(prompt);
+    
+    this.tweens.add({
+      targets: prompt,
+      alpha: 0.3,
+      duration: 1000,
+      yoyo: true,
+      repeat: -1,
+    });
+    
+    this.endScreen.setVisible(true);
+    
     this.input.keyboard?.once('keydown-SPACE', () => {
       this.scene.start('BootScene');
     });
@@ -9028,10 +10342,38 @@ export class GameScene extends Phaser.Scene {
       this.timeAccumulator -= GAME_CONSTANTS.MS_PER_GAME_MINUTE;
       this.gameMinutes++;
       
-      // Check for victory (6:00 AM = 360 minutes)
+      // Track total survival time for endless mode
+      if (this.isBadEndingNight6) {
+        this.endlessSurvivalMinutes++;
+      }
+      
+      // Check for 6:00 AM (360 minutes)
       if (this.gameMinutes >= 360) {
-        this.victory();
-        return;
+        if (this.isBadEndingNight6) {
+          // ENDLESS MODE: Don't end the night, play bell and continue
+          if (!this.hasReached6AM) {
+            this.hasReached6AM = true;
+            this.play6AMBellChime();
+            this.showAlert('6:00 AM... but the night continues', 0xaa8800);
+          }
+          
+          // Track hours after 6 AM for difficulty scaling (every 60 game minutes = 1 hour)
+          const minutesAfter6AM = this.gameMinutes - 360;
+          this.hoursAfter6AM = Math.floor(minutesAfter6AM / 60);
+          
+          // Roll over to next day at midnight (720 minutes = 12 hours after midnight = next day)
+          // Since we start at 12 AM (0), 6 AM is 360, next 12 AM is 720
+          if (this.gameMinutes >= 720) {
+            this.gameMinutes = 0;  // Reset to 12:00 AM
+            this.endlessDay++;
+            this.showAlert(`DAY ${this.endlessDay}`, 0xff4444);
+            console.log(`🌙 Endless Night 6 - Day ${this.endlessDay} begins!`);
+          }
+        } else {
+          // Normal night - victory!
+          this.victory();
+          return;
+        }
       }
     }
     
@@ -9090,9 +10432,21 @@ export class GameScene extends Phaser.Scene {
   }
   
   private updateEnemies(delta: number): void {
+    // Calculate difficulty scaling for endless Night 6
+    // Timer reduction makes enemies act as if more time has passed
+    const timerReduction = this.getEndlessTimerReduction();
+    const demoSpeedMultiplier = this.getDemomanSpeedMultiplier();
+    const pyroTeleportReduction = this.getPyroTeleportReduction();
+    
+    // Scale factor for Scout/Soldier/Heavy/Sniper (faster = higher effective delta)
+    // Each hour after 6 AM, reduce timers by 1 second = enemies effectively get 1 second "ahead"
+    // We achieve this by scaling delta slightly higher
+    const timerScaleFactor = timerReduction > 0 ? 1 + (timerReduction / 10000) : 1;  // Gradual scaling
+    
     // Update Scout (if enabled)
     if (this.isScoutEnabled()) {
-      const scoutResult = this.scout.update(delta);
+      const scoutDelta = delta * timerScaleFactor;
+      const scoutResult = this.scout.update(scoutDelta);
       
       if (scoutResult.reachedIntel) {
         // Scout reached Intel Room
@@ -9138,7 +10492,8 @@ export class GameScene extends Phaser.Scene {
     
     // Update Soldier (if enabled)
     if (this.isSoldierEnabled()) {
-      const soldierResult = this.soldier.update(delta);
+      const soldierDelta = delta * timerScaleFactor;
+      const soldierResult = this.soldier.update(soldierDelta);
       
       if (soldierResult.reachedIntel) {
         // Soldier reached Intel Room
@@ -9197,11 +10552,17 @@ export class GameScene extends Phaser.Scene {
       
       this.demoman.setBeingWatched(isWatchingHead);
       
-      const demoResult = this.demoman.update(delta);
+      // Demoman gets progressively faster in endless mode (1.2x, 1.4x, 1.6x, etc.)
+      const demoDelta = delta * demoSpeedMultiplier;
+      const demoResult = this.demoman.update(demoDelta);
       
       // If Demoman's eye just lit (charge warning), evacuate Pyro from hallways
       if (demoResult.eyeJustLit && this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
-        this.pyro.onDemomanChargeStart();
+        // Pass the charging direction so Pyro won't teleport back into that hallway
+        const chargingHallway = this.demoman.activeEye;
+        if (chargingHallway === 'LEFT' || chargingHallway === 'RIGHT') {
+          this.pyro.onDemomanChargeStart(chargingHallway);
+        }
       }
       
       // Update Demoman head visibility in Intel room
@@ -9279,7 +10640,7 @@ export class GameScene extends Phaser.Scene {
     
     // Update Heavy, Sniper, Spy, Pyro (if enabled)
     if (this.isHeavyEnabled() || this.isSniperEnabled() || this.isSpyEnabled() || this.isPyroEnabled()) {
-      this.updateHeavyAndSniper(delta);
+      this.updateHeavyAndSniper(delta, timerScaleFactor, pyroTeleportReduction);
     }
     
     // Update teleport danger check (always runs, regardless of which enemies are enabled)
@@ -9288,8 +10649,10 @@ export class GameScene extends Phaser.Scene {
   
   /**
    * Update Heavy (Night 3+) and Sniper (Night 4+) enemies
+   * @param timerScaleFactor - Speed multiplier for endless Night 6 difficulty scaling
+   * @param pyroTeleportReduction - Pyro teleport interval reduction (ms) for endless mode
    */
-  private updateHeavyAndSniper(delta: number): void {
+  private updateHeavyAndSniper(delta: number, timerScaleFactor: number = 1, pyroTeleportReduction: number = 0): void {
     const heavyEnabled = this.isHeavyEnabled();
     const sniperEnabled = this.isSniperEnabled();
     // Track if player is watching Heavy/Sniper on camera
@@ -9390,7 +10753,9 @@ export class GameScene extends Phaser.Scene {
     
     // Update Heavy (if enabled)
     if (heavyEnabled) {
-      const heavyResult = this.heavy.update(delta);
+      // Heavy moves faster in endless mode
+      const heavyDelta = delta * timerScaleFactor;
+      const heavyResult = this.heavy.update(heavyDelta);
       
       if (heavyResult.destroyedCamera) {
       // Camera destruction is handled by callback
@@ -9422,7 +10787,9 @@ export class GameScene extends Phaser.Scene {
         }
       }
       
-      const sniperResult = this.sniper.update(delta);
+      // Sniper moves and charges faster in endless mode
+      const sniperDelta = delta * timerScaleFactor;
+      const sniperResult = this.sniper.update(sniperDelta);
       
       if (sniperResult.destroyedCamera) {
         // Camera destruction is handled by callback
@@ -9525,7 +10892,9 @@ export class GameScene extends Phaser.Scene {
         this.pyroMaskRightBurn?.setAlpha(0);
       }
       
-      const pyroResult = this.pyro.update(delta, playerInIntel);
+      // Pyro teleports more frequently in endless mode
+      const pyroDelta = delta * (1 + (pyroTeleportReduction / 5000));  // Gradual increase
+      const pyroResult = this.pyro.update(pyroDelta, playerInIntel);
       
       // Handle match just lit warning
       if (pyroResult.matchJustLit) {
@@ -9564,6 +10933,9 @@ export class GameScene extends Phaser.Scene {
     if (this.isMedicEnabled() && this.medic && !this.medic.isForceDespawned()) {
       this.medic.update(delta);
     }
+    
+    // Update Medic ghost apparition (Endless Night 6 only)
+    this.updateMedicGhost(delta);
     
     // Update camera repair timers
     const now = Date.now();
@@ -9925,6 +11297,240 @@ export class GameScene extends Phaser.Scene {
           glowGraphics.setVisible(true);
         }
       }
+    }
+  }
+  
+  // ============================================
+  // MEDIC GHOST APPARITION (ENDLESS NIGHT 6)
+  // ============================================
+  
+  /**
+   * Update Medic ghost apparition logic
+   * Ghost appears randomly in doorways when Medic isn't actively ubering
+   * Purely psychological - harmless, translucent, disappears when light shines on it
+   * 
+   * Ghost appears in:
+   * - Endless Night 6: when Medic isn't actively Übering
+   * - Custom Night: when Medic has no valid Über targets (Scout/Soldier/Demoman not enabled)
+   */
+  private updateMedicGhost(delta: number): void {
+    // Check if Medic is enabled
+    if (!this.isMedicEnabled()) {
+      this.medicGhostVisual?.setVisible(false);
+      return;
+    }
+    
+    // Check if Medic has any valid Über targets in Custom Night
+    const hasUberTargets = this.customEnemies && 
+      (this.customEnemies.scout || this.customEnemies.soldier || this.customEnemies.demoman);
+    
+    // Ghost is active in:
+    // 1. Endless Night 6 (bad ending) - always when not Übering
+    // 2. Custom Night - only when Medic has NO valid Über targets (ghost-only mode)
+    const ghostModeActive = this.isBadEndingNight6 || (this.isCustomNightMode && !hasUberTargets);
+    
+    if (!ghostModeActive) {
+      this.medicGhostVisual?.setVisible(false);
+      return;
+    }
+    
+    // Check if Medic is currently ubering someone (ghost won't appear while ubering)
+    const medicIsUbering = this.medic && this.medic.getCurrentTarget() !== null;
+    
+    if (this.medicGhostActive) {
+      // Check if player is shining light on the ghost - it vanishes instantly!
+      const isLightOnGhost = this.sentry.isWrangled && 
+        ((this.medicGhostSide === 'LEFT' && this.sentry.aimedDoor === 'LEFT') ||
+         (this.medicGhostSide === 'RIGHT' && this.sentry.aimedDoor === 'RIGHT'));
+      
+      if (isLightOnGhost) {
+        // Ghost flickers and vanishes when light hits it
+        this.medicGhostActive = false;
+        this.medicGhostSide = null;
+        this.medicGhostVisual.setVisible(false);
+        this.medicGhostCooldown = 60000;  // 60 sec cooldown (max once per hour)
+        this.stopMedicGhostScream();  // Stop the scream immediately!
+        console.log('👻 Medic ghost dispersed by light!');
+        return;
+      }
+      
+      // Ghost is currently visible - update timer
+      this.medicGhostTimer += delta;
+      
+      // Fade out effect as ghost disappears
+      const fadeProgress = this.medicGhostTimer / this.medicGhostDuration;
+      const alpha = 0.35 * (1 - fadeProgress * 0.5);  // Fade from 0.35 to ~0.18
+      this.medicGhostVisual.setAlpha(alpha);
+      
+      // Ghost duration complete - hide it
+      if (this.medicGhostTimer >= this.medicGhostDuration) {
+        this.medicGhostActive = false;
+        this.medicGhostSide = null;
+        this.medicGhostVisual.setVisible(false);
+        this.medicGhostCooldown = 60000;  // 60 sec cooldown (max once per hour)
+        this.stopMedicGhostScream();  // Clean up audio
+        console.log('👻 Medic ghost vanished');
+      }
+    } else {
+      // Ghost not active - check if we should spawn one
+      this.medicGhostCooldown -= delta;
+      
+      if (this.medicGhostCooldown <= 0 && !medicIsUbering) {
+        // Spawn ghost when cooldown is ready (max once per hour)
+        this.spawnMedicGhost();
+      }
+    }
+    
+    // Position ghost in correct doorway
+    if (this.medicGhostActive && this.medicGhostVisual) {
+      const height = 720;
+      if (this.medicGhostSide === 'LEFT') {
+        this.medicGhostVisual.setPosition(120, height / 2 - 30);
+      } else {
+        this.medicGhostVisual.setPosition(1280 - 120, height / 2 - 30);
+      }
+      this.medicGhostVisual.setVisible(true);
+    }
+  }
+  
+  /**
+   * Spawn a Medic ghost in a random doorway
+   */
+  private spawnMedicGhost(): void {
+    this.medicGhostActive = true;
+    this.medicGhostSide = Math.random() < 0.5 ? 'LEFT' : 'RIGHT';
+    this.medicGhostTimer = 0;
+    this.medicGhostDuration = 2500 + Math.random() * 2000;  // 2.5-4.5 seconds
+    this.medicGhostVisual.setAlpha(0.35);
+    
+    // Play creepy scream when ghost appears!
+    this.playMedicGhostScream();
+    
+    console.log(`👻 Medic ghost appeared in ${this.medicGhostSide} doorway!`);
+  }
+  
+  /**
+   * Play creepy Medic ghost scream - jarring and lasts full duration
+   */
+  private playMedicGhostScream(): void {
+    // Stop any existing scream first
+    this.stopMedicGhostScream();
+    
+    try {
+      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      this.medicGhostAudioContext = audioContext;
+      this.medicGhostOscillators = [];
+      
+      const duration = 3.5;  // Full ghost duration
+      
+      // LOUD initial shriek - the jumpscare
+      const shriek = audioContext.createOscillator();
+      const shriekGain = audioContext.createGain();
+      shriek.connect(shriekGain);
+      shriekGain.connect(audioContext.destination);
+      
+      shriek.type = 'sawtooth';
+      shriek.frequency.setValueAtTime(1800, audioContext.currentTime);
+      shriek.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.8);
+      
+      shriekGain.gain.setValueAtTime(0.35, audioContext.currentTime);  // LOUD
+      shriekGain.gain.exponentialRampToValueAtTime(0.15, audioContext.currentTime + 0.3);
+      shriekGain.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + duration);
+      
+      shriek.start(audioContext.currentTime);
+      shriek.stop(audioContext.currentTime + duration);
+      this.medicGhostOscillators.push(shriek);
+      
+      // Distorted warbling layer - unsettling
+      const warble = audioContext.createOscillator();
+      const warbleGain = audioContext.createGain();
+      const lfo = audioContext.createOscillator();
+      const lfoGain = audioContext.createGain();
+      
+      lfo.connect(lfoGain);
+      lfoGain.connect(warble.frequency);
+      warble.connect(warbleGain);
+      warbleGain.connect(audioContext.destination);
+      
+      warble.type = 'square';
+      warble.frequency.value = 600;
+      lfo.type = 'sine';
+      lfo.frequency.value = 8;  // Fast vibrato
+      lfoGain.gain.value = 200;  // Wide pitch variation
+      
+      warbleGain.gain.setValueAtTime(0.12, audioContext.currentTime);
+      warbleGain.gain.setValueAtTime(0.12, audioContext.currentTime + duration * 0.7);
+      warbleGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+      
+      lfo.start(audioContext.currentTime);
+      warble.start(audioContext.currentTime);
+      lfo.stop(audioContext.currentTime + duration);
+      warble.stop(audioContext.currentTime + duration);
+      this.medicGhostOscillators.push(lfo, warble);
+      
+      // Deep rumbling drone - threatening
+      const drone = audioContext.createOscillator();
+      const droneGain = audioContext.createGain();
+      drone.connect(droneGain);
+      droneGain.connect(audioContext.destination);
+      
+      drone.type = 'sawtooth';
+      drone.frequency.value = 55;
+      
+      droneGain.gain.setValueAtTime(0.2, audioContext.currentTime);
+      droneGain.gain.setValueAtTime(0.2, audioContext.currentTime + duration * 0.8);
+      droneGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+      
+      drone.start(audioContext.currentTime);
+      drone.stop(audioContext.currentTime + duration);
+      this.medicGhostOscillators.push(drone);
+      
+      // Random glitchy pops throughout
+      for (let i = 0; i < 6; i++) {
+        const pop = audioContext.createOscillator();
+        const popGain = audioContext.createGain();
+        pop.connect(popGain);
+        popGain.connect(audioContext.destination);
+        
+        pop.type = 'square';
+        pop.frequency.value = 100 + Math.random() * 2000;
+        
+        const t = audioContext.currentTime + 0.2 + Math.random() * (duration - 0.5);
+        popGain.gain.setValueAtTime(0.15, t);
+        popGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+        
+        pop.start(t);
+        pop.stop(t + 0.1);
+        this.medicGhostOscillators.push(pop);
+      }
+      
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
+   * Stop the Medic ghost scream immediately
+   */
+  private stopMedicGhostScream(): void {
+    try {
+      // Stop all tracked oscillators
+      for (const osc of this.medicGhostOscillators) {
+        try {
+          osc.stop();
+        } catch (e) {
+          // Already stopped
+        }
+      }
+      this.medicGhostOscillators = [];
+      
+      // Close the audio context
+      if (this.medicGhostAudioContext) {
+        this.medicGhostAudioContext.close();
+        this.medicGhostAudioContext = null;
+      }
+    } catch (e) {
+      // Ignore errors
     }
   }
 }

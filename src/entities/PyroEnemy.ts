@@ -27,6 +27,7 @@ export class PyroEnemy {
   private teleportTimer: number = 0;
   private lightExposureTimer: number = 0;  // Time player has been shining light on Pyro in hallway
   private blockedHallway: 'LEFT' | 'RIGHT' | null = null;  // Hallway being lit by player (can't teleport there)
+  private demomanChargingHallway: 'LEFT' | 'RIGHT' | null = null;  // Hallway Demoman is charging toward
   
   // Intel mode properties
   private isInIntel: boolean = false;
@@ -216,6 +217,7 @@ export class PyroEnemy {
    * Teleport to a random room (Room mode)
    * Respects blocked hallways (player is shining light there)
    * Also respects blocked destination (player is teleporting there)
+   * Also avoids hallways where Demoman is charging
    */
   public teleportToRandomRoom(): void {
     // Filter out current room and any blocked hallway
@@ -225,6 +227,13 @@ export class PyroEnemy {
     if (this.blockedHallway === 'LEFT') {
       availableRooms = availableRooms.filter(r => r !== 'LEFT_HALL');
     } else if (this.blockedHallway === 'RIGHT') {
+      availableRooms = availableRooms.filter(r => r !== 'RIGHT_HALL');
+    }
+    
+    // Don't teleport into a hallway where Demoman is charging
+    if (this.demomanChargingHallway === 'LEFT') {
+      availableRooms = availableRooms.filter(r => r !== 'LEFT_HALL');
+    } else if (this.demomanChargingHallway === 'RIGHT') {
       availableRooms = availableRooms.filter(r => r !== 'RIGHT_HALL');
     }
     
@@ -253,12 +262,26 @@ export class PyroEnemy {
   /**
    * Called when Demoman starts his charge (eye lights up)
    * If Pyro is in a hallway, he temporarily vanishes to avoid blocking Demo's path
+   * @param chargingHallway - Which hallway Demoman is charging toward (blocks teleporting there)
    */
-  public onDemomanChargeStart(): void {
-    if (this.isInHallway()) {
+  public onDemomanChargeStart(chargingHallway: 'LEFT' | 'RIGHT'): void {
+    // Block Pyro from teleporting into the charging hallway
+    this.demomanChargingHallway = chargingHallway;
+    
+    // If Pyro is currently in that hallway, evacuate immediately
+    if ((chargingHallway === 'LEFT' && this.currentNode === 'LEFT_HALL') ||
+        (chargingHallway === 'RIGHT' && this.currentNode === 'RIGHT_HALL')) {
       console.log('🔥 Pyro vanished from hallway (Demoman charging)');
       this.teleportToNonHallway();
     }
+  }
+  
+  /**
+   * Called when Demoman finishes charging (head teleports away)
+   * Clears the blocked hallway so Pyro can teleport there again
+   */
+  public onDemomanChargeEnd(): void {
+    this.demomanChargingHallway = null;
   }
   
   /**

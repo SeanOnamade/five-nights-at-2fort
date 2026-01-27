@@ -1,16 +1,35 @@
 import Phaser from 'phaser';
 import { isMobileDevice } from '../utils/mobile';
+import { 
+  SaveData, 
+  loadSave, 
+  createNewSave, 
+  deleteSave, 
+  hasSave, 
+  unlockEverything 
+} from '../utils/saveData';
 
 /**
  * BootScene - Main Menu / Title Screen
  * 
  * Displays the game title, night selection, and allows player to start the game.
+ * 
+ * Menu States:
+ * 1. No save: "NEW GAME" only
+ * 2. Save exists, incomplete: "NEW GAME" + "CONTINUE"  
+ * 3. Game completed: Night selection (1-5, 6) + Custom Night
  */
 export class BootScene extends Phaser.Scene {
   private selectedNight: number = 1;
   private tutorialContainer!: Phaser.GameObjects.Container;
   private extrasContainer!: Phaser.GameObjects.Container;
+  private endingsContainer!: Phaser.GameObjects.Container;  // Endings preview (dev mode)
   private isMobile: boolean = false;
+  private saveData: SaveData | null = null;
+  
+  // Developer password tracking
+  private devPasswordBuffer: string = '';
+  private readonly DEV_PASSWORD = '2FORT';
   
   constructor() {
     super({ key: 'BootScene' });
@@ -36,8 +55,16 @@ export class BootScene extends Phaser.Scene {
     // Detect mobile device
     this.isMobile = isMobileDevice();
     
-    // Reset selected night to 1 when returning to menu
-    this.selectedNight = 1;
+    // Load save data
+    this.saveData = loadSave();
+    const hasBeatenNight5 = this.saveData?.hasBeatenNight5 || false;
+    const hasExistingSave = hasSave();
+    
+    // Reset selected night based on save state
+    this.selectedNight = this.saveData?.currentNight || 1;
+    
+    // Reset dev password buffer
+    this.devPasswordBuffer = '';
     
     // Clear loading text
     this.children.removeAll();
@@ -96,9 +123,6 @@ export class BootScene extends Phaser.Scene {
       fontSize: '13px',
       color: '#555566',
     }).setOrigin(0.5);
-    
-    // Start button text (declared early so night buttons can reference it)
-    let startText: Phaser.GameObjects.Text;
     
     // ===== CONTROLS LEGEND (left side with background) =====
     // Only show keyboard controls on desktop
@@ -175,24 +199,6 @@ export class BootScene extends Phaser.Scene {
       });
     }
     
-    // ===== NIGHT SELECTION (bottom area) =====
-    const nightSelY = 580;
-    
-    this.add.text(width / 2, nightSelY - 50, 'SELECT NIGHT', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#446644',
-    }).setOrigin(0.5);
-    
-    // Night buttons - compact row at bottom
-    const nightButtons: Phaser.GameObjects.Container[] = [];
-    const nights = [1, 2, 3, 4, 5, 6];
-    const nightBtnWidth = 60;
-    const nightBtnGap = 12;
-    const totalNightWidth = nights.length * nightBtnWidth + (nights.length - 1) * nightBtnGap;
-    const buttonStartX = (width - totalNightWidth) / 2 + nightBtnWidth / 2;
-    const buttonY = nightSelY;
-    
     // Custom night enemy toggles - load from localStorage or default to OFF
     const savedSettings = localStorage.getItem('customNightEnemies');
     const customNightEnemies = savedSettings ? JSON.parse(savedSettings) : {
@@ -210,250 +216,62 @@ export class BootScene extends Phaser.Scene {
       customNightEnemies.medic = false;
     }
     
-    // Custom night UI container (created later, shown when N6 selected)
+    // Custom night UI container (created later, shown when Custom Night selected)
     let customNightUI: Phaser.GameObjects.Container | null = null;
     
-    nights.forEach((night, index) => {
-      const x = buttonStartX + index * (nightBtnWidth + nightBtnGap);
-      const isCustomNight = night === 6;
-      const isUnlocked = night <= 6;
-      
-      // Compact green color scheme
-      const glowColor = 0x44ff44;
-      const bgColor = 0x0f1a0f;
-      const strokeColor = 0x336633;
-      const textColor = '#44aa44';
-      
-      // Button glow (for selected)
-      const btnGlow = this.add.rectangle(x, buttonY, nightBtnWidth + 4, 44, glowColor, 0);
-      
-      // Button background - compact
-      const btnBg = this.add.rectangle(x, buttonY, nightBtnWidth, 40, isUnlocked ? bgColor : 0x111111);
-      btnBg.setStrokeStyle(2, isUnlocked ? strokeColor : 0x222222);
-      
-      // Night number or "C" for custom
-      const nightNum = this.add.text(x, buttonY, isCustomNight ? 'C' : `${night}`, {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '22px',
-        color: isUnlocked ? textColor : '#333333',
-        fontStyle: 'bold',
-      }).setOrigin(0.5);
-      
-      // No label - just the number/letter
-      
-      const container = this.add.container(0, 0, [btnGlow, btnBg, nightNum]);
-      nightButtons.push(container);
-      
-      if (isUnlocked) {
-        btnBg.setInteractive({ useHandCursor: true });
-        
-        btnBg.on('pointerover', () => {
-          btnBg.setFillStyle(0x1a331a);
-          btnBg.setStrokeStyle(2, 0x55aa55);
-          nightNum.setColor('#66ff66');
-        });
-        
-        btnBg.on('pointerout', () => {
-          if (this.selectedNight === night) {
-            btnBg.setFillStyle(0x1a2a1a);
-            btnBg.setStrokeStyle(3, 0x44ff44);
-            btnGlow.setFillStyle(0x44ff44, 0.08);
-            nightNum.setColor('#66ff66');
-          } else {
-            btnBg.setFillStyle(0x112211);
-            btnBg.setStrokeStyle(2, 0x336633);
-            btnGlow.setFillStyle(0x44ff44, 0);
-            nightNum.setColor('#44aa44');
-          }
-        });
-        
-        btnBg.on('pointerdown', () => {
-          this.selectedNight = night;
-          startText.setText(isCustomNight ? '▶ START CUSTOM NIGHT' : `▶ START NIGHT ${night}`);
-          
-          // Show/hide custom night UI
-          if (customNightUI) {
-            customNightUI.setVisible(isCustomNight);
-          }
-          
-          // Update all buttons
-          nightButtons.forEach((btn, i) => {
-            const glow = btn.list[0] as Phaser.GameObjects.Rectangle;
-            const bg = btn.list[1] as Phaser.GameObjects.Rectangle;
-            const num = btn.list[2] as Phaser.GameObjects.Text;
-            const isThisCustom = nights[i] === 6;
-            
-            if (nights[i] <= 6) {
-              if (i === index) {
-                // All buttons use green when selected (including custom)
-                bg.setFillStyle(0x1a2a1a);
-                bg.setStrokeStyle(3, 0x44ff44);
-                glow.setFillStyle(0x44ff44, 0.08);
-                num.setColor('#66ff66');
-              } else {
-                // All buttons use green when not selected
-                bg.setFillStyle(0x112211);
-                bg.setStrokeStyle(2, 0x336633);
-                glow.setFillStyle(0x44ff44, 0);
-                num.setColor('#44aa44');
-              }
-            }
-          });
-        });
-        
-        // Select night 1 by default
-        if (night === 1) {
-          btnBg.setFillStyle(0x1a2a1a);
-          btnBg.setStrokeStyle(3, 0x44ff44);
-          btnGlow.setFillStyle(0x44ff44, 0.08);
-          nightNum.setColor('#66ff66');
-        }
-      }
-    });
+    // ===== MENU BUTTONS (center area) =====
+    // Different menu layouts based on game state
     
-    // ===== CUSTOM NIGHT UI (shown when C is selected - ABOVE night selection) =====
-    customNightUI = this.add.container(width / 2, nightSelY - 75);
-    customNightUI.setVisible(false);
-    
-    // Brighter panel for custom night (wider to fit 8 enemies including Pyro and Medic)
-    const customBg = this.add.rectangle(0, 0, 580, 60, 0x101815, 0.98);
-    customBg.setStrokeStyle(2, 0x44aa44);
-    customNightUI.add(customBg);
-    
-    const customTitle = this.add.text(0, -24, 'ENABLE THREATS:', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
-      color: '#66cc66',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    customNightUI.add(customTitle);
-    
-    const enemyTypes = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy', 'pyro', 'medic'] as const;
-    const enemyColors: Record<string, number> = {
-      scout: 0x7755aa,   // Purple for scout
-      soldier: 0x6688aa,
-      demoman: 0x44aa55,
-      heavy: 0xaa6644,
-      sniper: 0x5599cc,
-      spy: 0x666677,
-      pyro: 0xdd6622,    // Fire orange for Pyro
-      medic: 0x4488ff,   // Blue for Medic (Über color)
-    };
-    const enemyLabels: Record<string, string> = {
-      scout: 'SCT',
-      soldier: 'SOL',
-      demoman: 'DEM',
-      heavy: 'HVY',
-      sniper: 'SNP',
-      spy: 'SPY',
-      pyro: 'PYR',
-      medic: 'MED',
-    };
-    
-    enemyTypes.forEach((enemy, i) => {
-      const ex = -217 + i * 62;  // Centered spacing for 8 enemies
-      const ey = 10;
-      
-      // Brighter toggle button - starts OFF by default (smaller to fit 7 enemies)
-      const toggleBg = this.add.rectangle(ex, ey, 55, 28, enemyColors[enemy], 0.5);
-      toggleBg.setStrokeStyle(1, 0x555555);
-      toggleBg.setInteractive({ useHandCursor: true });
-      
-      const toggleLabel = this.add.text(ex, ey, enemyLabels[enemy], {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '12px',
-        color: '#888888',
-        fontStyle: 'bold',
-      }).setOrigin(0.5);
-      
-      toggleBg.on('pointerdown', () => {
-        customNightEnemies[enemy] = !customNightEnemies[enemy];
-        // Save to localStorage
-        localStorage.setItem('customNightEnemies', JSON.stringify(customNightEnemies));
-        
-        if (customNightEnemies[enemy]) {
-          toggleBg.setStrokeStyle(2, 0x66ff66);
-          toggleBg.setAlpha(1);
-          toggleLabel.setColor('#ffffff');
-        } else {
-          toggleBg.setStrokeStyle(1, 0x555555);
-          toggleBg.setAlpha(0.5);
-          toggleLabel.setColor('#888888');
-        }
-      });
-      
-      // Initialize visual state based on saved settings
-      if (customNightEnemies[enemy]) {
-        toggleBg.setStrokeStyle(2, 0x66ff66);
-        toggleBg.setAlpha(1);
-        toggleLabel.setColor('#ffffff');
-      }
-      
-      customNightUI!.add([toggleBg, toggleLabel]);
-    });
-    
-    // ===== START BUTTON (center of screen - prominent) =====
-    const startBtnY = 320;
-    const startBtnGlow = this.add.rectangle(width / 2, startBtnY, 340, 70, 0x44ff44, 0.08);
-    const startBtnBg = this.add.rectangle(width / 2, startBtnY, 320, 60, 0x0f1f0f);
-    startBtnBg.setStrokeStyle(3, 0x44aa44);
-    startBtnBg.setInteractive({ useHandCursor: true });
-    
-    startText = this.add.text(width / 2, startBtnY, '▶ START NIGHT 1', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '26px',
-      color: '#55dd55',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    
-    // Pulse effect on start button
-    this.tweens.add({
-      targets: [startBtnGlow],
-      alpha: 0.3,
-      duration: 1200,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-    
-    startBtnBg.on('pointerover', () => {
-      startBtnBg.setFillStyle(0x225522);
-      startBtnBg.setStrokeStyle(3, 0x66ff66);
-      startText.setColor('#88ff88');
-    });
-    
-    startBtnBg.on('pointerout', () => {
-      startBtnBg.setFillStyle(0x1a331a);
-      startBtnBg.setStrokeStyle(3, 0x44aa44);
-      startText.setColor('#66ff66');
-    });
-    
-    // Start game function
     let started = false;
-    const startGame = () => {
+    
+    // Start game function - reused by multiple buttons
+    const startGame = (night: number, isCustomNight: boolean = false, isBadEndingNight6: boolean = false) => {
       if (started) return;
       started = true;
       
       this.playStartSound();
-      startText.setText(`LOADING NIGHT ${this.selectedNight}...`);
       
       this.cameras.main.fadeOut(600, 0, 0, 0);
       this.time.delayedCall(600, () => {
-        // For custom night, pass enemy toggles
-        if (this.selectedNight === 6) {
+        if (isCustomNight) {
+          // Custom Night with enemy toggles
           this.scene.start('GameScene', { 
-            night: 6, 
-            customEnemies: { ...customNightEnemies }
+            night: 7, // Use 7 for custom night to distinguish from story Night 6
+            customEnemies: { ...customNightEnemies },
+            isCustomNight: true
+          });
+        } else if (isBadEndingNight6) {
+          // Bad ending Night 6 - all enemies + medic forced on
+          this.scene.start('GameScene', { 
+            night: 6,
+            isBadEndingNight6: true,
+            customEnemies: {
+              scout: true,
+              soldier: true,
+              demoman: true,
+              heavy: true,
+              sniper: true,
+              spy: true,
+              pyro: true,
+              medic: true
+            }
           });
         } else {
-          this.scene.start('GameScene', { night: this.selectedNight });
+          this.scene.start('GameScene', { night });
         }
       });
     };
     
-    startBtnBg.on('pointerdown', startGame);
-    this.input.keyboard?.on('keydown-SPACE', startGame);
-    this.input.keyboard?.on('keydown-ENTER', startGame);
+    if (hasBeatenNight5) {
+      // ===== POST-GAME: NIGHT SELECTION + CUSTOM NIGHT =====
+      this.createPostGameMenu(width, height, customNightEnemies, customNightUI, startGame, this.saveData);
+    } else {
+      // ===== PRE-GAME: NEW GAME / CONTINUE =====
+      this.createPreGameMenu(width, height, hasExistingSave, startGame);
+    }
+    
+    // ===== DEVELOPER PASSWORD LISTENER =====
+    this.setupDevPasswordListener();
     
     // ===== SIDE MENU BUTTONS (right side - with button backgrounds) =====
     const menuX = width - 115;
@@ -504,18 +322,646 @@ export class BootScene extends Phaser.Scene {
     });
     extrasBtnBg.on('pointerdown', () => this.showExtras());
     
+    // Endings preview button (for testing/dev mode - shows after beating Night 5)
+    const save = loadSave();
+    if (save?.hasBeatenNight5) {
+      const endingsBtnBg = this.add.rectangle(menuX, 410, 130, 32, 0x151520);
+      endingsBtnBg.setStrokeStyle(1, 0x445566);
+      endingsBtnBg.setInteractive({ useHandCursor: true });
+      const endingsBtnText = this.add.text(menuX, 410, '☆ ENDINGS', {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '11px',
+        color: '#8899bb',
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+      
+      endingsBtnBg.on('pointerover', () => {
+        endingsBtnBg.setFillStyle(0x252535);
+        endingsBtnBg.setStrokeStyle(1, 0x8899bb);
+        endingsBtnText.setColor('#aabbdd');
+      });
+      endingsBtnBg.on('pointerout', () => {
+        endingsBtnBg.setFillStyle(0x151520);
+        endingsBtnBg.setStrokeStyle(1, 0x445566);
+        endingsBtnText.setColor('#8899bb');
+      });
+      endingsBtnBg.on('pointerdown', () => this.showEndingsMenu());
+    }
+    
     // Create tutorial overlay
     this.createTutorialOverlay();
     
     // Create extras overlay
     this.createExtrasOverlay();
     
+    // Create endings preview overlay
+    this.createEndingsOverlay();
+    
     // Version
-    this.add.text(width - 60, height - 30, 'v1.0', {
+    this.add.text(width - 60, height - 30, 'v1.1', {
       fontFamily: 'Courier New, monospace',
       fontSize: '10px',
       color: '#333344',
     }).setOrigin(0.5);
+  }
+  
+  /**
+   * Create pre-game menu (New Game / Continue)
+   */
+  private createPreGameMenu(
+    width: number, 
+    height: number, 
+    hasExistingSave: boolean,
+    startGame: (night: number, isCustomNight?: boolean, isBadEndingNight6?: boolean) => void
+  ): void {
+    const centerY = 300;
+    const btnWidth = 280;
+    const btnHeight = 50;
+    
+    // NEW GAME button
+    const newGameY = hasExistingSave ? centerY - 35 : centerY;
+    const newGameGlow = this.add.rectangle(width / 2, newGameY, btnWidth + 8, btnHeight + 8, 0x44ff44, 0.08);
+    const newGameBg = this.add.rectangle(width / 2, newGameY, btnWidth, btnHeight, 0x0f1f0f);
+    newGameBg.setStrokeStyle(3, 0x44aa44);
+    newGameBg.setInteractive({ useHandCursor: true });
+    
+    const newGameText = this.add.text(width / 2, newGameY, '▶ NEW GAME', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '24px',
+      color: '#55dd55',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    
+    // Pulse effect
+    this.tweens.add({
+      targets: [newGameGlow],
+      alpha: 0.3,
+      duration: 1200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    
+    newGameBg.on('pointerover', () => {
+      newGameBg.setFillStyle(0x225522);
+      newGameBg.setStrokeStyle(3, 0x66ff66);
+      newGameText.setColor('#88ff88');
+    });
+    
+    newGameBg.on('pointerout', () => {
+      newGameBg.setFillStyle(0x0f1f0f);
+      newGameBg.setStrokeStyle(3, 0x44aa44);
+      newGameText.setColor('#55dd55');
+    });
+    
+    newGameBg.on('pointerdown', () => {
+      // Delete existing save and create new one
+      deleteSave();
+      createNewSave();
+      this.selectedNight = 1;
+      newGameText.setText('LOADING...');
+      startGame(1);
+    });
+    
+    // CONTINUE button (only if save exists)
+    if (hasExistingSave && this.saveData) {
+      const continueY = centerY + 35;
+      const continueNight = this.saveData.currentNight;
+      
+      const continueBg = this.add.rectangle(width / 2, continueY, btnWidth, btnHeight, 0x0f1520);
+      continueBg.setStrokeStyle(2, 0x446688);
+      continueBg.setInteractive({ useHandCursor: true });
+      
+      const continueText = this.add.text(width / 2, continueY, `▶ CONTINUE - NIGHT ${continueNight}`, {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '20px',
+        color: '#6699bb',
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+      
+      continueBg.on('pointerover', () => {
+        continueBg.setFillStyle(0x152535);
+        continueBg.setStrokeStyle(2, 0x6699bb);
+        continueText.setColor('#88bbdd');
+      });
+      
+      continueBg.on('pointerout', () => {
+        continueBg.setFillStyle(0x0f1520);
+        continueBg.setStrokeStyle(2, 0x446688);
+        continueText.setColor('#6699bb');
+      });
+      
+      continueBg.on('pointerdown', () => {
+        continueText.setText('LOADING...');
+        // Night 6 is always bad ending mode
+        const isBadEnding = continueNight === 6;
+        startGame(continueNight, false, isBadEnding);
+      });
+    }
+    
+    // Keyboard shortcuts
+    this.input.keyboard?.on('keydown-SPACE', () => {
+      if (hasExistingSave && this.saveData) {
+        // Continue with current save - Night 6 is always bad ending mode
+        const isBadEnding = this.saveData.currentNight === 6;
+        startGame(this.saveData.currentNight, false, isBadEnding);
+      } else {
+        // New game
+        deleteSave();
+        createNewSave();
+        startGame(1);
+      }
+    });
+  }
+  
+  /**
+   * Create post-game menu (night selection + custom night)
+   */
+  private createPostGameMenu(
+    width: number, 
+    height: number, 
+    customNightEnemies: Record<string, boolean>,
+    customNightUI: Phaser.GameObjects.Container | null,
+    startGame: (night: number, isCustomNight?: boolean, isBadEndingNight6?: boolean) => void,
+    save: SaveData | null
+  ): void {
+    // Calculate total destructions to determine if good ending is available
+    const nightDestructions = save?.nightDestructions || {};
+    const totalDestructions = Object.values(nightDestructions).reduce((sum: number, count: number) => sum + count, 0);
+    const goodEndingAchieved = save?.goodEndingAchieved || false;
+    
+    // Can redeem for good ending = beat Night 5, haven't gotten good ending yet, destructions now low enough
+    const canRedeemForGoodEnding = save?.hasBeatenNight5 && !goodEndingAchieved && totalDestructions < 5;
+    
+    // Night selection header
+    const nightSelY = 560;
+    
+    // Show destruction status hint
+    let statusColor: string;
+    let statusText: string;
+    const badEndingAchieved = save?.badEndingAchieved || false;
+    
+    if (goodEndingAchieved) {
+      // Already got good ending - just show stats
+      statusColor = '#44ff44';
+      statusText = `Total destructions: ${totalDestructions} - Good ending achieved!`;
+    } else if (canRedeemForGoodEnding) {
+      // Can redeem from bad ending path
+      statusColor = '#ffcc00';
+      statusText = `Total destructions: ${totalDestructions}/5 - Good ending available!`;
+    } else {
+      // Too many destructions - show bad ending status if achieved
+      statusColor = '#ff6644';
+      if (badEndingAchieved) {
+        statusText = `Total destructions: ${totalDestructions}/5 - Bad ending achieved. Replay to reduce`;
+      } else {
+        statusText = `Total destructions: ${totalDestructions}/5 - Replay nights to reduce`;
+      }
+    }
+    
+    this.add.text(width / 2, nightSelY - 80, statusText, {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '11px',
+      color: statusColor,
+    }).setOrigin(0.5);
+    
+    this.add.text(width / 2, nightSelY - 60, 'SELECT NIGHT', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '14px',
+      color: '#446644',
+    }).setOrigin(0.5);
+    
+    // Night buttons - compact row (1-5 + 6)
+    const nightButtons: Phaser.GameObjects.Container[] = [];
+    const nights = [1, 2, 3, 4, 5, 6];
+    const nightBtnWidth = 55;
+    const nightBtnGap = 10;
+    const totalNightWidth = nights.length * nightBtnWidth + (nights.length - 1) * nightBtnGap;
+    const buttonStartX = (width - totalNightWidth) / 2 + nightBtnWidth / 2;
+    const buttonY = nightSelY;
+    
+    // Reference to start text (assigned later, used in button handlers)
+    const startTextRef: { text: Phaser.GameObjects.Text | null } = { text: null };
+    
+    nights.forEach((night, index) => {
+      const x = buttonStartX + index * (nightBtnWidth + nightBtnGap);
+      const isNight6 = night === 6;
+      
+      // Night 6 is available to anyone who has beaten Night 5
+      if (isNight6 && !save?.hasBeatenNight5) {
+        return; // Skip Night 6 button if not unlocked
+      }
+      
+      // Determine color based on destruction count for this night
+      let glowColor = 0x44ff44;  // Default green
+      let bgColor = 0x0f1a0f;
+      let strokeColor = 0x336633;
+      let textColor = '#44aa44';
+      let hoverBgColor = 0x1a331a;
+      let hoverStrokeColor = 0x55aa55;
+      let hoverTextColor = '#66ff66';
+      let selectedBgColor = 0x1a2a1a;
+      let selectedStrokeColor = 0x44ff44;
+      
+      if (night <= 5) {
+        const destructions = nightDestructions[night] ?? 0;
+        
+        if (night === 5 && canRedeemForGoodEnding) {
+          // Night 5 glows GOLD when player can redeem from bad ending path!
+          glowColor = 0xffcc00;
+          bgColor = 0x1a1a0a;
+          strokeColor = 0x998833;
+          textColor = '#ddaa22';
+          hoverBgColor = 0x2a2a1a;
+          hoverStrokeColor = 0xddcc44;
+          hoverTextColor = '#ffdd44';
+          selectedBgColor = 0x2a2a1a;
+          selectedStrokeColor = 0xffcc00;
+        } else if (destructions > 0) {
+          // Red for nights with destructions
+          glowColor = 0xff4444;
+          bgColor = 0x1a0f0f;
+          strokeColor = 0x663333;
+          textColor = '#aa4444';
+          hoverBgColor = 0x331a1a;
+          hoverStrokeColor = 0xaa5555;
+          hoverTextColor = '#ff6666';
+          selectedBgColor = 0x2a1a1a;
+          selectedStrokeColor = 0xff4444;
+        }
+        // else: green (default) for 0 destructions
+      }
+      
+      const btnGlow = this.add.rectangle(x, buttonY, nightBtnWidth + 4, 44, glowColor, 0);
+      const btnBg = this.add.rectangle(x, buttonY, nightBtnWidth, 40, bgColor);
+      btnBg.setStrokeStyle(2, strokeColor);
+      
+      const nightNum = this.add.text(x, buttonY, `${night}`, {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '22px',
+        color: textColor,
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+      
+      const container = this.add.container(0, 0, [btnGlow, btnBg, nightNum]);
+      nightButtons.push(container);
+      
+      btnBg.setInteractive({ useHandCursor: true });
+      
+      btnBg.on('pointerover', () => {
+        btnBg.setFillStyle(hoverBgColor);
+        btnBg.setStrokeStyle(2, hoverStrokeColor);
+        nightNum.setColor(hoverTextColor);
+      });
+      
+      btnBg.on('pointerout', () => {
+        if (this.selectedNight === night) {
+          btnBg.setFillStyle(selectedBgColor);
+          btnBg.setStrokeStyle(3, selectedStrokeColor);
+          btnGlow.setFillStyle(glowColor, 0.08);
+          nightNum.setColor(hoverTextColor);
+        } else {
+          btnBg.setFillStyle(bgColor);
+          btnBg.setStrokeStyle(2, strokeColor);
+          btnGlow.setFillStyle(glowColor, 0);
+          nightNum.setColor(textColor);
+        }
+      });
+      
+      btnBg.on('pointerdown', () => {
+        this.selectedNight = night;
+        
+        // Update start button text (if it exists)
+        if (startTextRef.text) {
+          startTextRef.text.setText(`▶ START NIGHT ${night}`);
+        }
+        
+        // Update all buttons - reset each to their base colors, then highlight selected
+        nightButtons.forEach((btn, i) => {
+          const glow = btn.list[0] as Phaser.GameObjects.Rectangle;
+          const bg = btn.list[1] as Phaser.GameObjects.Rectangle;
+          const num = btn.list[2] as Phaser.GameObjects.Text;
+          const btnNight = nights[i];
+          
+          // Recalculate colors for this button
+          const btnDestructions = nightDestructions[btnNight] ?? 0;
+          let btnGlowColor = 0x44ff44;
+          let btnBgColor = 0x0f1a0f;
+          let btnStrokeColor = 0x336633;
+          let btnTextColor = '#44aa44';
+          let btnSelectedBgColor = 0x1a2a1a;
+          let btnSelectedStrokeColor = 0x44ff44;
+          let btnHoverTextColor = '#66ff66';
+          
+          if (btnNight <= 5) {
+            if (btnNight === 5 && canRedeemForGoodEnding) {
+              btnGlowColor = 0xffcc00;
+              btnBgColor = 0x1a1a0a;
+              btnStrokeColor = 0x998833;
+              btnTextColor = '#ddaa22';
+              btnSelectedBgColor = 0x2a2a1a;
+              btnSelectedStrokeColor = 0xffcc00;
+              btnHoverTextColor = '#ffdd44';
+            } else if (btnDestructions > 0) {
+              btnGlowColor = 0xff4444;
+              btnBgColor = 0x1a0f0f;
+              btnStrokeColor = 0x663333;
+              btnTextColor = '#aa4444';
+              btnSelectedBgColor = 0x2a1a1a;
+              btnSelectedStrokeColor = 0xff4444;
+              btnHoverTextColor = '#ff6666';
+            }
+          }
+          
+          if (i === index) {
+            bg.setFillStyle(btnSelectedBgColor);
+            bg.setStrokeStyle(3, btnSelectedStrokeColor);
+            glow.setFillStyle(btnGlowColor, 0.08);
+            num.setColor(btnHoverTextColor);
+          } else {
+            bg.setFillStyle(btnBgColor);
+            bg.setStrokeStyle(2, btnStrokeColor);
+            glow.setFillStyle(btnGlowColor, 0);
+            num.setColor(btnTextColor);
+          }
+        });
+      });
+      
+      // Select current night by default
+      if (night === this.selectedNight) {
+        btnBg.setFillStyle(selectedBgColor);
+        btnBg.setStrokeStyle(3, selectedStrokeColor);
+        btnGlow.setFillStyle(glowColor, 0.08);
+        nightNum.setColor(hoverTextColor);
+      }
+      
+      // Add pulsing glow for Night 5 when player can redeem from bad ending
+      if (night === 5 && canRedeemForGoodEnding) {
+        btnGlow.setFillStyle(0xffcc00, 0.15);
+        this.tweens.add({
+          targets: btnGlow,
+          alpha: 0.6,
+          duration: 800,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      }
+    });
+    
+    // Start selected night button
+    const startBtnY = 290;
+    const startBtnGlow = this.add.rectangle(width / 2, startBtnY, 320, 60, 0x44ff44, 0.08);
+    const startBtnBg = this.add.rectangle(width / 2, startBtnY, 300, 50, 0x0f1f0f);
+    startBtnBg.setStrokeStyle(3, 0x44aa44);
+    startBtnBg.setInteractive({ useHandCursor: true });
+    
+    const startText = this.add.text(width / 2, startBtnY, `▶ START NIGHT ${this.selectedNight}`, {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '22px',
+      color: '#55dd55',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    
+    // Assign to reference so button handlers can update it
+    startTextRef.text = startText;
+    
+    this.tweens.add({
+      targets: [startBtnGlow],
+      alpha: 0.3,
+      duration: 1200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    
+    startBtnBg.on('pointerover', () => {
+      startBtnBg.setFillStyle(0x225522);
+      startBtnBg.setStrokeStyle(3, 0x66ff66);
+      startText.setColor('#88ff88');
+    });
+    
+    startBtnBg.on('pointerout', () => {
+      startBtnBg.setFillStyle(0x0f1f0f);
+      startBtnBg.setStrokeStyle(3, 0x44aa44);
+      startText.setColor('#55dd55');
+    });
+    
+    startBtnBg.on('pointerdown', () => {
+      startText.setText('LOADING...');
+      // Night 6 in post-game is always bad ending style (all enemies)
+      const isBadEnding = this.selectedNight === 6;
+      startGame(this.selectedNight, false, isBadEnding);
+    });
+    
+    // ===== CUSTOM NIGHT BUTTON (below start button) =====
+    // Custom Night is available after beating Night 5
+    const customNightUnlocked = save?.hasBeatenNight5 || false;
+    const customBtnY = 360;
+    const customBtnBg = this.add.rectangle(width / 2, customBtnY, 220, 40, 0x151520);
+    customBtnBg.setStrokeStyle(2, 0x554488);
+    
+    const customBtnText = this.add.text(width / 2, customBtnY, '★ CUSTOM NIGHT', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '16px',
+      color: '#8866aa',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    
+    // Only enable interaction if unlocked
+    if (customNightUnlocked) {
+      customBtnBg.setInteractive({ useHandCursor: true });
+      
+      customBtnBg.on('pointerover', () => {
+        customBtnBg.setFillStyle(0x252535);
+        customBtnBg.setStrokeStyle(2, 0x8866cc);
+        customBtnText.setColor('#aa88dd');
+      });
+      
+      customBtnBg.on('pointerout', () => {
+        customBtnBg.setFillStyle(0x151520);
+        customBtnBg.setStrokeStyle(2, 0x554488);
+        customBtnText.setColor('#8866aa');
+      });
+    } else {
+      // Locked appearance
+      customBtnBg.setFillStyle(0x0a0a10);
+      customBtnBg.setStrokeStyle(1, 0x333344);
+      customBtnText.setColor('#444455');
+      customBtnText.setText('🔒 CUSTOM NIGHT');
+    }
+    
+    // Custom night toggle UI (appears above button when clicked)
+    customNightUI = this.add.container(width / 2, customBtnY - 60);
+    customNightUI.setVisible(false);
+    
+    const customPanelBg = this.add.rectangle(0, 0, 580, 60, 0x101815, 0.98);
+    customPanelBg.setStrokeStyle(2, 0x554488);
+    customNightUI.add(customPanelBg);
+    
+    const customTitle = this.add.text(0, -24, 'ENABLE THREATS:', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '11px',
+      color: '#aa88cc',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    customNightUI.add(customTitle);
+    
+    const enemyTypes = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy', 'pyro', 'medic'] as const;
+    const enemyColors: Record<string, number> = {
+      scout: 0x7755aa,
+      soldier: 0x6688aa,
+      demoman: 0x44aa55,
+      heavy: 0xaa6644,
+      sniper: 0x5599cc,
+      spy: 0x666677,
+      pyro: 0xdd6622,
+      medic: 0x4488ff,
+    };
+    const enemyLabels: Record<string, string> = {
+      scout: 'SCT', soldier: 'SOL', demoman: 'DEM', heavy: 'HVY',
+      sniper: 'SNP', spy: 'SPY', pyro: 'PYR', medic: 'MED',
+    };
+    
+    enemyTypes.forEach((enemy, i) => {
+      const ex = -217 + i * 62;
+      const ey = 10;
+      
+      const toggleBg = this.add.rectangle(ex, ey, 55, 28, enemyColors[enemy], 0.5);
+      toggleBg.setStrokeStyle(1, 0x555555);
+      toggleBg.setInteractive({ useHandCursor: true });
+      
+      const toggleLabel = this.add.text(ex, ey, enemyLabels[enemy], {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '12px',
+        color: '#888888',
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+      
+      toggleBg.on('pointerdown', () => {
+        customNightEnemies[enemy] = !customNightEnemies[enemy];
+        localStorage.setItem('customNightEnemies', JSON.stringify(customNightEnemies));
+        
+        if (customNightEnemies[enemy]) {
+          toggleBg.setStrokeStyle(2, 0x66ff66);
+          toggleBg.setAlpha(1);
+          toggleLabel.setColor('#ffffff');
+        } else {
+          toggleBg.setStrokeStyle(1, 0x555555);
+          toggleBg.setAlpha(0.5);
+          toggleLabel.setColor('#888888');
+        }
+      });
+      
+      if (customNightEnemies[enemy]) {
+        toggleBg.setStrokeStyle(2, 0x66ff66);
+        toggleBg.setAlpha(1);
+        toggleLabel.setColor('#ffffff');
+      }
+      
+      customNightUI!.add([toggleBg, toggleLabel]);
+    });
+    
+    // Start custom night button inside the panel
+    const startCustomBg = this.add.rectangle(0, 45, 140, 28, 0x1a1a2a);
+    startCustomBg.setStrokeStyle(2, 0x554488);
+    startCustomBg.setInteractive({ useHandCursor: true });
+    customNightUI.add(startCustomBg);
+    
+    const startCustomText = this.add.text(0, 45, '▶ START', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '14px',
+      color: '#8866aa',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    customNightUI.add(startCustomText);
+    
+    startCustomBg.on('pointerover', () => {
+      startCustomBg.setFillStyle(0x2a2a4a);
+      startCustomText.setColor('#aa88dd');
+    });
+    
+    startCustomBg.on('pointerout', () => {
+      startCustomBg.setFillStyle(0x1a1a2a);
+      startCustomText.setColor('#8866aa');
+    });
+    
+    startCustomBg.on('pointerdown', () => {
+      startCustomText.setText('LOADING...');
+      startGame(7, true, false);
+    });
+    
+    let customNightOpen = false;
+    customBtnBg.on('pointerdown', () => {
+      customNightOpen = !customNightOpen;
+      customNightUI!.setVisible(customNightOpen);
+      customBtnText.setText(customNightOpen ? '✕ CLOSE' : '★ CUSTOM NIGHT');
+    });
+    
+    // Keyboard shortcut
+    this.input.keyboard?.on('keydown-SPACE', () => {
+      const isBadEnding = this.selectedNight === 6;
+      startGame(this.selectedNight, false, isBadEnding);
+    });
+  }
+  
+  /**
+   * Setup developer password listener (hidden FNAF-style unlock)
+   */
+  private setupDevPasswordListener(): void {
+    this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
+      // Only track letter keys
+      if (event.key.length === 1 && /[a-zA-Z0-9]/.test(event.key)) {
+        this.devPasswordBuffer += event.key.toUpperCase();
+        
+        // Keep buffer at password length
+        if (this.devPasswordBuffer.length > this.DEV_PASSWORD.length) {
+          this.devPasswordBuffer = this.devPasswordBuffer.slice(-this.DEV_PASSWORD.length);
+        }
+        
+        // Check for match
+        if (this.devPasswordBuffer === this.DEV_PASSWORD) {
+          this.onDevPasswordEntered();
+        }
+      }
+    });
+  }
+  
+  /**
+   * Called when developer password is entered correctly
+   */
+  private onDevPasswordEntered(): void {
+    // Unlock everything
+    unlockEverything();
+    
+    // Show unlock notification
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+    
+    const unlockText = this.add.text(width / 2, height / 2, 'DEVELOPER MODE UNLOCKED', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '28px',
+      color: '#ffcc00',
+      fontStyle: 'bold',
+      backgroundColor: '#000000',
+      padding: { left: 20, right: 20, top: 10, bottom: 10 },
+    }).setOrigin(0.5).setDepth(200);
+    
+    // Play unlock sound
+    this.playStartSound();
+    
+    // Fade out and reload menu
+    this.tweens.add({
+      targets: unlockText,
+      alpha: 0,
+      duration: 1500,
+      delay: 1000,
+      onComplete: () => {
+        unlockText.destroy();
+        // Reload the scene to reflect unlocked state
+        this.scene.restart();
+      }
+    });
   }
   
   private createTutorialOverlay(): void {
@@ -1894,5 +2340,147 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.extrasContainer.add(nightBadge);
     this.spyCardElements.push(nightBadge);
+  }
+  
+  // ============================================
+  // ENDINGS PREVIEW (DEV MODE / POST-GAME)
+  // ============================================
+  
+  /**
+   * Create the endings preview overlay
+   */
+  private createEndingsOverlay(): void {
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+    
+    this.endingsContainer = this.add.container(0, 0);
+    this.endingsContainer.setVisible(false);
+    this.endingsContainer.setDepth(200);
+    
+    // Dark overlay
+    const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.9);
+    overlay.setInteractive();
+    overlay.on('pointerdown', () => this.hideEndingsMenu());
+    this.endingsContainer.add(overlay);
+    
+    // Title
+    const title = this.add.text(width / 2, 80, '☆ ENDINGS PREVIEW ☆', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '28px',
+      color: '#8899bb',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.endingsContainer.add(title);
+    
+    const subtitle = this.add.text(width / 2, 115, 'Preview all ending screens', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '14px',
+      color: '#556677',
+    }).setOrigin(0.5);
+    this.endingsContainer.add(subtitle);
+    
+    // Good Ending button
+    const goodBtn = this.add.rectangle(width / 2, 220, 350, 80, 0x1a2a1a);
+    goodBtn.setStrokeStyle(2, 0x44aa44);
+    goodBtn.setInteractive({ useHandCursor: true });
+    goodBtn.on('pointerover', () => goodBtn.setFillStyle(0x2a3a2a));
+    goodBtn.on('pointerout', () => goodBtn.setFillStyle(0x1a2a1a));
+    goodBtn.on('pointerdown', () => {
+      this.scene.start('GameScene', { night: 5, previewEnding: 'good' });
+    });
+    this.endingsContainer.add(goodBtn);
+    
+    const goodTitle = this.add.text(width / 2, 210, 'GOOD ENDING', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '18px',
+      color: '#88ff88',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.endingsContainer.add(goodTitle);
+    
+    const goodDesc = this.add.text(width / 2, 235, 'Peaceful celebration - all mercs together', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '12px',
+      color: '#66aa66',
+    }).setOrigin(0.5);
+    this.endingsContainer.add(goodDesc);
+    
+    // Bad Ending Intro button
+    const badIntroBtn = this.add.rectangle(width / 2, 330, 350, 80, 0x2a1a1a);
+    badIntroBtn.setStrokeStyle(2, 0xaa4444);
+    badIntroBtn.setInteractive({ useHandCursor: true });
+    badIntroBtn.on('pointerover', () => badIntroBtn.setFillStyle(0x3a2a2a));
+    badIntroBtn.on('pointerout', () => badIntroBtn.setFillStyle(0x2a1a1a));
+    badIntroBtn.on('pointerdown', () => {
+      this.scene.start('GameScene', { night: 5, previewEnding: 'badIntro' });
+    });
+    this.endingsContainer.add(badIntroBtn);
+    
+    const badIntroTitle = this.add.text(width / 2, 320, 'BAD ENDING INTRO', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '18px',
+      color: '#ff8888',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.endingsContainer.add(badIntroTitle);
+    
+    const badIntroDesc = this.add.text(width / 2, 345, 'Medic goes mad cinematic - leads to Night 6', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '12px',
+      color: '#aa6666',
+    }).setOrigin(0.5);
+    this.endingsContainer.add(badIntroDesc);
+    
+    // Dark Ending (Night 6) button
+    const darkBtn = this.add.rectangle(width / 2, 440, 350, 80, 0x1a1a2a);
+    darkBtn.setStrokeStyle(2, 0x6666aa);
+    darkBtn.setInteractive({ useHandCursor: true });
+    darkBtn.on('pointerover', () => darkBtn.setFillStyle(0x2a2a3a));
+    darkBtn.on('pointerout', () => darkBtn.setFillStyle(0x1a1a2a));
+    darkBtn.on('pointerdown', () => {
+      this.scene.start('GameScene', { night: 6, previewEnding: 'dark' });
+    });
+    this.endingsContainer.add(darkBtn);
+    
+    const darkTitle = this.add.text(width / 2, 430, 'DARK ENDING', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '18px',
+      color: '#aaaaff',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.endingsContainer.add(darkTitle);
+    
+    const darkDesc = this.add.text(width / 2, 455, 'Night 6 survival end - lonely Engineer', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '12px',
+      color: '#7777aa',
+    }).setOrigin(0.5);
+    this.endingsContainer.add(darkDesc);
+    
+    // Close button
+    const closeBtn = this.add.text(width / 2, 550, '[ CLOSE ]', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '16px',
+      color: '#666666',
+    }).setOrigin(0.5);
+    closeBtn.setInteractive({ useHandCursor: true });
+    closeBtn.on('pointerover', () => closeBtn.setColor('#aaaaaa'));
+    closeBtn.on('pointerout', () => closeBtn.setColor('#666666'));
+    closeBtn.on('pointerdown', () => this.hideEndingsMenu());
+    this.endingsContainer.add(closeBtn);
+  }
+  
+  /**
+   * Show the endings preview menu
+   */
+  private showEndingsMenu(): void {
+    this.endingsContainer.setVisible(true);
+  }
+  
+  /**
+   * Hide the endings preview menu
+   */
+  private hideEndingsMenu(): void {
+    this.endingsContainer.setVisible(false);
   }
 }

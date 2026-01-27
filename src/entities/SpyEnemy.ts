@@ -29,12 +29,33 @@ export class SpyEnemy {
   // Valid rooms for Spy to appear (excludes Intel and hallways)
   private static VALID_ROOMS: NodeId[] = ['BRIDGE', 'COURTYARD', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL'];
   
-  constructor() {
-    // Start in a random state
-    this.spyState = Math.random() < 0.5 ? 'DISGUISE' : 'SAPPING';
-    this.pickNewDisguise();
-    this.teleportToRandomRoom();
-    console.log(`🕵️ Spy initialized in ${this.spyState} state, disguised as ${this.currentDisguise}`);
+  // Available disguises (set based on which enemies are enabled)
+  private availableDisguises: SpyDisguise[] = ['SCOUT', 'SOLDIER', 'DEMOMAN_HEAD', 'HEAVY', 'SNIPER'];
+  
+  // If true, Spy has no disguise targets and stays in SAPPING mode only
+  private sappingOnlyMode: boolean = false;
+  
+  constructor(availableDisguises?: SpyDisguise[]) {
+    // Set available disguises if provided (for Custom Night)
+    if (availableDisguises !== undefined) {
+      if (availableDisguises.length > 0) {
+        this.availableDisguises = availableDisguises;
+      } else {
+        // No disguise targets - Spy stays in SAPPING mode only
+        this.sappingOnlyMode = true;
+      }
+    }
+    
+    // Start in SAPPING if no disguises, otherwise random
+    if (this.sappingOnlyMode) {
+      this.spyState = 'SAPPING';
+      console.log(`🕵️ Spy initialized in SAPPING-ONLY mode (no disguise targets)`);
+    } else {
+      this.spyState = Math.random() < 0.5 ? 'DISGUISE' : 'SAPPING';
+      this.pickNewDisguise();
+      this.teleportToRandomRoom();
+      console.log(`🕵️ Spy initialized in ${this.spyState} state, disguised as ${this.currentDisguise}`);
+    }
   }
   
   /**
@@ -122,10 +143,17 @@ export class SpyEnemy {
   /**
    * Toggle between DISGUISE and SAPPING states
    * NOTE: Sapper persists even when switching states - only removed by player!
+   * If in sapping-only mode (no disguise targets), stays in SAPPING state.
    */
   private toggleState(): void {
     this.stateTimer = 0;
     this.teleportTimer = 0; // Reset teleport timer on state change
+    
+    // If sapping-only mode, stay in SAPPING (just reset timer)
+    if (this.sappingOnlyMode) {
+      console.log(`🕵️ [${this.getTimeString()}] Spy continues SAPPING (no disguise targets)`);
+      return;
+    }
     
     if (this.spyState === 'DISGUISE') {
       this.spyState = 'SAPPING';
@@ -142,11 +170,15 @@ export class SpyEnemy {
   }
   
   /**
-   * Pick a new random disguise
+   * Pick a new random disguise from available disguises
    */
   private pickNewDisguise(): void {
-    const disguises: SpyDisguise[] = ['SCOUT', 'SOLDIER', 'DEMOMAN_HEAD', 'HEAVY', 'SNIPER'];
-    this.currentDisguise = disguises[Math.floor(Math.random() * disguises.length)];
+    if (this.availableDisguises.length === 0) {
+      // Fallback - shouldn't happen but just in case
+      this.currentDisguise = 'SCOUT';
+      return;
+    }
+    this.currentDisguise = this.availableDisguises[Math.floor(Math.random() * this.availableDisguises.length)];
   }
   
   /**

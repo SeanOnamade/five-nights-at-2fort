@@ -48,15 +48,19 @@ export class DemomanEnemy {
   private hasEmittedDoorEvent: boolean = false;
   private isBeingWatched: boolean = false;
   
+  // Track if force despawned (for custom night with Demo disabled)
+  private _forceDespawned: boolean = false;
+  
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
-    this.reset();
+    this.reset(true);  // Silent reset on construction
   }
   
   /**
    * Reset Demoman to initial state
+   * @param silent If true, don't log the head teleport (used during construction)
    */
-  public reset(): void {
+  public reset(silent: boolean = false): void {
     this.state = 'DORMANT';
     this.activeEye = 'NONE';
     this.pathIndex = 0;
@@ -76,14 +80,15 @@ export class DemomanEnemy {
     this.dormantTimer = 0;
     
     // Teleport head to random location
-    this.teleportHead();
+    this.teleportHead(silent);
   }
   
   /**
    * Teleport head to a random camera location or Intel room
    * Can appear at ANY camera location or in front of the player
+   * @param silent If true, don't log (used during construction before forceDespawn check)
    */
-  private teleportHead(): void {
+  private teleportHead(silent: boolean = false): void {
     const locations: (NodeId | 'INTEL_ROOM')[] = [
       'BRIDGE', 'COURTYARD', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 
       'LEFT_HALL', 'RIGHT_HALL', 'INTEL_ROOM'
@@ -96,7 +101,9 @@ export class DemomanEnemy {
     }
     
     this.headLocation = newLocation;
-    console.log(`🗡️ Demoman head teleported to ${this.headLocation}`);
+    if (!silent && !this._forceDespawned) {
+      console.log(`🗡️ Demoman head teleported to ${this.headLocation}`);
+    }
   }
   
   /**
@@ -297,6 +304,14 @@ export class DemomanEnemy {
    */
   public forceDespawn(): void {
     this.state = 'DESPAWNED';
+    this._forceDespawned = true;
+  }
+  
+  /**
+   * Check if Demoman is force despawned
+   */
+  public isForceDespawned(): boolean {
+    return this._forceDespawned;
   }
   
   /**

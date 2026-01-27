@@ -82,9 +82,44 @@ Survive from 12:00 AM to 6:00 AM (6 real-time minutes per night). Defend the Int
   - *Intel mode*: Match ignites = 10 seconds to teleport away!
   - WARNING: Pyro reflects rockets fired by the sentry, destroying it!
 
-### Custom Night (Night 6)
+## Two Endings
+
+Your performance across all five nights determines your fate:
+
+### Good Ending
+If your sentry is destroyed **fewer than 5 times** across Nights 1-5:
+- Peaceful ending with all mercs celebrating together
+- The nightmare is over. You held the line.
+
+### Bad Ending
+If your sentry is destroyed **5 or more times** across Nights 1-5:
+- The constant destruction has driven Medic mad
+- He's become one of the monsters
+- You must survive **Night 6** against ALL enemies + Medic
+- A darker conclusion awaits...
+
+## Post-Game Content
+
+### Night Selection & Replay
+After beating Night 5, all nights become selectable:
+- **Green** nights = 0 sentry destructions (perfect!)
+- **Red** nights = 1+ sentry destructions (can replay to improve)
+- **Gold** Night 5 = Total destructions < 5, good ending available!
+
+Replay red nights to lower your destruction count and unlock the good ending.
+
+### Custom Night
+After completing the game (either ending), Custom Night unlocks:
 - Toggle any combination of enemies
-- **Medic** - Übercharges Scout/Soldier/Demoman, making them immune to sentry fire. Must teleport away to survive!
+- **Medic** - Übercharges Scout/Soldier/Demoman, making them immune to sentry fire
+
+## Developer Mode
+
+Type `2FORT` on the main menu to unlock everything:
+- All nights selectable
+- Custom Night available
+- Night 6 (bad ending path) accessible
+- Endings preview menu
 
 ## Enemies at a Glance
 
@@ -111,8 +146,8 @@ Survive from 12:00 AM to 6:00 AM (6 real-time minutes per night). Defend the Int
 src/
 ├── main.ts           # Entry point, game config
 ├── scenes/
-│   ├── BootScene.ts  # Main menu, night selection
-│   └── GameScene.ts  # Core gameplay
+│   ├── BootScene.ts  # Main menu, night selection, save/load
+│   └── GameScene.ts  # Core gameplay, endings
 ├── entities/
 │   ├── EnemyBase.ts  # Abstract enemy class
 │   ├── ScoutEnemy.ts
@@ -126,7 +161,8 @@ src/
 ├── types/
 │   └── index.ts      # Type definitions, constants
 ├── utils/
-│   └── mobile.ts     # Mobile detection utilities
+│   ├── mobile.ts     # Mobile detection utilities
+│   └── saveData.ts   # Save/load, progression tracking
 └── docs/
     └── AI_REFERENCE.md  # Detailed enemy parameters
 ```
@@ -148,4 +184,4 @@ Inspired by:
 
 ---
 
-*Good luck, Engineer. Don't let them hurt Medic. He's close to finding the cure.*
+*Good luck, Engineer. Keep that sentry standing. The fate of 2Fort depends on it.*

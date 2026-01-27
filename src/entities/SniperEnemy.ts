@@ -168,7 +168,8 @@ export class SniperEnemy extends EnemyBase {
 
       case 'DESPAWNED':
         this.respawnTimer += delta;
-        if (this.respawnTimer >= GAME_CONSTANTS.ENEMY_RESPAWN_DELAY) {
+        // Don't respawn while player is teleporting (prevents unfair spawns at destination)
+        if (this.respawnTimer >= GAME_CONSTANTS.ENEMY_RESPAWN_DELAY && !this._teleportFrozen) {
           this.respawn();
         }
         break;
