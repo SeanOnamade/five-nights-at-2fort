@@ -14,7 +14,7 @@ import {
  * - Can kill player from hallways (headshot when in LEFT_HALL or RIGHT_HALL)
  * - Requires 2 wrangler shots to drive away
  * - Can be lured from anywhere (like Heavy)
- * - Destroys cameras if watched for too long
+ * - HEADSHOTS player through camera if watched for too long (instant death!)
  * - Red laser beam visible in hallways without wrangler
  */
 export class SniperEnemy extends EnemyBase {
@@ -22,10 +22,9 @@ export class SniperEnemy extends EnemyBase {
   protected moveInterval = GAME_CONSTANTS.SNIPER_TELEPORT_INTERVAL;
   protected waitTime = GAME_CONSTANTS.SNIPER_CHARGE_TIME; // Time to charge headshot
 
-  // Camera watching tracking
+  // Camera watching tracking (Sniper headshots player through camera!)
   private watchTimer: number = 0;
   private isBeingWatched: boolean = false;
-  private destroyCameraCallback: ((cameraNode: NodeId) => void) | null = null;
 
   // Headshot charge tracking
   private chargeTimer: number = 0;
@@ -70,13 +69,6 @@ export class SniperEnemy extends EnemyBase {
   }
 
   /**
-   * Set callback for when Sniper destroys a camera
-   */
-  public setDestroyCameraCallback(callback: (cameraNode: NodeId) => void): void {
-    this.destroyCameraCallback = callback;
-  }
-
-  /**
    * Set callback for headshot charge progress
    */
   public setChargeCallback(callback: (progress: number) => void): void {
@@ -90,7 +82,7 @@ export class SniperEnemy extends EnemyBase {
     reachedIntel: boolean; 
     atDoorway: boolean;
     doorSide: 'LEFT' | 'RIGHT' | null;
-    destroyedCamera: boolean;
+    headshotThroughCamera: boolean;
     headshotReady: boolean;
     canShootIntel: boolean;
   } {
@@ -98,22 +90,19 @@ export class SniperEnemy extends EnemyBase {
       reachedIntel: false, 
       atDoorway: false,
       doorSide: null as 'LEFT' | 'RIGHT' | null,
-      destroyedCamera: false,
+      headshotThroughCamera: false,
       headshotReady: false,
       canShootIntel: this.canShootIntelRoom(),
     };
 
-    // Handle camera watching/destruction
-    // watchMultiplier is 2 if both Heavy and Sniper are on the same camera (halves time)
+    // Handle camera watching - Sniper headshots player through the camera!
+    // watchMultiplier is 2 if both Heavy and Sniper are on the same camera (2x speed)
     if (this.isBeingWatched && this.state !== 'DESPAWNED') {
       // Timer increases when being watched
       this.watchTimer += delta * this.watchMultiplier;
       if (this.watchTimer >= GAME_CONSTANTS.CAMERA_WATCH_DESTROY_TIME) {
-        // Sniper shoots out the camera!
-        result.destroyedCamera = true;
-        if (this.destroyCameraCallback) {
-          this.destroyCameraCallback(this.currentNode);
-        }
+        // Sniper headshots the player through the camera!
+        result.headshotThroughCamera = true;
         this.watchTimer = 0;
         this.isBeingWatched = false;
       }
@@ -174,14 +163,6 @@ export class SniperEnemy extends EnemyBase {
         }
         break;
 
-      case 'DESTROYING_CAMERA':
-        // Brief pause while destroying camera, then continue
-        this.waitTimer += delta;
-        if (this.waitTimer >= 1000) {
-          this.state = this.isLured ? 'LURED' : 'PATROLLING';
-          this.waitTimer = 0;
-        }
-        break;
     }
 
     return result;

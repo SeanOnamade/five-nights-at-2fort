@@ -100,7 +100,7 @@ export type EnemyState =
   | 'CHARGING'        // Demoman-specific: body rushing toward Intel
   | 'BREACHING'       // Soldier-specific: counting down to attack after sentry destroyed
   | 'LURED'           // Heavy/Sniper: moving toward a lure
-  | 'DESTROYING_CAMERA'; // Heavy/Sniper: destroying camera after being watched
+  | 'DESTROYING_CAMERA'; // Heavy: destroying camera after being watched
 
 /**
  * Base interface for enemy data
@@ -255,8 +255,8 @@ export const GAME_CONSTANTS = {
   SNIPER_CHARGE_WARNING_TIME: 2000, // Warning sound starts this long before shot
   SNIPER_SHOTS_TO_REPEL: 2,         // Number of wrangler shots needed to drive Sniper away
   
-  // Camera destruction - NIGHT 3+ (Heavy), NIGHT 4+ (Sniper)
-  CAMERA_WATCH_DESTROY_TIME: 4500,  // Time watching Heavy/Sniper before camera destroyed (4.5 sec - HALVED!)
+  // Camera watching - Heavy destroys camera, Sniper headshots player!
+  CAMERA_WATCH_DESTROY_TIME: 4500,  // Time watching Heavy/Sniper before they act (4.5 sec)
   CAMERA_REPAIR_TIME: 30000,        // Time camera stays destroyed (30 sec)
   CAMERA_REMOTE_REPAIR_COST: 50,    // Metal cost to remotely repair camera
   

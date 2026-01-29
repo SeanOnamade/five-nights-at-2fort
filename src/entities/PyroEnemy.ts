@@ -28,6 +28,7 @@ export class PyroEnemy {
   private lightExposureTimer: number = 0;  // Time player has been shining light on Pyro in hallway
   private blockedHallway: 'LEFT' | 'RIGHT' | null = null;  // Hallway being lit by player (can't teleport there)
   private demomanChargingHallway: 'LEFT' | 'RIGHT' | null = null;  // Hallway Demoman is charging toward
+  private sniperChargingHallway: 'LEFT' | 'RIGHT' | null = null;  // Hallway Sniper is aiming from
   
   // Intel mode properties
   private isInIntel: boolean = false;
@@ -237,6 +238,13 @@ export class PyroEnemy {
       availableRooms = availableRooms.filter(r => r !== 'RIGHT_HALL');
     }
     
+    // Don't teleport into a hallway where Sniper is aiming (prevents unfair Pyro+Sniper combo)
+    if (this.sniperChargingHallway === 'LEFT') {
+      availableRooms = availableRooms.filter(r => r !== 'LEFT_HALL');
+    } else if (this.sniperChargingHallway === 'RIGHT') {
+      availableRooms = availableRooms.filter(r => r !== 'RIGHT_HALL');
+    }
+    
     // Don't teleport into the player's pending destination
     if (this._blockedDestination) {
       availableRooms = availableRooms.filter(r => r !== this._blockedDestination);
@@ -282,6 +290,14 @@ export class PyroEnemy {
    */
   public onDemomanChargeEnd(): void {
     this.demomanChargingHallway = null;
+  }
+  
+  /**
+   * Set which hallway Sniper is currently aiming from
+   * Pyro won't teleport into that hallway (prevents unfair Pyro+Sniper combo)
+   */
+  public setSniperChargingHallway(hallway: 'LEFT' | 'RIGHT' | null): void {
+    this.sniperChargingHallway = hallway;
   }
   
   /**

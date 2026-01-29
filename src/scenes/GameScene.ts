@@ -103,7 +103,7 @@ export class GameScene extends Phaser.Scene {
     "When teleporting, if an enemy is in an adjacent room, they will hear you and approach.",
     "Demo will never begin his attack while you're watching him.",
     // Additional hints
-    "Heavy and Sniper will destroy your camera if you stare too long.",
+    "Heavy will destroy your camera if you stare too long. Sniper will headshot you through it!",
     "Lures can distract certain enemies, buying you precious time!",
     "Metal regenerates over time -- manage it wisely!",
     "Sniper requires 2 shots to repel.",
@@ -322,6 +322,18 @@ export class GameScene extends Phaser.Scene {
   private endScreen!: Phaser.GameObjects.Container;
   
   // ============================================
+  // ENGINEER RECORDINGS (Phone calls)
+  // ============================================
+  
+  private recordingAudio: HTMLAudioElement | null = null;
+  private isRecordingPlaying: boolean = false;
+  private recordingSkipButton!: Phaser.GameObjects.Container;
+  private recordingIndicator!: Phaser.GameObjects.Container;
+  private recordingStartDelay: number = 5000; // 5 seconds into night
+  private recordingStartTimer: number = 0;
+  private hasPlayedRecording: boolean = false;
+  
+  // ============================================
   // MOBILE CONTROLS
   // ============================================
   
@@ -453,6 +465,15 @@ export class GameScene extends Phaser.Scene {
     this.stopSniperLaserHum();
     this.stopSapperSound();
     this.stopDispenserHum();
+    
+    // Reset Engineer recording state
+    this.recordingStartTimer = 0;
+    this.hasPlayedRecording = false;
+    this.isRecordingPlaying = false;
+    if (this.recordingAudio) {
+      this.recordingAudio.pause();
+      this.recordingAudio = null;
+    }
     
     // Reset sapper state for Night 5
     this.sapperRemoveClicks = 0;
@@ -598,7 +619,6 @@ export class GameScene extends Phaser.Scene {
     // Set up Sniper callbacks for Night 4+ or custom night
     const sniperEnabled = isCustomNight ? customEnemies.sniper : (this.nightNumber >= 4);
     if (sniperEnabled) {
-      this.sniper.setDestroyCameraCallback((node) => this.onCameraDestroyed(node, 'SNIPER'));
       this.sniper.setChargeCallback((progress) => this.onSniperChargeProgress(progress));
       this.sniper.setTeleportCallback(() => this.playSniperTeleportSound());
     }
@@ -701,6 +721,7 @@ export class GameScene extends Phaser.Scene {
     this.createHUD();
     this.createCameraUI();
     this.createEndScreen();
+    this.createRecordingUI();
     this.createPauseMenu(); // Uses this.isMobile for layout
     
     // Set up input
@@ -2050,7 +2071,7 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
-   * Create camera destroyed overlay (shown when Heavy/Sniper destroy camera)
+   * Create camera destroyed overlay (shown when Heavy destroys camera)
    */
   private createCameraDestroyedOverlay(): void {
     this.cameraDestroyedOverlay = this.add.container(420, 360);
@@ -2115,7 +2136,7 @@ export class GameScene extends Phaser.Scene {
     
     this.cameraUI.add(this.cameraDestroyedOverlay);
     
-    // Camera watch warning overlay - shows when Heavy/Sniper are about to break camera
+    // Camera watch warning overlay - shows when Heavy is about to break camera or Sniper is aiming
     this.cameraWatchWarning = this.add.container(420, 200);
     this.cameraWatchWarning.setVisible(false);
     this.cameraWatchWarning.setDepth(104);
@@ -3409,9 +3430,8 @@ export class GameScene extends Phaser.Scene {
         const timerText = this.cameraDestroyedOverlay.list[3] as Phaser.GameObjects.Text;
         timerText.setText(`AUTO REPAIR: ${remaining}s`);
         
-        // Update destroyed text with who destroyed it
-        const destroyer = camState.destroyedBy === 'HEAVY' ? 'HEAVY' : 'SNIPER';
-        this.cameraDestroyedText.setText(`-- ${destroyer} DESTROYED CAMERA --`);
+        // Update destroyed text (only Heavy can destroy cameras now)
+        this.cameraDestroyedText.setText(`-- HEAVY DESTROYED CAMERA --`);
       } else {
         this.cameraDestroyedOverlay.setVisible(false);
       }
@@ -6473,6 +6493,138 @@ export class GameScene extends Phaser.Scene {
   }
   
   // ============================================
+  // ENGINEER RECORDINGS UI
+  // ============================================
+  
+  /**
+   * Create the recording UI - skip button and playing indicator
+   */
+  private createRecordingUI(): void {
+    // Skip button - bottom right corner
+    this.recordingSkipButton = this.add.container(1200, 680);
+    this.recordingSkipButton.setDepth(150);
+    this.recordingSkipButton.setVisible(false);
+    
+    const skipBg = this.add.rectangle(0, 0, 80, 30, 0x333333, 0.9);
+    skipBg.setStrokeStyle(2, 0x666666);
+    skipBg.setInteractive({ useHandCursor: true });
+    
+    const skipText = this.add.text(0, 0, 'SKIP', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '14px',
+      color: '#aaaaaa',
+    }).setOrigin(0.5);
+    
+    skipBg.on('pointerover', () => {
+      skipBg.setFillStyle(0x555555);
+      skipText.setColor('#ffffff');
+    });
+    
+    skipBg.on('pointerout', () => {
+      skipBg.setFillStyle(0x333333);
+      skipText.setColor('#aaaaaa');
+    });
+    
+    skipBg.on('pointerdown', () => {
+      this.stopRecording();
+    });
+    
+    this.recordingSkipButton.add([skipBg, skipText]);
+    
+    // Recording indicator - tape recorder icon with waveform
+    this.recordingIndicator = this.add.container(1100, 680);
+    this.recordingIndicator.setDepth(150);
+    this.recordingIndicator.setVisible(false);
+    
+    const indicatorBg = this.add.rectangle(0, 0, 100, 30, 0x1a1a1a, 0.9);
+    indicatorBg.setStrokeStyle(1, 0x444444);
+    
+    const tapeIcon = this.add.text(-35, 0, '📼', {
+      fontSize: '16px',
+    }).setOrigin(0.5);
+    
+    const playingText = this.add.text(10, 0, 'PLAYING', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '10px',
+      color: '#00ff00',
+    }).setOrigin(0.5);
+    
+    // Blink the playing text
+    this.tweens.add({
+      targets: playingText,
+      alpha: 0.3,
+      duration: 500,
+      yoyo: true,
+      repeat: -1,
+    });
+    
+    this.recordingIndicator.add([indicatorBg, tapeIcon, playingText]);
+  }
+  
+  /**
+   * Start playing the Engineer recording for the current night
+   */
+  private startRecording(): void {
+    // Don't play if already played or game not playing
+    if (this.hasPlayedRecording || this.gameStatus !== 'PLAYING') return;
+    
+    // Determine which recording to play based on night number
+    let recordingFile = `night${this.nightNumber}.mp3`;
+    
+    // Special case for Night 6 bad ending
+    if (this.nightNumber === 6 && this.isBadEndingNight6) {
+      recordingFile = 'night6.mp3';
+    }
+    
+    // Try to load and play the audio
+    try {
+      this.recordingAudio = new Audio(`./audio/recordings/${recordingFile}`);
+      this.recordingAudio.volume = 0.7;
+      
+      this.recordingAudio.addEventListener('canplaythrough', () => {
+        if (this.recordingAudio && this.gameStatus === 'PLAYING') {
+          this.recordingAudio.play();
+          this.isRecordingPlaying = true;
+          this.recordingSkipButton.setVisible(true);
+          this.recordingIndicator.setVisible(true);
+          console.log(`🎙️ Playing Engineer recording: ${recordingFile}`);
+        }
+      });
+      
+      this.recordingAudio.addEventListener('ended', () => {
+        this.stopRecording();
+      });
+      
+      this.recordingAudio.addEventListener('error', () => {
+        console.log(`🎙️ No recording found for: ${recordingFile}`);
+        this.hasPlayedRecording = true; // Mark as played so we don't retry
+      });
+      
+      this.recordingAudio.load();
+    } catch (e) {
+      console.log('🎙️ Audio playback not supported');
+      this.hasPlayedRecording = true;
+    }
+  }
+  
+  /**
+   * Stop the current recording
+   */
+  private stopRecording(): void {
+    if (this.recordingAudio) {
+      this.recordingAudio.pause();
+      this.recordingAudio.currentTime = 0;
+      this.recordingAudio = null;
+    }
+    
+    this.isRecordingPlaying = false;
+    this.hasPlayedRecording = true;
+    this.recordingSkipButton.setVisible(false);
+    this.recordingIndicator.setVisible(false);
+    console.log('🎙️ Recording stopped');
+  }
+  
+  // ============================================
   // INPUT HANDLING
   // ============================================
   
@@ -7168,6 +7320,11 @@ export class GameScene extends Phaser.Scene {
       this.stopDispenserHum();
       this.physics?.pause();
       
+      // Pause Engineer recording if playing
+      if (this.recordingAudio && this.isRecordingPlaying) {
+        this.recordingAudio.pause();
+      }
+      
       // Show a random hint
       const randomHint = this.pauseHints[Math.floor(Math.random() * this.pauseHints.length)];
       this.pauseHintText.setText(randomHint);
@@ -7178,6 +7335,10 @@ export class GameScene extends Phaser.Scene {
       // Resume dispenser hum if in Intel room (plays even with cameras up)
       if (!this.isTeleported) {
         this.startDispenserHum();
+      }
+      // Resume Engineer recording if it was playing
+      if (this.recordingAudio && this.isRecordingPlaying) {
+        this.recordingAudio.play();
       }
     }
   }
@@ -8424,9 +8585,8 @@ export class GameScene extends Phaser.Scene {
         const timerText = this.cameraDestroyedOverlay.list[3] as Phaser.GameObjects.Text;
         timerText.setText(`AUTO REPAIR: ${remaining}s`);
         
-        // Also update destroyed text
-        const destroyer = camState.destroyedBy === 'HEAVY' ? 'HEAVY' : 'SNIPER';
-        this.cameraDestroyedText.setText(`-- ${destroyer} DESTROYED CAMERA --`);
+        // Also update destroyed text (only Heavy can destroy cameras now)
+        this.cameraDestroyedText.setText(`-- HEAVY DESTROYED CAMERA --`);
         return;
       } else {
         this.cameraDestroyedOverlay.setVisible(false);
@@ -9394,6 +9554,7 @@ export class GameScene extends Phaser.Scene {
     this.gameStatus = 'LOST';
     // Stop ALL sounds immediately
     this.stopAllGameSounds();
+    this.stopRecording(); // Stop Engineer recording if playing
     console.log('GAME OVER:', reason);
     
     // Play jumpscare sound!
@@ -9865,6 +10026,7 @@ export class GameScene extends Phaser.Scene {
     
     this.gameStatus = 'WON';
     this.stopAllGameSounds(); // Stop ALL sounds
+    this.stopRecording(); // Stop Engineer recording if playing
     this.playVictoryChime(); // Play triumphant sound
     console.log('VICTORY!');
     
@@ -10331,6 +10493,14 @@ export class GameScene extends Phaser.Scene {
     if (this.gameStatus !== 'PLAYING') return;
     if (this.isPaused) return;
     
+    // ---- ENGINEER RECORDING TIMER ----
+    if (!this.hasPlayedRecording && !this.isRecordingPlaying) {
+      this.recordingStartTimer += delta;
+      if (this.recordingStartTimer >= this.recordingStartDelay) {
+        this.startRecording();
+      }
+    }
+    
     // ---- UPDATE WRANGLER COOLDOWN ----
     if (this.wranglerCooldown > 0) {
       this.wranglerCooldown -= delta;
@@ -10676,7 +10846,7 @@ export class GameScene extends Phaser.Scene {
           const heavyAtCam = this.isHeavyEnabled() && this.heavy.isAtNode(selectedCam.node);
           const sniperAtCam = this.isSniperEnabled() && this.sniper.isAtNode(selectedCam.node);
           
-          // If BOTH Heavy and Sniper are on the same camera, destruction time is HALVED (multiplier 2)
+          // If BOTH Heavy and Sniper are on the same camera, their timers run at 2x speed
           // If enemy is LURED, add 1.5x multiplier (makes it harder to watch lured enemies)
           let heavyMultiplier = (heavyAtCam && sniperAtCam) ? 2 : 1;
           let sniperMultiplier = (heavyAtCam && sniperAtCam) ? 2 : 1;
@@ -10791,8 +10961,10 @@ export class GameScene extends Phaser.Scene {
       const sniperDelta = delta * timerScaleFactor;
       const sniperResult = this.sniper.update(sniperDelta);
       
-      if (sniperResult.destroyedCamera) {
-        // Camera destruction is handled by callback
+      if (sniperResult.headshotThroughCamera) {
+        // Sniper headshot the player through the camera!
+        this.gameOver('Sniped through the camera!');
+        return;
       }
       
       if (sniperResult.headshotReady) {
@@ -10857,6 +11029,14 @@ export class GameScene extends Phaser.Scene {
         this.pyro.setBlockedHallway(this.sentry.aimedDoor as 'LEFT' | 'RIGHT');
       } else {
         this.pyro.setBlockedHallway(null);
+      }
+      
+      // Tell Pyro which hallway Sniper is aiming from (prevents unfair Pyro+Sniper combo)
+      if (this.isSniperEnabled() && this.sniper.isActive()) {
+        const sniperHallway = this.sniper.getAimingDoor();
+        this.pyro.setSniperChargingHallway(sniperHallway);
+      } else {
+        this.pyro.setSniperChargingHallway(null);
       }
       
       // Check if player is shining wrangler light on Pyro in hallway
@@ -11055,9 +11235,9 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
-   * Handle camera destroyed by Heavy or Sniper
+   * Handle camera destroyed by Heavy (Sniper headshots player instead of destroying cameras)
    */
-  private onCameraDestroyed(node: NodeId, destroyedBy: 'HEAVY' | 'SNIPER'): void {
+  private onCameraDestroyed(node: NodeId, destroyedBy: 'HEAVY'): void {
     // Find which camera corresponds to this node
     const camera = CAMERAS.find(cam => cam.node === node);
     if (!camera) return;
