@@ -300,6 +300,20 @@ export class DemomanEnemy {
   }
   
   /**
+   * Get charge buildup progress (0-1) when in DORMANT state
+   * 0 = just reset, 1 = about to light up eye
+   * Used to control head opacity on cameras (translucent -> opaque)
+   */
+  public getChargeBuildup(): number {
+    if (this.state !== 'DORMANT') {
+      // If not dormant (eye lit or charging), return 1 (fully opaque)
+      return 1;
+    }
+    if (this.dormantDuration <= 0) return 0;
+    return Math.min(1, this.dormantTimer / this.dormantDuration);
+  }
+  
+  /**
    * Permanently despawn (for custom night)
    */
   public forceDespawn(): void {

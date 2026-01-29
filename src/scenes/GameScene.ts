@@ -306,6 +306,7 @@ export class GameScene extends Phaser.Scene {
   // Sound state for sniper laser hum
   private isPlayingSniperHum: boolean = false;
   private sniperHumOscillator: OscillatorNode | null = null;
+  private sniperHumOscillator2: OscillatorNode | null = null;  // Second harmonic oscillator
   private sniperHumGain: GainNode | null = null;
   private detectionOscillator: OscillatorNode | null = null;
   
@@ -2182,16 +2183,20 @@ export class GameScene extends Phaser.Scene {
     
     // ========== CAMERA BOOT-UP OVERLAY ==========
     // Shown during the 1-second camera boot delay
-    this.cameraBootOverlay = this.add.container(420, 350);
+    // Must cover the entire camera view INCLUDING the title bar at the top
+    // Title bar is at y~128, feed goes from ~145 to ~555
+    // So we need to cover from y~110 to y~560, centered at y~335
+    this.cameraBootOverlay = this.add.container(420, 335);
     this.cameraBootOverlay.setDepth(110); // Above other camera elements
     
-    // Dark boot screen (fully opaque so player can't see camera feed behind it)
-    const bootScreenBg = this.add.rectangle(0, 0, 510, 410, 0x000803, 1.0);
+    // Dark boot screen - sized to fully cover the camera screen AND title bar
+    // Covers from y=110 to y=560 (height 450) and x=155 to x=685 (width 530)
+    const bootScreenBg = this.add.rectangle(0, 0, 530, 460, 0x000803, 1.0);
     bootScreenBg.setStrokeStyle(2, 0x003311);
     this.cameraBootOverlay.add(bootScreenBg);
     
-    // Boot-up text title
-    const bootTitle = this.add.text(0, -100, 'CAMERA SYSTEM', {
+    // Boot-up text title (adjusted for new container position)
+    const bootTitle = this.add.text(0, -85, 'CAMERA SYSTEM', {
       fontFamily: 'Courier New, monospace',
       fontSize: '18px',
       color: '#00aa44',
@@ -2200,26 +2205,26 @@ export class GameScene extends Phaser.Scene {
     this.cameraBootOverlay.add(bootTitle);
     
     // Boot status text (animated)
-    const bootStatus = this.add.text(0, -60, 'INITIALIZING...', {
+    const bootStatus = this.add.text(0, -45, 'INITIALIZING...', {
       fontFamily: 'Courier New, monospace',
       fontSize: '14px',
       color: '#006622',
     }).setOrigin(0.5);
     this.cameraBootOverlay.add(bootStatus);
     
-    // Progress bar background
-    const bootBarBg = this.add.rectangle(0, 0, 300, 20, 0x001108);
+    // Progress bar background (adjusted for new container position)
+    const bootBarBg = this.add.rectangle(0, 15, 300, 20, 0x001108);
     bootBarBg.setStrokeStyle(2, 0x003311);
     this.cameraBootOverlay.add(bootBarBg);
     
     // Progress bar fill (will be animated)
-    const bootBarFill = this.add.rectangle(-147, 0, 0, 14, 0x00aa44, 0.8);
+    const bootBarFill = this.add.rectangle(-147, 15, 0, 14, 0x00aa44, 0.8);
     bootBarFill.setOrigin(0, 0.5);
     bootBarFill.setName('bootBarFill');
     this.cameraBootOverlay.add(bootBarFill);
     
     // Boot percentage text
-    const bootPercent = this.add.text(0, 35, '0%', {
+    const bootPercent = this.add.text(0, 50, '0%', {
       fontFamily: 'Courier New, monospace',
       fontSize: '12px',
       color: '#00aa44',
@@ -2229,24 +2234,24 @@ export class GameScene extends Phaser.Scene {
     
     // Scanlines for boot screen (matches camera feed aesthetic)
     const bootScanlines = this.add.graphics();
-    for (let y = -200; y < 200; y += 4) {
+    for (let y = -230; y < 230; y += 4) {
       bootScanlines.lineStyle(1, 0x000000, 0.3);
-      bootScanlines.lineBetween(-250, y, 250, y);
+      bootScanlines.lineBetween(-265, y, 265, y);
     }
     this.cameraBootOverlay.add(bootScanlines);
     
-    // Boot log messages (scrolling up effect)
-    const bootLog1 = this.add.text(0, 80, '> Connecting to network...', {
+    // Boot log messages (scrolling up effect, adjusted for new container position)
+    const bootLog1 = this.add.text(0, 95, '> Connecting to network...', {
       fontFamily: 'Courier New, monospace',
       fontSize: '10px',
       color: '#004422',
     }).setOrigin(0.5);
-    const bootLog2 = this.add.text(0, 100, '> Loading camera feeds...', {
+    const bootLog2 = this.add.text(0, 115, '> Loading camera feeds...', {
       fontFamily: 'Courier New, monospace',
       fontSize: '10px',
       color: '#004422',
     }).setOrigin(0.5);
-    const bootLog3 = this.add.text(0, 120, '> Calibrating night vision...', {
+    const bootLog3 = this.add.text(0, 135, '> Calibrating night vision...', {
       fontFamily: 'Courier New, monospace',
       fontSize: '10px',
       color: '#004422',
@@ -2670,8 +2675,35 @@ export class GameScene extends Phaser.Scene {
       this.sniper.setBlockedDestination(node);
     }
     
+    // Freeze Scout and Soldier movement during player's teleport animation
+    // This prevents them from moving into rooms while player is mid-teleport
+    if (this.isScoutEnabled() && this.scout) {
+      this.scout.freezeMovement();
+    }
+    if (this.isSoldierEnabled() && this.soldier) {
+      this.soldier.freezeMovement();
+    }
+    
     // Show teleport animation overlay FIRST, then check for enemies after arrival
     this.showTeleportAnimation(() => {
+      // If game ended during teleport animation (e.g., Pyro timer ran out), don't proceed
+      if (this.gameStatus !== 'PLAYING') {
+        // Still unfreeze enemies to prevent them being stuck
+        if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
+          this.pyro.unfreezeTeleport();
+        }
+        if (this.isSniperEnabled() && this.sniper) {
+          this.sniper.unfreezeTeleport();
+        }
+        if (this.isScoutEnabled() && this.scout) {
+          this.scout.unfreezeMovement();
+        }
+        if (this.isSoldierEnabled() && this.soldier) {
+          this.soldier.unfreezeMovement();
+        }
+        return;
+      }
+      
       // Check if any enemy BODY is in this room (not just heads)
       // NOTE: Pyro stays frozen until AFTER this check completes
       const scoutThere = this.scout.isAtNode(node);
@@ -2689,13 +2721,19 @@ export class GameScene extends Phaser.Scene {
       
       console.log(`Arrived at ${node}. Enemies: Scout=${scoutThere}, Soldier=${soldierThere}, DemoBody=${demomanBodyThere}, Heavy=${heavyThere}, Sniper=${sniperThere}, Pyro=${pyroThere}`);
       
-      // Helper to unfreeze Pyro and Sniper before returning
+      // Helper to unfreeze enemies before returning
       const unfreezeAndReturn = () => {
         if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
           this.pyro.unfreezeTeleport();
         }
         if (this.isSniperEnabled() && this.sniper) {
           this.sniper.unfreezeTeleport();
+        }
+        if (this.isScoutEnabled() && this.scout) {
+          this.scout.unfreezeMovement();
+        }
+        if (this.isSoldierEnabled() && this.soldier) {
+          this.soldier.unfreezeMovement();
         }
       };
       
@@ -2801,12 +2839,18 @@ export class GameScene extends Phaser.Scene {
         }
       }
       
-      // Unfreeze Pyro and Sniper AFTER all checks complete - prevents race condition
+      // Unfreeze all enemies AFTER all checks complete - prevents race condition
       if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
         this.pyro.unfreezeTeleport();
       }
       if (this.isSniperEnabled() && this.sniper) {
         this.sniper.unfreezeTeleport();
+      }
+      if (this.isScoutEnabled() && this.scout) {
+        this.scout.unfreezeMovement();
+      }
+      if (this.isSoldierEnabled() && this.soldier) {
+        this.soldier.unfreezeMovement();
       }
       
       console.log(`Engineer teleported to ${node}`);
@@ -3008,12 +3052,18 @@ export class GameScene extends Phaser.Scene {
       this.teleportAnimationOverlay = null;
     }
     
-    // Unfreeze Pyro and Sniper
+    // Unfreeze all enemies
     if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
       this.pyro.unfreezeTeleport();
     }
     if (this.isSniperEnabled() && this.sniper) {
       this.sniper.unfreezeTeleport();
+    }
+    if (this.isScoutEnabled() && this.scout) {
+      this.scout.unfreezeMovement();
+    }
+    if (this.isSoldierEnabled() && this.soldier) {
+      this.soldier.unfreezeMovement();
     }
     
     // Reset state
@@ -3934,21 +3984,33 @@ export class GameScene extends Phaser.Scene {
    * Draw Demoman's severed head for camera feed
    * @param isUbered - If true, draws a bright blue Über glow around the head
    */
-  private drawDemomanHead(graphics: Phaser.GameObjects.Graphics, isUbered: boolean = false): void {
+  private drawDemomanHead(graphics: Phaser.GameObjects.Graphics, isUbered: boolean = false, chargeBuildup: number = 1): void {
     graphics.clear();
     
-    // Draw Über glow if Demoman is Übered by Medic
+    // Draw ghostly aura based on charge buildup
+    // Aura is dim/dull when far from charging, bright and pulsing when close
+    // Color: green normally, blue when Übered
+    const easedBuildup = chargeBuildup * chargeBuildup * chargeBuildup;
+    const pulse = chargeBuildup > 0.75 ? Math.sin(Date.now() * 0.01) * 0.15 : 0;
+    const auraOpacity = 0.05 + easedBuildup * 0.45 + (pulse * easedBuildup);
+    const auraSize = 75 + easedBuildup * 25;
+    
+    // Choose color based on Über status
+    const auraColorOuter = isUbered ? 0x4488ff : 0x00ff44;
+    const auraColorInner = isUbered ? 0x66aaff : 0x44ff88;
+    
+    // Outer ethereal glow
+    graphics.fillStyle(auraColorOuter, auraOpacity * 0.4);
+    graphics.fillCircle(0, 0, auraSize + 20);
+    // Middle glow
+    graphics.fillStyle(auraColorOuter, auraOpacity * 0.6);
+    graphics.fillCircle(0, 0, auraSize);
+    // Inner glow
+    graphics.fillStyle(auraColorInner, auraOpacity * 0.8);
+    graphics.fillCircle(0, 0, auraSize - 20);
+    
+    // Draw Medic ghost if Übered (in addition to blue charge aura)
     if (isUbered) {
-      // Outer pulsing blue glow
-      graphics.fillStyle(0x4488ff, 0.4);
-      graphics.fillCircle(0, 0, 90);
-      // Middle glow
-      graphics.fillStyle(0x4488ff, 0.5);
-      graphics.fillCircle(0, 0, 70);
-      // Inner bright glow
-      graphics.fillStyle(0x66aaff, 0.6);
-      graphics.fillCircle(0, 0, 55);
-      
       // Draw Medic ghost hovering near head (upper right)
       const ghostX = 55;
       const ghostY = -40;
@@ -6340,6 +6402,50 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
+   * Play camera boot-up sound - subtle electronic chirp
+   */
+  private playCameraBootSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+      
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      // Short, subtle electronic "blip" - not intrusive since cameras open frequently
+      const osc = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      const filter = audioContext.createBiquadFilter();
+      
+      osc.connect(filter);
+      filter.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Gentle low-pass filter
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(800, audioContext.currentTime);
+      
+      // Quick ascending tone
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(300, audioContext.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.15);
+      
+      // Subtle but audible, quick fade
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.12, audioContext.currentTime + 0.02);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.2);
+      
+      osc.start(audioContext.currentTime);
+      osc.stop(audioContext.currentTime + 0.25);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+  
+  /**
    * Play camera static burst sound - brief static when switching
    */
   private playCameraStaticBurst(): void {
@@ -6502,7 +6608,7 @@ export class GameScene extends Phaser.Scene {
   private createRecordingUI(): void {
     // Skip button - bottom right corner
     this.recordingSkipButton = this.add.container(1200, 680);
-    this.recordingSkipButton.setDepth(150);
+    this.recordingSkipButton.setDepth(210);  // Above pause menu (200)
     this.recordingSkipButton.setVisible(false);
     
     const skipBg = this.add.rectangle(0, 0, 80, 30, 0x333333, 0.9);
@@ -6526,6 +6632,7 @@ export class GameScene extends Phaser.Scene {
     });
     
     skipBg.on('pointerdown', () => {
+      this.playCassetteStopSound();
       this.stopRecording();
     });
     
@@ -6533,7 +6640,7 @@ export class GameScene extends Phaser.Scene {
     
     // Recording indicator - tape recorder icon with waveform
     this.recordingIndicator = this.add.container(1100, 680);
-    this.recordingIndicator.setDepth(150);
+    this.recordingIndicator.setDepth(210);  // Above pause menu (200)
     this.recordingIndicator.setVisible(false);
     
     const indicatorBg = this.add.rectangle(0, 0, 100, 30, 0x1a1a1a, 0.9);
@@ -6565,8 +6672,11 @@ export class GameScene extends Phaser.Scene {
    * Start playing the Engineer recording for the current night
    */
   private startRecording(): void {
-    // Don't play if already played or game not playing
+    // Don't play if already played, already loading, or game not playing
     if (this.hasPlayedRecording || this.gameStatus !== 'PLAYING') return;
+    
+    // Mark as played IMMEDIATELY to prevent multiple calls
+    this.hasPlayedRecording = true;
     
     // Determine which recording to play based on night number
     let recordingFile = `night${this.nightNumber}.mp3`;
@@ -6622,6 +6732,63 @@ export class GameScene extends Phaser.Scene {
     this.recordingSkipButton.setVisible(false);
     this.recordingIndicator.setVisible(false);
     console.log('🎙️ Recording stopped');
+  }
+  
+  /**
+   * Play cassette stop/click sound - mechanical clunk when skipping recording
+   */
+  private playCassetteStopSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = this.sharedAudioContext;
+      const now = ctx.currentTime;
+      
+      // Create a mechanical "click" sound like a cassette button
+      const clickGain = ctx.createGain();
+      clickGain.connect(ctx.destination);
+      
+      // First click - the button press
+      const click1 = ctx.createOscillator();
+      click1.type = 'square';
+      click1.frequency.setValueAtTime(800, now);
+      click1.frequency.exponentialRampToValueAtTime(200, now + 0.02);
+      click1.connect(clickGain);
+      clickGain.gain.setValueAtTime(0.3, now);
+      clickGain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+      click1.start(now);
+      click1.stop(now + 0.05);
+      
+      // Second clunk - the mechanism engaging
+      const clunk = ctx.createOscillator();
+      const clunkGain = ctx.createGain();
+      clunk.type = 'triangle';
+      clunk.frequency.setValueAtTime(150, now + 0.03);
+      clunk.frequency.exponentialRampToValueAtTime(60, now + 0.08);
+      clunk.connect(clunkGain);
+      clunkGain.connect(ctx.destination);
+      clunkGain.gain.setValueAtTime(0.25, now + 0.03);
+      clunkGain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+      clunk.start(now + 0.03);
+      clunk.stop(now + 0.12);
+      
+      // Tape stop "whir-down" sound
+      const whir = ctx.createOscillator();
+      const whirGain = ctx.createGain();
+      whir.type = 'sawtooth';
+      whir.frequency.setValueAtTime(400, now + 0.05);
+      whir.frequency.exponentialRampToValueAtTime(50, now + 0.25);
+      whir.connect(whirGain);
+      whirGain.connect(ctx.destination);
+      whirGain.gain.setValueAtTime(0.08, now + 0.05);
+      whirGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      whir.start(now + 0.05);
+      whir.stop(now + 0.25);
+      
+    } catch (e) {
+      // Audio not available
+    }
   }
   
   // ============================================
@@ -7318,6 +7485,9 @@ export class GameScene extends Phaser.Scene {
       this.playPauseSound();
       this.stopDetectionSound();
       this.stopDispenserHum();
+      this.stopSniperLaserHum();
+      this.stopPyroCracklingAmbient();
+      this.stopMedicGhostScream();  // Stop ghost scream during pause
       this.physics?.pause();
       
       // Pause Engineer recording if playing
@@ -7339,6 +7509,14 @@ export class GameScene extends Phaser.Scene {
       // Resume Engineer recording if it was playing
       if (this.recordingAudio && this.isRecordingPlaying) {
         this.recordingAudio.play();
+      }
+      // Resume Pyro crackling if match is still lit (must restart fully, not just schedule)
+      if (this.isPyroEnabled() && this.pyro && this.pyro.isMatchLit()) {
+        this.startPyroCracklingAmbient();
+      }
+      // Resume Medic ghost scream if ghost is still active
+      if (this.medicGhostActive) {
+        this.playMedicGhostScream();
       }
     }
   }
@@ -7554,8 +7732,10 @@ export class GameScene extends Phaser.Scene {
     this.sniperLaserLeft.setVisible(sniperInLeftHall && !this.isCameraMode);
     this.sniperLaserRight.setVisible(sniperInRightHall && !this.isCameraMode);
     
-    // Play/stop laser hum based on visibility
-    if (laserVisible) {
+    // Play/stop laser hum - SOUND plays even in camera mode (important feedback!)
+    // Only the visual laser hides when in camera mode
+    const sniperAiming = sniperInLeftHall || sniperInRightHall;
+    if (sniperAiming) {
       const progress = this.sniper.getChargeProgress();
       this.startSniperLaserHum(progress);
     } else {
@@ -7617,13 +7797,11 @@ export class GameScene extends Phaser.Scene {
       
       // Create new hum sound
       this.sniperHumOscillator = audioContext.createOscillator();
+      this.sniperHumOscillator2 = audioContext.createOscillator();  // Track second oscillator
       this.sniperHumGain = audioContext.createGain();
       
-      // Add a second oscillator for richness
-      const osc2 = audioContext.createOscillator();
-      
       this.sniperHumOscillator.connect(this.sniperHumGain);
-      osc2.connect(this.sniperHumGain);
+      this.sniperHumOscillator2.connect(this.sniperHumGain);
       this.sniperHumGain.connect(audioContext.destination);
       
       // Low electrical hum
@@ -7631,13 +7809,13 @@ export class GameScene extends Phaser.Scene {
       this.sniperHumOscillator.frequency.value = 80 + chargeProgress * 60;
       
       // Higher harmonic for "electrical" feel
-      osc2.type = 'sine';
-      osc2.frequency.value = 240 + chargeProgress * 120;
+      this.sniperHumOscillator2.type = 'sine';
+      this.sniperHumOscillator2.frequency.value = 240 + chargeProgress * 120;
       
       this.sniperHumGain.gain.value = 0.03 + chargeProgress * 0.08;
       
       this.sniperHumOscillator.start();
-      osc2.start();
+      this.sniperHumOscillator2.start();
       this.isPlayingSniperHum = true;
     } catch (e) {
       // Audio not available
@@ -7655,6 +7833,11 @@ export class GameScene extends Phaser.Scene {
         this.sniperHumOscillator.stop();
         this.sniperHumOscillator.disconnect();
         this.sniperHumOscillator = null;
+      }
+      if (this.sniperHumOscillator2) {
+        this.sniperHumOscillator2.stop();
+        this.sniperHumOscillator2.disconnect();
+        this.sniperHumOscillator2 = null;
       }
       if (this.sniperHumGain) {
         this.sniperHumGain.disconnect();
@@ -7752,6 +7935,9 @@ export class GameScene extends Phaser.Scene {
    * Play sapper sparking/buzzing sound (Night 5+)
    */
   private playSapperSound(): void {
+    // Don't play if game is over
+    if (this.gameStatus !== 'PLAYING') return;
+    
     try {
       if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
         this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -7891,6 +8077,7 @@ export class GameScene extends Phaser.Scene {
       this.demoEyeGlowOscillator,
       this.sapperSoundOscillator,
       this.sniperHumOscillator,
+      this.sniperHumOscillator2,
       this.detectionOscillator,
       this.approachGrowlOsc,
       this.dispenserHumOscillator,
@@ -7912,6 +8099,7 @@ export class GameScene extends Phaser.Scene {
     this.demoEyeGlowOscillator = null;
     this.sapperSoundOscillator = null;
     this.sniperHumOscillator = null;
+    this.sniperHumOscillator2 = null;
     this.detectionOscillator = null;
     this.approachGrowlOsc = null;
     this.dispenserHumOscillator = null;
@@ -8493,6 +8681,10 @@ export class GameScene extends Phaser.Scene {
       this.medic.onTargetAttackResolved();
     }
     
+    // Reset Medic ghost cooldown to prevent immediate spawn after Über ends
+    // Ghost should wait at least 30 seconds after an Über attack resolves
+    this.medicGhostCooldown = Math.max(this.medicGhostCooldown, 30000);
+    
     console.log(`💉 ${enemyType} Über attack resolved - player escaped!`);
   }
   
@@ -8535,6 +8727,9 @@ export class GameScene extends Phaser.Scene {
       this.isCameraBooting = true;
       this.cameraBootTimer = 0;
       this.cameraBootOverlay.setVisible(true);
+      
+      // Play camera boot sound
+      this.playCameraBootSound();
       
       // Reset boot bar to 0
       const bootBarFill = this.cameraBootOverlay.getByName('bootBarFill') as Phaser.GameObjects.Rectangle;
@@ -8762,10 +8957,14 @@ export class GameScene extends Phaser.Scene {
     ];
     void _basePositions; // Kept for reference
     
-    // Hide all enemy containers first
-    containers.forEach(c => c.setVisible(false));
+    // Hide all enemy containers first and reset alpha (demo head may have changed it)
+    containers.forEach(c => {
+      c.setVisible(false);
+      c.setAlpha(1);  // Reset alpha in case demo head opacity was applied
+    });
     this.cameraFeedEnemyEyeGlow.setVisible(false);
     this.cameraFeedDemoHead.setVisible(false);
+    this.cameraFeedDemoHead.setAlpha(1);  // Reset demo head alpha too
     
     // Draw ALL enemies present (up to 3)
     if (enemies.length > 0) {
@@ -8831,7 +9030,13 @@ export class GameScene extends Phaser.Scene {
       
       // Check if Demoman is Übered - draw with blue glow!
       const demoHeadUbered = demomanHeadAtCam && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
-      this.drawDemomanHead(enemyGraphics, demoHeadUbered);
+      // Pass charge buildup for ghostly aura effect (dim when far from charging, bright when close)
+      // Spy disguised as Demo gets a static dim aura (0.15) since he has no charge timer
+      const chargeBuildup = demomanHeadAtCam ? this.demoman.getChargeBuildup() : 0.15;
+      this.drawDemomanHead(enemyGraphics, demoHeadUbered, chargeBuildup);
+      
+      // Keep container at full alpha - the ghostly effect is now in the aura, not transparency
+      this.cameraFeedEnemy.setAlpha(1);
       
       // Hide label - Medic ghost indicates Über status
       enemyLabel.setText('');
@@ -8855,7 +9060,13 @@ export class GameScene extends Phaser.Scene {
       
       // Check if Demoman is Übered - draw with blue glow!
       const demoHeadUbered = demomanHeadAtCam && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
-      this.drawDemomanHeadSmall(demoHeadGraphics, demoHeadUbered);
+      // Pass charge buildup for ghostly aura effect
+      // Spy disguised as Demo gets a static dim aura (0.15) since he has no charge timer
+      const chargeBuildup = demomanHeadAtCam ? this.demoman.getChargeBuildup() : 0.15;
+      this.drawDemomanHeadSmall(demoHeadGraphics, demoHeadUbered, chargeBuildup);
+      
+      // Keep container at full alpha - the ghostly effect is now in the aura
+      this.cameraFeedDemoHead.setAlpha(1);
       
       // Hide label - Medic ghost indicates Über status
       demoHeadLabel.setText('');
@@ -8881,27 +9092,36 @@ export class GameScene extends Phaser.Scene {
     
     // Update map node colors to show active lures
     this.updateMapNodeColors(selectedCam.node);
+    
+    // Update camera lure button visibility (ensures button shows after placing lure)
+    this.updateCameraLureButton();
   }
   
   /**
    * Draw a smaller version of Demoman's head for secondary display
    * @param isUbered - If true, draws a bright blue Über glow around the head
    */
-  private drawDemomanHeadSmall(graphics: Phaser.GameObjects.Graphics, isUbered: boolean = false): void {
+  private drawDemomanHeadSmall(graphics: Phaser.GameObjects.Graphics, isUbered: boolean = false, chargeBuildup: number = 1): void {
     graphics.clear();
     
-    // Draw Über glow if Demoman is Übered by Medic
+    // Draw ghostly aura based on charge buildup (blue when Übered, green normally)
+    const easedBuildup = chargeBuildup * chargeBuildup * chargeBuildup;
+    const pulse = chargeBuildup > 0.75 ? Math.sin(Date.now() * 0.01) * 0.15 : 0;
+    const auraOpacity = 0.05 + easedBuildup * 0.45 + (pulse * easedBuildup);
+    const auraSize = 50 + easedBuildup * 18;
+    
+    const auraColorOuter = isUbered ? 0x4488ff : 0x00ff44;
+    const auraColorInner = isUbered ? 0x66aaff : 0x44ff88;
+    
+    graphics.fillStyle(auraColorOuter, auraOpacity * 0.4);
+    graphics.fillCircle(0, 0, auraSize + 15);
+    graphics.fillStyle(auraColorOuter, auraOpacity * 0.6);
+    graphics.fillCircle(0, 0, auraSize);
+    graphics.fillStyle(auraColorInner, auraOpacity * 0.8);
+    graphics.fillCircle(0, 0, auraSize - 12);
+    
+    // Draw Medic ghost if Übered (in addition to blue charge aura)
     if (isUbered) {
-      // Outer pulsing blue glow
-      graphics.fillStyle(0x4488ff, 0.4);
-      graphics.fillCircle(0, 0, 60);
-      // Middle glow
-      graphics.fillStyle(0x4488ff, 0.5);
-      graphics.fillCircle(0, 0, 45);
-      // Inner bright glow
-      graphics.fillStyle(0x66aaff, 0.6);
-      graphics.fillCircle(0, 0, 35);
-      
       // Draw small Medic ghost hovering near head
       const ghostX = 38;
       const ghostY = -25;

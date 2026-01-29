@@ -36,6 +36,9 @@ export abstract class EnemyBase {
   // Track if attack has been reported (to avoid spamming reachedIntel every frame)
   private hasReportedAttack: boolean = false;
   
+  // Freeze movement when player is teleporting (prevents unfair deaths)
+  private _movementFrozen: boolean = false;
+  
   // Configuration (override in subclasses)
   protected abstract moveInterval: number;
   protected abstract waitTime: number;
@@ -78,10 +81,13 @@ export abstract class EnemyBase {
     
     switch (this.state) {
       case 'PATROLLING':
-        this.moveTimer += delta;
-        if (this.moveTimer >= this.moveInterval) {
-          this.moveTimer = 0;
-          this.moveToNextNode();
+        // Don't move if frozen (player is teleporting)
+        if (!this._movementFrozen) {
+          this.moveTimer += delta;
+          if (this.moveTimer >= this.moveInterval) {
+            this.moveTimer = 0;
+            this.moveToNextNode();
+          }
         }
         break;
         
@@ -197,6 +203,27 @@ export abstract class EnemyBase {
   public forceDespawn(): void {
     this.state = 'DESPAWNED';
     this.respawnTimer = -999999; // Will never reach respawn threshold
+  }
+  
+  /**
+   * Freeze movement (used when player is teleporting to prevent unfair deaths)
+   */
+  public freezeMovement(): void {
+    this._movementFrozen = true;
+  }
+  
+  /**
+   * Unfreeze movement (player finished teleporting)
+   */
+  public unfreezeMovement(): void {
+    this._movementFrozen = false;
+  }
+  
+  /**
+   * Check if movement is currently frozen
+   */
+  public isMovementFrozen(): boolean {
+    return this._movementFrozen;
   }
 }
 
