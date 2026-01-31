@@ -21,13 +21,13 @@ These recordings play during each night, like FNAF phone calls. Engineer is leav
 
 > *[CLICK - tape recorder starts]*
 > 
-> "Log one. For the time being, Medic and I have hunkered down in Blu's intel, which has been inexplicably abandoned. Blu Team is nowhere to be found. I don't know how long it'll be until we can leave the base. Comms are jammed—classic. As for the rest of our team... they're not with us. They're not right.
+> "Log one. For the time being, Medic and I've hunkered down in Blu's intel, which's been inexplicably abandoned. Blu Team's nowhere to be found. I dunno how long it'll be till we can leave their base. All comms are jammed or down—classic.
 > 
-> They're still in Red Fort, doing God knows what. Except for Scout and Soldier. They made their way across the bridge, and I think they're trying to get to us. Something's... happened to them. Something unexplainable. They're not the same men I used to work with. At least, not right now.
+> As for the rest of our team... they're not with us. They're not right. They're still in Red Fort, doing God knows what. Except for Scout and Soldier. They made their way across the bridge, and I think they're trying to git to us. Something's happened to them. Something... unexplainable. They're not the same men I work with. At least, not right now.
 > 
-> Medic's getting some shuteye. He's determined to get to the bottom of this, and he says he'll need rest. And I trust him with my life... hell, I've trusted him with more in the past. So I've set up my dispenser, sentry, and wrangler down here for the time being. Should sustain us for now. Point and click, like I've always done. Should ward them off, but sure as hell won't kill them. Thankfully. We don't want 'em dead.
+> Medic's getting some shut-eye. He's determined to get to the bottom of this, and he says he'll need rest. And I trust him with my life... hell, I've easily trusted him with more before. So I've set up my dispenser, sentry, and wrangler for the time being. Should sustain us down here for now. Point and click, like I've always done. Should ward 'em off, but sure as hell won't kill 'em. Thankfully. We don't want 'em dead.
 > 
-> Just need to last till 6am. Then Doc can take over. I hope he can fix the boys... before the boys fix us.
+> Just need to last till 6 AM. Then Doc can take over. I hope he can fix the boys... before the boys fix us."
 > 
 > *[CLICK - tape recorder stops]*
 
