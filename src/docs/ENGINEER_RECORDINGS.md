@@ -61,15 +61,13 @@ These recordings play during each night, like FNAF phone calls. Engineer is leav
 
 > *[CLICK - tape recorder starts]*
 > 
-> "Log three. Sniper's stationed on the Red battlements, locking down the sightline. We have no chance at making a run for it. So I set up teleporters this morning with hopes of teleporting away. But Doc refused. Befuddled me, but he says he's confirmed with samples from the others that this whole mess was caused by a blood-borne virus.
+> "Log Three. Sniper's been stationed on the Red battlements all day, locking down the sightline. We've got no chance at escaping on foot. So I set up teleporters this morning with hopes of teleporting the hell outta here. But Doc doesn't seem intent on leaving so soon. The more of our team that moseys on down across that bridge, the more blood samples he can collect for his research.
 > 
-> How did he confirm it? Not with Sniper, that's for sure. We tried callin' out for him today, to try to get a blood sample. Instead, we drew Heavy's attention.
+> He got a sample today, but not from Sniper. Doc tried callin' out for him, but in doing so, he drew the attention of none other than Heavy. The big guy came runnin' the moment he heard Doc's voice. As if somewhere deep down, he's still remembers. Cornered, Doc took one of the teleporters back to the Intel Room right in the nick of time.
 > 
-> He came runnin' the moment he heard Doc's voice. As if he... remembered. Like somewhere deep down, he's still fightin' it. Hands reachin' out, not to hurt, but to—I don't know. Doc was cornered, but fortunately, he was able to take one of the teleporters I set up. They go between intel and each room.
+> After Heavy calmed down, he began to stalk slowly towards Intel. My sentry definitely ain't stopping him—so I made lures using recordings of Medic's voice. I hope and PRAY that they can draw him away. Unfortunately, I have to teleport into the rooms to set 'em up. I'll be safe as long as I don't run into anyone. Well, except for demo's head. He doesn't bite. Least not yet.
 > 
-> After Heavy calmed down, he simply began to stalk towards intel. Slow, plodding. I don't think my sentry's going to stop him. So I made lures—recordings of Medic's voice. I hope, I PRAY that they can draw him away. Unfortunately, I have to teleport to the rooms to place 'em. I'll be safe as long as I don't run into the boys. Well, except for Demo's head. He doesn't bite. Yet.
-> 
-> All in all, Doc's torn up about it. About Heavy. He's getting more irritable, especially with the sentry noises, but I need him to focus up. We've got to be getting closer, and I can't afford to get overrun.
+> All in all, Doc's pretty torn up about Heavy. He's getting more irritable by the day, but I need him to focus up. We're gettin' closer to a solution, I can feel it."
 > 
 > *[CLICK - tape recorder stops]*
 

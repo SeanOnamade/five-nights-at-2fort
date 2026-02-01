@@ -3392,7 +3392,12 @@ export class GameScene extends Phaser.Scene {
    * Note: Camera switching is allowed during boot so player can select teleport destination
    */
   private selectCamera(index: number): void {
-    // Don't do anything if clicking the camera we're already on
+    // Always show teleport button if Night 3+ (even if same camera selected)
+    if (this.nightNumber >= 3 && this.teleportButton) {
+      this.teleportButton.setVisible(true);
+    }
+    
+    // Don't do anything else if clicking the camera we're already on
     if (this.selectedCamera === index) {
       return;
     }
@@ -3485,11 +3490,6 @@ export class GameScene extends Phaser.Scene {
       } else {
         this.cameraDestroyedOverlay.setVisible(false);
       }
-    }
-    
-    // Show teleport button if Night 3+
-    if (this.nightNumber >= 3 && this.teleportButton) {
-      this.teleportButton.setVisible(true);
     }
     
     // Update camera lure button visibility
