@@ -392,6 +392,42 @@ export class GameScene extends Phaser.Scene {
     return this.customEnemies ? this.customEnemies.medic : false;
   }
   
+  /**
+   * Helper methods to check if enemies have "started" for the night.
+   * On introduction nights, enemies are delayed until 1am to give players
+   * time to listen to the phone recordings and learn mechanics.
+   * - Night 1: Scout and Soldier start at 1am
+   * - Night 2: Demoman starts at 1am
+   * - Night 3: Heavy starts at 1am
+   */
+  private hasScoutStarted(): boolean {
+    // Night 1: Scout doesn't start until 1am (gameMinutes >= 60)
+    // All other nights: Scout starts immediately
+    if (this.nightNumber === 1 && this.gameMinutes < 60) return false;
+    return true;
+  }
+  
+  private hasSoldierStarted(): boolean {
+    // Night 1: Soldier doesn't start until 1am (gameMinutes >= 60)
+    // All other nights: Soldier starts immediately
+    if (this.nightNumber === 1 && this.gameMinutes < 60) return false;
+    return true;
+  }
+  
+  private hasDemomanStarted(): boolean {
+    // Night 2: Demoman doesn't start until 12:45am (gameMinutes >= 45)
+    // All other nights: Demoman starts immediately
+    if (this.nightNumber === 2 && this.gameMinutes < 45) return false;
+    return true;
+  }
+  
+  private hasHeavyStarted(): boolean {
+    // Night 3: Heavy doesn't start until 1am (gameMinutes >= 60)
+    // All other nights: Heavy starts immediately
+    if (this.nightNumber === 3 && this.gameMinutes < 60) return false;
+    return true;
+  }
+  
   // ============================================
   // ENDLESS NIGHT 6 DIFFICULTY SCALING
   // ============================================
@@ -821,7 +857,7 @@ export class GameScene extends Phaser.Scene {
     this.demomanApproachGlow.setDepth(9);
     
     // Über glow effects for Medic (Custom Night)
-    // These create a pulsing blue aura around Übered enemies
+    // These create a pulsing red aura around Übered enemies
     this.uberGlowLeft = this.add.graphics();
     this.uberGlowLeft.setVisible(false);
     this.uberGlowLeft.setDepth(9);
@@ -892,7 +928,7 @@ export class GameScene extends Phaser.Scene {
   
   /**
    * Create sniper visor glow visuals (Night 4+)
-   * Bright blue visor-shaped glow at eye level in the doorway with large light radius
+   * Bright red visor-shaped glow at eye level in the doorway with large light radius
    */
   private createSniperLasers(): void {
     // Eye level position (where sniper's visor would be)
@@ -905,22 +941,22 @@ export class GameScene extends Phaser.Scene {
     // Large atmospheric light radius - BRIGHT and BIG
     const glowLeft = this.add.graphics();
     // Very large outer glow - massive light radius
-    glowLeft.fillStyle(0x0055aa, 0.08);
+    glowLeft.fillStyle(0xaa2200, 0.08);
     glowLeft.fillCircle(0, 0, 220);
-    glowLeft.fillStyle(0x0066cc, 0.12);
+    glowLeft.fillStyle(0xcc3300, 0.12);
     glowLeft.fillCircle(0, 0, 160);
-    glowLeft.fillStyle(0x0077dd, 0.18);
+    glowLeft.fillStyle(0xdd4400, 0.18);
     glowLeft.fillCircle(0, 0, 100);
-    glowLeft.fillStyle(0x0088ee, 0.25);
+    glowLeft.fillStyle(0xee5500, 0.25);
     glowLeft.fillCircle(0, 0, 60);
     // Medium glow - starting to get visor shaped
-    glowLeft.fillStyle(0x00aaff, 0.35);
+    glowLeft.fillStyle(0xff4444, 0.35);
     glowLeft.fillEllipse(0, 0, 90, 40);
     // Inner bright glow - visor shape
-    glowLeft.fillStyle(0x44ddff, 0.5);
+    glowLeft.fillStyle(0xff6644, 0.5);
     glowLeft.fillEllipse(0, 0, 65, 20);
     // Bright core - the visor itself
-    glowLeft.fillStyle(0x66eeff, 0.9);
+    glowLeft.fillStyle(0xff8866, 0.9);
     glowLeft.fillRoundedRect(-35, -8, 70, 16, 8);
     // White-hot center line
     glowLeft.fillStyle(0xffffff, 1);
@@ -946,19 +982,19 @@ export class GameScene extends Phaser.Scene {
     
     // Large atmospheric light radius - BRIGHT and BIG
     const glowRight = this.add.graphics();
-    glowRight.fillStyle(0x0055aa, 0.08);
+    glowRight.fillStyle(0xaa2200, 0.08);
     glowRight.fillCircle(0, 0, 220);
-    glowRight.fillStyle(0x0066cc, 0.12);
+    glowRight.fillStyle(0xcc3300, 0.12);
     glowRight.fillCircle(0, 0, 160);
-    glowRight.fillStyle(0x0077dd, 0.18);
+    glowRight.fillStyle(0xdd4400, 0.18);
     glowRight.fillCircle(0, 0, 100);
-    glowRight.fillStyle(0x0088ee, 0.25);
+    glowRight.fillStyle(0xee5500, 0.25);
     glowRight.fillCircle(0, 0, 60);
-    glowRight.fillStyle(0x00aaff, 0.35);
+    glowRight.fillStyle(0xff4444, 0.35);
     glowRight.fillEllipse(0, 0, 90, 40);
-    glowRight.fillStyle(0x44ddff, 0.5);
+    glowRight.fillStyle(0xff6644, 0.5);
     glowRight.fillEllipse(0, 0, 65, 20);
-    glowRight.fillStyle(0x66eeff, 0.9);
+    glowRight.fillStyle(0xff8866, 0.9);
     glowRight.fillRoundedRect(-35, -8, 70, 16, 8);
     glowRight.fillStyle(0xffffff, 1);
     glowRight.fillRoundedRect(-25, -4, 50, 8, 4);
@@ -1115,9 +1151,9 @@ export class GameScene extends Phaser.Scene {
     // Sentry container
     this.sentryGraphic = this.add.container(width / 2, height - 220);
     
-    // Sentry base/body - BLU team
-    this.sentryBody = this.add.rectangle(0, 0, 60, 80, 0x4488bb);
-    this.sentryBody.setStrokeStyle(3, 0x336699);
+    // Sentry base/body - RED team
+    this.sentryBody = this.add.rectangle(0, 0, 60, 80, 0xBB4444);
+    this.sentryBody.setStrokeStyle(3, 0xCC4444);
     
     // Sentry gun barrel
     this.sentryGun = this.add.rectangle(0, -50, 20, 40, 0x555555);
@@ -1259,15 +1295,15 @@ export class GameScene extends Phaser.Scene {
     const dispY = height - 180;
     
     // Dispenser base (bottom left area)
-    this.dispenserGraphic = this.add.rectangle(dispX, dispY, 50, 70, 0x4488ff);
-    this.dispenserGraphic.setStrokeStyle(2, 0x2266cc);
+    this.dispenserGraphic = this.add.rectangle(dispX, dispY, 50, 70, 0xBB4444);
+    this.dispenserGraphic.setStrokeStyle(2, 0xCC4444);
     
     // Dispenser top cap
-    this.add.rectangle(dispX, dispY - 40, 40, 10, 0x66aaff);
+    this.add.rectangle(dispX, dispY - 40, 40, 10, 0xDD6666);
     
-    // Dispenser screen
-    const screen = this.add.rectangle(dispX, dispY - 15, 30, 20, 0x003366);
-    screen.setStrokeStyle(1, 0x00aaff);
+    // Dispenser screen (dark red tint for RED team)
+    const screen = this.add.rectangle(dispX, dispY - 15, 30, 20, 0x331111);
+    screen.setStrokeStyle(1, 0xaa4444);
     
     // Metal flow indicator (animated)
     const metalFlow = this.add.graphics();
@@ -1311,7 +1347,7 @@ export class GameScene extends Phaser.Scene {
     
     this.add.text(dispX, height - 130, 'DISPENSER', {
       fontSize: '10px',
-      color: '#aaddff',
+      color: '#ffaaaa',
     }).setOrigin(0.5);
     
     // Animated glow effect
@@ -1323,24 +1359,17 @@ export class GameScene extends Phaser.Scene {
       repeat: -1,
     });
     
-    // Screen blink
-    this.tweens.add({
-      targets: screen,
-      fillColor: 0x006699,
-      duration: 500,
-      yoyo: true,
-      repeat: -1,
-    });
+    // Screen is now static (no flashing)
   }
   
   private createHUD(): void {
     const padding = 20;
     
-    // Time display (top center) - BLU team color
+    // Time display (top center) - RED team color
     this.timeText = this.add.text(640, padding, '00:00', {
       fontFamily: 'Courier New, monospace',
       fontSize: '48px',
-      color: '#4488ff',
+      color: '#ff4444',
       fontStyle: 'bold',
     }).setOrigin(0.5, 0);
     
@@ -2269,14 +2298,14 @@ export class GameScene extends Phaser.Scene {
     // Teleport button on camera map (shows when viewing a camera)
     this.teleportButton = this.add.container(1000, 570);
     
-    this.teleportButtonBg = this.add.rectangle(0, 0, 180, 35, 0x224466);
-    this.teleportButtonBg.setStrokeStyle(2, 0x4488cc);
+    this.teleportButtonBg = this.add.rectangle(0, 0, 180, 35, 0x442222);
+    this.teleportButtonBg.setStrokeStyle(2, 0xcc4444);
     this.teleportButtonBg.setInteractive({ useHandCursor: true });
     
     this.teleportButtonText = this.add.text(0, 0, 'TELEPORT HERE', {
       fontFamily: 'Courier New, monospace',
       fontSize: '12px',
-      color: '#88ccff',
+      color: '#ff8888',
       fontStyle: 'bold',
     }).setOrigin(0.5);
     
@@ -2288,14 +2317,14 @@ export class GameScene extends Phaser.Scene {
       if (this.isTeleportAnimating) {
         this.teleportButtonBg.setFillStyle(0x664422);
       } else {
-        this.teleportButtonBg.setFillStyle(0x336688);
+        this.teleportButtonBg.setFillStyle(0x663333);
       }
     });
     this.teleportButtonBg.on('pointerout', () => {
       if (this.isTeleportAnimating) {
         this.teleportButtonBg.setFillStyle(0x553311);
       } else {
-        this.teleportButtonBg.setFillStyle(0x224466);
+        this.teleportButtonBg.setFillStyle(0x442222);
       }
     });
     this.teleportButtonBg.on('pointerdown', () => {
@@ -2930,8 +2959,8 @@ export class GameScene extends Phaser.Scene {
     const flash = this.add.rectangle(0, 0, 1280, 720, 0x000000, 0);
     overlay.add(flash);
     
-    // Blue glow circle expanding from center
-    const glowCircle = this.add.circle(0, 0, 10, 0x4488ff, 0.8);
+    // Red glow circle expanding from center (RED team teleporter)
+    const glowCircle = this.add.circle(0, 0, 10, 0xff4444, 0.8);
     overlay.add(glowCircle);
     
     // Inner bright core
@@ -2942,7 +2971,7 @@ export class GameScene extends Phaser.Scene {
     const teleportText = this.add.text(0, 150, 'TELEPORTING...', {
       fontFamily: 'Courier New, monospace',
       fontSize: '24px',
-      color: '#66ccff',
+      color: '#ff6666',
       fontStyle: 'bold',
     }).setOrigin(0.5);
     teleportText.setAlpha(0);
@@ -2956,7 +2985,7 @@ export class GameScene extends Phaser.Scene {
         Math.cos(angle) * 50,
         Math.sin(angle) * 50,
         4,
-        0x44aaff
+        0xff4444  // RED team teleporter particles
       );
       particle.setAlpha(0);
       particles.push(particle);
@@ -3090,11 +3119,11 @@ export class GameScene extends Phaser.Scene {
       this.teleportButtonText.setText('✕ CANCEL');
       this.teleportButtonText.setColor('#ffaa44');
     } else {
-      // Normal mode - blue colors
-      this.teleportButtonBg.setFillStyle(0x224466);
-      this.teleportButtonBg.setStrokeStyle(2, 0x4488cc);
+      // Normal mode - red colors (RED team)
+      this.teleportButtonBg.setFillStyle(0x442222);
+      this.teleportButtonBg.setStrokeStyle(2, 0xcc4444);
       this.teleportButtonText.setText('TELEPORT HERE');
-      this.teleportButtonText.setColor('#88ccff');
+      this.teleportButtonText.setColor('#ff8888');
     }
   }
   
@@ -3497,27 +3526,27 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
-   * Draw blue Über glow effect for Medic's Übercharge
-   * Creates a pulsing blue aura around the target position
+   * Draw red Über glow effect for Medic's Übercharge
+   * Creates a pulsing red aura around the target position
    */
   private drawUberGlow(graphics: Phaser.GameObjects.Graphics, x: number, y: number): void {
     graphics.clear();
     graphics.setPosition(x, y);
     
     // Outer glow ring (faint)
-    graphics.fillStyle(0x4488ff, 0.15);
+    graphics.fillStyle(0xff4444, 0.15);
     graphics.fillCircle(0, 0, 120);
     
     // Middle glow ring
-    graphics.fillStyle(0x4488ff, 0.25);
+    graphics.fillStyle(0xff4444, 0.25);
     graphics.fillCircle(0, 0, 90);
     
     // Inner glow ring (brightest)
-    graphics.fillStyle(0x66aaff, 0.35);
+    graphics.fillStyle(0xff6666, 0.35);
     graphics.fillCircle(0, 0, 60);
     
     // Core glow
-    graphics.fillStyle(0x88ccff, 0.2);
+    graphics.fillStyle(0xff8888, 0.2);
     graphics.fillCircle(0, 0, 40);
     
     // Draw Medic ghost hovering over enemy's shoulder (upper right)
@@ -3525,11 +3554,11 @@ export class GameScene extends Phaser.Scene {
     const ghostY = -70; // Offset up (above shoulder)
     
     // Ghost outer glow
-    graphics.fillStyle(0x4488ff, 0.15);
+    graphics.fillStyle(0xff4444, 0.15);
     graphics.fillCircle(ghostX, ghostY, 35);
     
-    // Ghost body (translucent blue)
-    graphics.fillStyle(0x4488ff, 0.4);
+    // Ghost body (translucent red)
+    graphics.fillStyle(0xff4444, 0.4);
     // Head
     graphics.fillCircle(ghostX, ghostY - 10, 12);
     // Body (triangle shape)
@@ -3547,12 +3576,12 @@ export class GameScene extends Phaser.Scene {
     graphics.fillRect(ghostX - 5, ghostY + 14, 10, 4);
     
     // Ghost eyes (glowing)
-    graphics.fillStyle(0x88ccff, 0.8);
+    graphics.fillStyle(0xff8888, 0.8);
     graphics.fillCircle(ghostX - 4, ghostY - 12, 3);
     graphics.fillCircle(ghostX + 4, ghostY - 12, 3);
     
     // Ghostly trail/wisp effect below
-    graphics.fillStyle(0x4488ff, 0.2);
+    graphics.fillStyle(0xff4444, 0.2);
     graphics.beginPath();
     graphics.moveTo(ghostX - 8, ghostY + 35);
     graphics.lineTo(ghostX + 8, ghostY + 35);
@@ -3564,7 +3593,7 @@ export class GameScene extends Phaser.Scene {
   
   /**
    * Draw enemy silhouette for camera feed
-   * @param isUbered - If true, draws a bright blue Über glow behind the enemy
+   * @param isUbered - If true, draws a bright red Über glow behind the enemy
    */
   private drawEnemySilhouette(graphics: Phaser.GameObjects.Graphics, type: 'SCOUT' | 'SOLDIER' | 'DEMOMAN_BODY', isUbered: boolean = false): void {
     graphics.clear();
@@ -3575,14 +3604,14 @@ export class GameScene extends Phaser.Scene {
     
     // Draw Über glow if enemy is Übered by Medic
     if (isUbered) {
-      // Outer pulsing blue glow
-      graphics.fillStyle(0x4488ff, 0.3);
+      // Outer pulsing red glow
+      graphics.fillStyle(0xff4444, 0.3);
       graphics.fillCircle(0, 0, 100);
       // Middle glow
-      graphics.fillStyle(0x4488ff, 0.4);
+      graphics.fillStyle(0xff4444, 0.4);
       graphics.fillCircle(0, 0, 80);
       // Inner bright glow
-      graphics.fillStyle(0x66aaff, 0.5);
+      graphics.fillStyle(0xff6666, 0.5);
       graphics.fillCircle(0, 0, 60);
       
       // Draw Medic ghost hovering over enemy's shoulder (upper right)
@@ -3590,11 +3619,11 @@ export class GameScene extends Phaser.Scene {
       const ghostY = -55; // Offset up (above shoulder)
       
       // Ghost outer glow
-      graphics.fillStyle(0x4488ff, 0.2);
+      graphics.fillStyle(0xff4444, 0.2);
       graphics.fillCircle(ghostX, ghostY, 30);
       
-      // Ghost body (translucent blue)
-      graphics.fillStyle(0x4488ff, 0.5);
+      // Ghost body (translucent red)
+      graphics.fillStyle(0xff4444, 0.5);
       // Head
       graphics.fillCircle(ghostX, ghostY - 8, 10);
       // Body (triangle shape)
@@ -3612,12 +3641,12 @@ export class GameScene extends Phaser.Scene {
       graphics.fillRect(ghostX - 4, ghostY + 11, 8, 4);
       
       // Ghost eyes (glowing)
-      graphics.fillStyle(0x88ccff, 0.9);
+      graphics.fillStyle(0xff8888, 0.9);
       graphics.fillCircle(ghostX - 3, ghostY - 10, 2);
       graphics.fillCircle(ghostX + 3, ghostY - 10, 2);
       
       // Ghostly trail/wisp effect below
-      graphics.fillStyle(0x4488ff, 0.25);
+      graphics.fillStyle(0xff4444, 0.25);
       graphics.beginPath();
       graphics.moveTo(ghostX - 6, ghostY + 28);
       graphics.lineTo(ghostX + 6, ghostY + 28);
@@ -3630,9 +3659,9 @@ export class GameScene extends Phaser.Scene {
     if (type === 'SCOUT') {
       // Scout - lean Boston speedster (UPDATED to match gallery)
       
-      // Blue glow behind (normal - skip if Übered since we drew it above)
+      // Red glow behind (normal - skip if Übered since we drew it above)
       if (!isUbered) {
-        graphics.fillStyle(0x3366aa, 0.15);
+        graphics.fillStyle(0xCC4444, 0.15);
         graphics.fillCircle(0, 0, 75);
       }
       
@@ -3653,8 +3682,8 @@ export class GameScene extends Phaser.Scene {
       graphics.fillRect(-14, 55, 8, 3);
       graphics.fillRect(6, 55, 8, 3);
       
-      // Athletic torso - BLU team shirt
-      graphics.fillStyle(0x335599, 1);
+      // Athletic torso - RED team shirt
+      graphics.fillStyle(0xCC4444, 1);
       graphics.beginPath();
       graphics.moveTo(-20, -20);
       graphics.lineTo(18, -20);
@@ -3681,8 +3710,8 @@ export class GameScene extends Phaser.Scene {
         graphics.fillRect(27, -23 + i * 4, 10, 2);
       }
       
-      // Arms - BLU team
-      graphics.fillStyle(0x335599, 1);
+      // Arms - RED team
+      graphics.fillStyle(0xCC4444, 1);
       graphics.fillCircle(-22, -14, 10);
       graphics.fillCircle(20, -14, 10);
       graphics.fillRect(-42, -18, 22, 12);
@@ -3755,7 +3784,7 @@ export class GameScene extends Phaser.Scene {
     } else if (type === 'SOLDIER') {
       // Soldier - UPDATED to match gallery sprite
       
-      // Red/orange glow behind (skip if Übered - blue glow drawn above)
+      // Red/orange glow behind (skip if Übered - red Über glow drawn above)
       if (!isUbered) {
         graphics.fillStyle(0xcc4422, 0.12);
         graphics.fillCircle(0, 0, 80);
@@ -3777,17 +3806,17 @@ export class GameScene extends Phaser.Scene {
       graphics.fillRect(-28, 62, 24, 3);
       graphics.fillRect(4, 62, 24, 3);
       
-      // Stocky military torso - BLU team
-      graphics.fillStyle(0x224488, 1);
+      // Stocky military torso - RED team
+      graphics.fillStyle(0xBD3B3B, 1);
       graphics.fillRoundedRect(-32, -18, 64, 45, 6);
       // Jacket center seam
-      graphics.fillStyle(0x1a3377, 1);
+      graphics.fillStyle(0x9A2A2A, 1);
       graphics.fillRect(-3, -15, 6, 40);
       // Jacket collar
-      graphics.fillStyle(0x1a2a66, 1);
+      graphics.fillStyle(0x8B2222, 1);
       graphics.fillRect(-18, -20, 36, 8);
       // Chest pockets
-      graphics.fillStyle(0x335599, 0.5);
+      graphics.fillStyle(0xDD5555, 0.5);
       graphics.fillRect(-26, -8, 14, 12);
       graphics.fillRect(12, -8, 14, 12);
       // Pocket buttons
@@ -3803,8 +3832,8 @@ export class GameScene extends Phaser.Scene {
       graphics.fillRect(-30, 14, 14, 5);
       graphics.fillRect(16, 14, 14, 5);
       
-      // Strong arms - BLU team
-      graphics.fillStyle(0x224488, 1);
+      // Strong arms - RED team
+      graphics.fillStyle(0xBD3B3B, 1);
       graphics.fillCircle(-32, -8, 14);
       graphics.fillCircle(32, -8, 14);
       graphics.fillRect(-44, -10, 16, 40);
@@ -3887,7 +3916,7 @@ export class GameScene extends Phaser.Scene {
     } else if (type === 'DEMOMAN_BODY') {
       // Demoman - HEADLESS body with Eyelander (matches gallery)
       
-      // Ghostly green glow (skip if Übered - blue glow drawn above)
+      // Ghostly green glow (skip if Übered - red Über glow drawn above)
       if (!isUbered) {
         graphics.fillStyle(0x00ff44, 0.18);
         graphics.fillCircle(0, 10, 95);
@@ -3902,8 +3931,8 @@ export class GameScene extends Phaser.Scene {
       graphics.fillRoundedRect(-26, 70, 24, 14, 3);
       graphics.fillRoundedRect(2, 70, 24, 14, 3);
       
-      // Stocky torso - BLU team
-      graphics.fillStyle(0x224488, 1);
+      // Stocky torso - RED team
+      graphics.fillStyle(0xBD3B3B, 1);
       graphics.fillRoundedRect(-32, -28, 64, 55, 6);
       // Vest/harness
       graphics.fillStyle(0x3a2a1a, 1);
@@ -3931,8 +3960,8 @@ export class GameScene extends Phaser.Scene {
         graphics.fillStyle(0x333333, 1);
       }
       
-      // Arms - BLU team
-      graphics.fillStyle(0x224488, 1);
+      // Arms - RED team
+      graphics.fillStyle(0xBD3B3B, 1);
       graphics.fillCircle(-32, -16, 14);
       graphics.fillCircle(32, -16, 14);
       graphics.fillRect(-44, -18, 16, 48);
@@ -3982,22 +4011,24 @@ export class GameScene extends Phaser.Scene {
   
   /**
    * Draw Demoman's severed head for camera feed
-   * @param isUbered - If true, draws a bright blue Über glow around the head
+   * @param isUbered - If true, draws a bright red Über glow around the head
+   * @param chargeBuildup - How close Demo is to charging (0-1), affects aura brightness
+   * @param isFakeHead - If true, this is Spy's disguise - shows WRONG eye glowing to reward observant players
    */
-  private drawDemomanHead(graphics: Phaser.GameObjects.Graphics, isUbered: boolean = false, chargeBuildup: number = 1): void {
+  private drawDemomanHead(graphics: Phaser.GameObjects.Graphics, isUbered: boolean = false, chargeBuildup: number = 1, isFakeHead: boolean = false): void {
     graphics.clear();
     
     // Draw ghostly aura based on charge buildup
     // Aura is dim/dull when far from charging, bright and pulsing when close
-    // Color: green normally, blue when Übered
+    // Color: green normally, red when Übered
     const easedBuildup = chargeBuildup * chargeBuildup * chargeBuildup;
     const pulse = chargeBuildup > 0.75 ? Math.sin(Date.now() * 0.01) * 0.15 : 0;
     const auraOpacity = 0.05 + easedBuildup * 0.45 + (pulse * easedBuildup);
     const auraSize = 75 + easedBuildup * 25;
     
     // Choose color based on Über status
-    const auraColorOuter = isUbered ? 0x4488ff : 0x00ff44;
-    const auraColorInner = isUbered ? 0x66aaff : 0x44ff88;
+    const auraColorOuter = isUbered ? 0xff4444 : 0x00ff44;
+    const auraColorInner = isUbered ? 0xff6666 : 0x44ff88;
     
     // Outer ethereal glow
     graphics.fillStyle(auraColorOuter, auraOpacity * 0.4);
@@ -4009,18 +4040,18 @@ export class GameScene extends Phaser.Scene {
     graphics.fillStyle(auraColorInner, auraOpacity * 0.8);
     graphics.fillCircle(0, 0, auraSize - 20);
     
-    // Draw Medic ghost if Übered (in addition to blue charge aura)
+    // Draw Medic ghost if Übered (in addition to red charge aura)
     if (isUbered) {
       // Draw Medic ghost hovering near head (upper right)
       const ghostX = 55;
       const ghostY = -40;
       
       // Ghost outer glow
-      graphics.fillStyle(0x4488ff, 0.2);
+      graphics.fillStyle(0xff4444, 0.2);
       graphics.fillCircle(ghostX, ghostY, 28);
       
-      // Ghost body (translucent blue)
-      graphics.fillStyle(0x4488ff, 0.5);
+      // Ghost body (translucent red)
+      graphics.fillStyle(0xff4444, 0.5);
       graphics.fillCircle(ghostX, ghostY - 6, 9);
       graphics.beginPath();
       graphics.moveTo(ghostX - 10, ghostY + 3);
@@ -4036,7 +4067,7 @@ export class GameScene extends Phaser.Scene {
       graphics.fillRect(ghostX - 4, ghostY + 10, 8, 3);
       
       // Ghost eyes
-      graphics.fillStyle(0x88ccff, 0.9);
+      graphics.fillStyle(0xff8888, 0.9);
       graphics.fillCircle(ghostX - 3, ghostY - 8, 2);
       graphics.fillCircle(ghostX + 3, ghostY - 8, 2);
     }
@@ -4070,9 +4101,22 @@ export class GameScene extends Phaser.Scene {
     graphics.fillRect(16, -35, 8, 30);
     
     // Left eye socket - dark void (or glowing if active)
-    // Use blue glow when Übered, green normally
-    const eyeGlowColor = isUbered ? 0x4488ff : 0x00ff44;
-    if (this.demoman.isEyeGlowing() && this.demoman.activeEye === 'LEFT') {
+    // Use red glow when Übered, green normally
+    const eyeGlowColor = isUbered ? 0xff4444 : 0x00ff44;
+    
+    // For Spy's fake head: if Demo's eye is glowing, show the WRONG eye!
+    // This rewards observant players who notice the discrepancy
+    const demoEyeGlowing = this.demoman.isEyeGlowing();
+    const realActiveEye = this.demoman.activeEye;
+    // Spy's fake head shows opposite eye, or no glow if Demo isn't charging
+    const showLeftGlow = isFakeHead 
+      ? (demoEyeGlowing && realActiveEye === 'RIGHT')  // Fake: glow LEFT when real is RIGHT
+      : (demoEyeGlowing && realActiveEye === 'LEFT');  // Real: glow LEFT when LEFT
+    const showRightGlow = isFakeHead
+      ? (demoEyeGlowing && realActiveEye === 'LEFT')   // Fake: glow RIGHT when real is LEFT  
+      : (demoEyeGlowing && realActiveEye === 'RIGHT'); // Real: glow RIGHT when RIGHT
+    
+    if (showLeftGlow) {
       graphics.fillStyle(eyeGlowColor, 0.6);
       graphics.fillCircle(-18, -8, 25);
       graphics.fillStyle(eyeGlowColor, 1);
@@ -4080,8 +4124,8 @@ export class GameScene extends Phaser.Scene {
       graphics.fillStyle(0xffffff, 1);
       graphics.fillCircle(-22, -12, 4);
     } else if (isUbered) {
-      // Even when eye not glowing, show blue aura in socket when Übered
-      graphics.fillStyle(0x4488ff, 0.4);
+      // Even when eye not glowing, show red aura in socket when Übered
+      graphics.fillStyle(0xff4444, 0.4);
       graphics.fillCircle(-18, -8, 18);
       graphics.fillStyle(0x000000, 1);
       graphics.fillCircle(-18, -8, 12);
@@ -4091,12 +4135,12 @@ export class GameScene extends Phaser.Scene {
     }
     
     // Right eye (under patch) glows through if active
-    if (this.demoman.isEyeGlowing() && this.demoman.activeEye === 'RIGHT') {
+    if (showRightGlow) {
       graphics.fillStyle(eyeGlowColor, 0.8);
       graphics.fillCircle(18, -8, 20);
     } else if (isUbered) {
-      // Blue glow visible through eyepatch when Übered
-      graphics.fillStyle(0x4488ff, 0.3);
+      // Red glow visible through eyepatch when Übered
+      graphics.fillStyle(0xff4444, 0.3);
       graphics.fillCircle(18, -8, 15);
     }
   }
@@ -4112,11 +4156,11 @@ export class GameScene extends Phaser.Scene {
     graphics.fillEllipse(0, 90, 130, 35);
     
     // Glow effect (yellow when lured, red normally)
-    graphics.fillStyle(isLured ? 0xccaa00 : 0xaa3333, 0.12);
+    graphics.fillStyle(isLured ? 0xccaa00 : 0xCC4444, 0.12);
     graphics.fillCircle(0, 0, 90);
     
     // Thick powerful legs
-    const bodyColor = isLured ? 0x6a5a2a : 0x224488;  // BLU team color when not lured
+    const bodyColor = isLured ? 0x6a5a2a : 0xBD3B3B;  // RED team color when not lured
     graphics.fillStyle(0x4a4a5a, 1);
     graphics.fillRect(-30, 25, 26, 38);
     graphics.fillRect(4, 25, 26, 38);
@@ -4137,12 +4181,12 @@ export class GameScene extends Phaser.Scene {
     graphics.fillStyle(bodyColor, 1);
     graphics.fillRoundedRect(-50, -30, 100, 60, 12);
     // Pec definition
-    graphics.fillStyle(isLured ? 0x5a4a1a : 0x1a3377, 0.4);
+    graphics.fillStyle(isLured ? 0x5a4a1a : 0x9A2A2A, 0.4);
     graphics.fillEllipse(-22, -5, 22, 28);
     graphics.fillEllipse(22, -5, 22, 28);
     
     // Vest with buckles
-    graphics.fillStyle(0x1a2a55, 1);
+    graphics.fillStyle(0x8B2222, 1);
     graphics.fillRect(-6, -25, 12, 55);
     graphics.fillStyle(0xaa9944, 1);
     graphics.fillRect(-8, -15, 16, 6);
@@ -4288,10 +4332,10 @@ export class GameScene extends Phaser.Scene {
     graphics.fillStyle(0x000000, 0.5);
     graphics.fillEllipse(0, 90, 80, 18);
     
-    // Eerie blue glow (yellow when lured)
-    graphics.fillStyle(isLured ? 0xffcc00 : 0x4488ff, 0.25);
+    // Eerie red glow (yellow when lured)
+    graphics.fillStyle(isLured ? 0xffcc00 : 0xff4444, 0.25);
     graphics.fillCircle(0, -10, 95);
-    graphics.fillStyle(isLured ? 0xccaa00 : 0x2266dd, 0.2);
+    graphics.fillStyle(isLured ? 0xccaa00 : 0xCC3333, 0.2);
     graphics.fillCircle(0, -30, 60);
     
     // Tall lean legs - crouched aiming stance
@@ -4308,7 +4352,7 @@ export class GameScene extends Phaser.Scene {
     graphics.fillRoundedRect(2, 72, 16, 16, 2);
     
     // Lean vest (yellowish when lured)
-    const bodyColor = isLured ? 0x6a5a2a : 0x224488;  // BLU team color when not lured
+    const bodyColor = isLured ? 0x6a5a2a : 0xBD3B3B;  // RED team color when not lured
     graphics.fillStyle(bodyColor, 1);
     graphics.beginPath();
     graphics.moveTo(-26, -32);
@@ -4318,7 +4362,7 @@ export class GameScene extends Phaser.Scene {
     graphics.closePath();
     graphics.fillPath();
     // Vest details
-    graphics.fillStyle(isLured ? 0x5a4a1a : 0x1a3377, 1);
+    graphics.fillStyle(isLured ? 0x5a4a1a : 0x9A2A2A, 1);
     graphics.fillRect(-3, -28, 4, 50);
     // Shirt collar
     graphics.fillStyle(0xaa9988, 1);
@@ -4356,12 +4400,12 @@ export class GameScene extends Phaser.Scene {
     graphics.fillStyle(0x3a2a1a, 1);
     graphics.fillRect(-2, -88, 16, 6);
     
-    // Blue visor (glowing) - spans across both eyes
-    const visorColor = isLured ? 0xffcc00 : 0x00aaff;
+    // Red visor (glowing) - spans across both eyes
+    const visorColor = isLured ? 0xffcc00 : 0xff4444;
     // Visor frame
     graphics.fillStyle(0x222222, 1);
     graphics.fillRoundedRect(-14, -66, 40, 14, 4);
-    // Visor glass - glowing blue
+    // Visor glass - glowing red
     graphics.fillStyle(visorColor, 0.3);
     graphics.fillRoundedRect(-12, -64, 36, 10, 3);
     graphics.fillStyle(visorColor, 0.7);
@@ -4388,11 +4432,11 @@ export class GameScene extends Phaser.Scene {
     // Scope lens - GLOWING (aimed at you!)
     graphics.fillStyle(0x1a1a1a, 1);
     graphics.fillCircle(-8, -28, 12);
-    graphics.fillStyle(isLured ? 0xffcc00 : 0x4488ff, 0.5);
+    graphics.fillStyle(isLured ? 0xffcc00 : 0xff4444, 0.5);
     graphics.fillCircle(-8, -28, 12);
-    graphics.fillStyle(isLured ? 0xffcc00 : 0x4488ff, 1);
+    graphics.fillStyle(isLured ? 0xffcc00 : 0xff4444, 1);
     graphics.fillCircle(-8, -28, 7);
-    graphics.fillStyle(isLured ? 0xffffcc : 0x88ccff, 1);
+    graphics.fillStyle(isLured ? 0xffffcc : 0xff8888, 1);
     graphics.fillCircle(-10, -30, 3);
     // Crosshair in scope
     graphics.fillStyle(0x000000, 0.6);
@@ -4417,20 +4461,20 @@ export class GameScene extends Phaser.Scene {
   /**
    * Draw Medic ghost silhouette for endless Night 6
    * Ghostly, translucent figure meant to psyche out the player
-   * White/blue ethereal appearance with medical cross
+   * White/red ethereal appearance with medical cross
    */
   private drawMedicGhostSilhouette(graphics: Phaser.GameObjects.Graphics): void {
     graphics.clear();
     
     // Ethereal glow background
-    graphics.fillStyle(0x6688cc, 0.15);
+    graphics.fillStyle(0xcc6666, 0.15);
     graphics.fillCircle(0, 0, 80);
-    graphics.fillStyle(0x88aaee, 0.1);
+    graphics.fillStyle(0xee8888, 0.1);
     graphics.fillCircle(0, 0, 100);
     
-    // Ghost body - wispy, ethereal (white/blue tones)
+    // Ghost body - wispy, ethereal (white/red tones)
     // Main body - elongated and ghostly
-    graphics.fillStyle(0xccddff, 0.6);
+    graphics.fillStyle(0xffcccc, 0.6);
     graphics.beginPath();
     graphics.moveTo(-25, -30);
     graphics.lineTo(25, -30);
@@ -4440,7 +4484,7 @@ export class GameScene extends Phaser.Scene {
     graphics.fillPath();
     
     // LEFT ARM - reaching out slightly
-    graphics.fillStyle(0xccddff, 0.55);
+    graphics.fillStyle(0xffcccc, 0.55);
     // Upper arm
     graphics.beginPath();
     graphics.moveTo(-25, -25);
@@ -4458,11 +4502,11 @@ export class GameScene extends Phaser.Scene {
     graphics.closePath();
     graphics.fillPath();
     // Hand
-    graphics.fillStyle(0xddeeff, 0.6);
+    graphics.fillStyle(0xffeedd, 0.6);
     graphics.fillCircle(-54, 35, 8);
     
     // RIGHT ARM - holding syringe, extended forward
-    graphics.fillStyle(0xccddff, 0.55);
+    graphics.fillStyle(0xffcccc, 0.55);
     // Upper arm
     graphics.beginPath();
     graphics.moveTo(25, -25);
@@ -4480,11 +4524,11 @@ export class GameScene extends Phaser.Scene {
     graphics.closePath();
     graphics.fillPath();
     // Hand gripping syringe
-    graphics.fillStyle(0xddeeff, 0.6);
+    graphics.fillStyle(0xffeedd, 0.6);
     graphics.fillCircle(30, -5, 7);
     
     // Wispy bottom (ghost trail)
-    graphics.fillStyle(0xaabbee, 0.4);
+    graphics.fillStyle(0xeebbaa, 0.4);
     graphics.beginPath();
     graphics.moveTo(-20, 50);
     graphics.lineTo(20, 50);
@@ -4497,7 +4541,7 @@ export class GameScene extends Phaser.Scene {
     graphics.fillPath();
     
     // Head - ghostly
-    graphics.fillStyle(0xddeeff, 0.7);
+    graphics.fillStyle(0xffeedd, 0.7);
     graphics.fillCircle(0, -45, 20);
     
     // Medical cross on chest (red, iconic)
@@ -4506,14 +4550,14 @@ export class GameScene extends Phaser.Scene {
     graphics.fillRect(-12, -3, 24, 8);
     
     // Eyes - empty, glowing
-    graphics.fillStyle(0x4488ff, 0.9);
+    graphics.fillStyle(0xff4444, 0.9);
     graphics.fillCircle(-7, -50, 4);
     graphics.fillCircle(7, -50, 4);
     
     // Syringe in right hand
     graphics.fillStyle(0xcccccc, 0.7);
     graphics.fillRect(32, -10, 25, 5);
-    graphics.fillStyle(0xaaddff, 0.5);
+    graphics.fillStyle(0xffddaa, 0.5);
     graphics.fillRect(36, -8, 15, 2);
     // Needle tip
     graphics.fillStyle(0x888888, 0.8);
@@ -6646,11 +6690,12 @@ export class GameScene extends Phaser.Scene {
     const indicatorBg = this.add.rectangle(0, 0, 100, 30, 0x1a1a1a, 0.9);
     indicatorBg.setStrokeStyle(1, 0x444444);
     
-    const tapeIcon = this.add.text(-35, 0, '📼', {
-      fontSize: '16px',
+    const tapeIcon = this.add.text(-35, 0, '(●)', {
+      fontSize: '12px',
+      color: '#ff4444',
     }).setOrigin(0.5);
     
-    const playingText = this.add.text(10, 0, 'PLAYING', {
+    const playingText = this.add.text(15, 0, 'PLAYING', {
       fontFamily: 'Courier New, monospace',
       fontSize: '10px',
       color: '#00ff00',
@@ -7635,8 +7680,8 @@ export class GameScene extends Phaser.Scene {
       if (scoutAtDoor && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SCOUT')) {
         this.drawUberGlow(this.uberGlowLeft, 120, 720 / 2 - 30);
         this.uberGlowLeft.setVisible(true);
-        // Change door color to blue when Übered
-        this.leftDoor.setFillStyle(0x112244);
+        // Change door color to red when Übered
+        this.leftDoor.setFillStyle(0x441122);
       }
       
       // Show Pyro floating mask if Pyro is in left hall (Custom Night)
@@ -7685,8 +7730,8 @@ export class GameScene extends Phaser.Scene {
       if (soldierAtDoor && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SOLDIER')) {
         this.drawUberGlow(this.uberGlowRight, 1280 - 120, 720 / 2 - 30);
         this.uberGlowRight.setVisible(true);
-        // Change door color to blue when Übered
-        this.rightDoor.setFillStyle(0x112244);
+        // Change door color to red when Übered
+        this.rightDoor.setFillStyle(0x441122);
       }
       
       // Show Pyro floating mask if Pyro is in right hall (Custom Night)
@@ -8213,7 +8258,7 @@ export class GameScene extends Phaser.Scene {
           (this.scout.state === 'WAITING' || this.scout.state === 'ATTACKING')) {
         // Check if Scout is Übered (Medic) - can't be repelled!
         if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SCOUT')) {
-          this.showAlert('ÜBERED! CANNOT REPEL!', 0x4488ff);
+          this.showAlert('ÜBERED! CANNOT REPEL!', 0xff4444);
           hitEnemy = true; // Still counts as hitting (spent metal)
         } else {
           this.scout.driveAway();
@@ -8227,7 +8272,7 @@ export class GameScene extends Phaser.Scene {
           (this.demoman.currentNode === 'LEFT_HALL')) {
         // Check if Demoman is Übered (Medic) - can't be repelled!
         if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN')) {
-          this.showAlert('ÜBERED! CANNOT REPEL!', 0x4488ff);
+          this.showAlert('ÜBERED! CANNOT REPEL!', 0xff4444);
           hitEnemy = true;
         } else {
           // Bonus: +25 metal if hit during body phase (not just glow)
@@ -8264,7 +8309,7 @@ export class GameScene extends Phaser.Scene {
           (this.soldier.state === 'WAITING' || this.soldier.state === 'SIEGING')) {
         // Check if Soldier is Übered (Medic) - can't be repelled!
         if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SOLDIER')) {
-          this.showAlert('ÜBERED! CANNOT REPEL!', 0x4488ff);
+          this.showAlert('ÜBERED! CANNOT REPEL!', 0xff4444);
           hitEnemy = true;
         } else {
           this.soldier.driveAway();
@@ -8278,7 +8323,7 @@ export class GameScene extends Phaser.Scene {
           (this.demoman.currentNode === 'RIGHT_HALL')) {
         // Check if Demoman is Übered (Medic) - can't be repelled!
         if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN')) {
-          this.showAlert('ÜBERED! CANNOT REPEL!', 0x4488ff);
+          this.showAlert('ÜBERED! CANNOT REPEL!', 0xff4444);
           hitEnemy = true;
         } else {
           // Bonus: +25 metal if hit during body phase (not just glow)
@@ -8445,7 +8490,7 @@ export class GameScene extends Phaser.Scene {
     this.sentryBody.setFillStyle(0xff0000);
     this.time.delayedCall(200, () => {
       if (this.sentry.exists) {
-        this.sentryBody.setFillStyle(0x4488bb); // Back to BLU team color
+        this.sentryBody.setFillStyle(0xBB4444); // Back to RED team color
       }
     });
     
@@ -8672,7 +8717,7 @@ export class GameScene extends Phaser.Scene {
     
     // Destroy sentry if it exists
     if (this.sentry.exists) {
-      this.showAlert('SENTRY DESTROYED BY ÜBER!', 0x4488ff);
+      this.showAlert('SENTRY DESTROYED BY ÜBER!', 0xff4444);
       this.destroySentry();
     }
     
@@ -8901,7 +8946,7 @@ export class GameScene extends Phaser.Scene {
       });
     }
     if (demomanBodyAtCam) {
-      // Check if Demoman is Übered - blue glow!
+      // Check if Demoman is Übered - red glow!
       const demoUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
       enemies.push({ 
         type: 'DEMOMAN_BODY', 
@@ -8910,7 +8955,7 @@ export class GameScene extends Phaser.Scene {
       });
     }
     if (soldierAtCam) {
-      // Check if Soldier is Übered - blue glow!
+      // Check if Soldier is Übered - red glow!
       const soldierUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SOLDIER');
       enemies.push({ 
         type: 'SOLDIER', 
@@ -8919,7 +8964,7 @@ export class GameScene extends Phaser.Scene {
       });
     }
     if (scoutAtCam) {
-      // Check if Scout is Übered - blue glow!
+      // Check if Scout is Übered - red glow!
       const scoutUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SCOUT');
       enemies.push({ 
         type: 'SCOUT', 
@@ -8994,7 +9039,7 @@ export class GameScene extends Phaser.Scene {
         const graphics = container.list[0] as Phaser.GameObjects.Graphics;
         const label = container.list[container.list.length - 1] as Phaser.GameObjects.Text;
         
-        // Check if this enemy is Übered (for special blue glow)
+        // Check if this enemy is Übered (for special red glow)
         const isUbered = enemy.label.includes('(Ü)');
         
         // Draw appropriate silhouette with optional Über glow
@@ -9028,12 +9073,14 @@ export class GameScene extends Phaser.Scene {
       const enemyGraphics = this.cameraFeedEnemy.list[0] as Phaser.GameObjects.Graphics;
       const enemyLabel = this.cameraFeedEnemy.list[2] as Phaser.GameObjects.Text;
       
-      // Check if Demoman is Übered - draw with blue glow!
+      // Check if Demoman is Übered - draw with red glow!
       const demoHeadUbered = demomanHeadAtCam && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
       // Pass charge buildup for ghostly aura effect (dim when far from charging, bright when close)
       // Spy disguised as Demo gets a static dim aura (0.15) since he has no charge timer
       const chargeBuildup = demomanHeadAtCam ? this.demoman.getChargeBuildup() : 0.15;
-      this.drawDemomanHead(enemyGraphics, demoHeadUbered, chargeBuildup);
+      // Spy's fake head shows WRONG eye - rewards observant players!
+      const isFakeHead = !demomanHeadAtCam && spyAtCam && spyDisguise === 'DEMOMAN_HEAD';
+      this.drawDemomanHead(enemyGraphics, demoHeadUbered, chargeBuildup, isFakeHead);
       
       // Keep container at full alpha - the ghostly effect is now in the aura, not transparency
       this.cameraFeedEnemy.setAlpha(1);
@@ -9058,12 +9105,14 @@ export class GameScene extends Phaser.Scene {
       const demoHeadGraphics = this.cameraFeedDemoHead.list[0] as Phaser.GameObjects.Graphics;
       const demoHeadLabel = this.cameraFeedDemoHead.list[1] as Phaser.GameObjects.Text;
       
-      // Check if Demoman is Übered - draw with blue glow!
+      // Check if Demoman is Übered - draw with red glow!
       const demoHeadUbered = demomanHeadAtCam && this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
       // Pass charge buildup for ghostly aura effect
       // Spy disguised as Demo gets a static dim aura (0.15) since he has no charge timer
       const chargeBuildup = demomanHeadAtCam ? this.demoman.getChargeBuildup() : 0.15;
-      this.drawDemomanHeadSmall(demoHeadGraphics, demoHeadUbered, chargeBuildup);
+      // Spy's fake head shows WRONG eye - rewards observant players!
+      const isFakeHead = !demomanHeadAtCam && spyAtCam && spyDisguise === 'DEMOMAN_HEAD';
+      this.drawDemomanHeadSmall(demoHeadGraphics, demoHeadUbered, chargeBuildup, isFakeHead);
       
       // Keep container at full alpha - the ghostly effect is now in the aura
       this.cameraFeedDemoHead.setAlpha(1);
@@ -9079,9 +9128,9 @@ export class GameScene extends Phaser.Scene {
       this.cameraFeedDemoHead.setVisible(false);
     }
     
-    // Add blue glow effect when Sniper is in range (if enabled)
+    // Add red glow effect when Sniper is in range (if enabled)
     if (this.isSniperEnabled() && this.sniper.canShootIntelRoom() && !this.isTeleported) {
-      // Sniper can see Intel from current position - add eerie blue glow
+      // Sniper can see Intel from current position - add eerie red glow
       // This is handled by updateSniperChargeVisual() for the Intel room view
     }
     
@@ -9099,19 +9148,21 @@ export class GameScene extends Phaser.Scene {
   
   /**
    * Draw a smaller version of Demoman's head for secondary display
-   * @param isUbered - If true, draws a bright blue Über glow around the head
+   * @param isUbered - If true, draws a bright red Über glow around the head
+   * @param chargeBuildup - How close Demo is to charging (0-1), affects aura brightness
+   * @param isFakeHead - If true, this is Spy's disguise - shows WRONG eye glowing
    */
-  private drawDemomanHeadSmall(graphics: Phaser.GameObjects.Graphics, isUbered: boolean = false, chargeBuildup: number = 1): void {
+  private drawDemomanHeadSmall(graphics: Phaser.GameObjects.Graphics, isUbered: boolean = false, chargeBuildup: number = 1, isFakeHead: boolean = false): void {
     graphics.clear();
     
-    // Draw ghostly aura based on charge buildup (blue when Übered, green normally)
+    // Draw ghostly aura based on charge buildup (red when Übered, green normally)
     const easedBuildup = chargeBuildup * chargeBuildup * chargeBuildup;
     const pulse = chargeBuildup > 0.75 ? Math.sin(Date.now() * 0.01) * 0.15 : 0;
     const auraOpacity = 0.05 + easedBuildup * 0.45 + (pulse * easedBuildup);
     const auraSize = 50 + easedBuildup * 18;
     
-    const auraColorOuter = isUbered ? 0x4488ff : 0x00ff44;
-    const auraColorInner = isUbered ? 0x66aaff : 0x44ff88;
+    const auraColorOuter = isUbered ? 0xff4444 : 0x00ff44;
+    const auraColorInner = isUbered ? 0xff6666 : 0x44ff88;
     
     graphics.fillStyle(auraColorOuter, auraOpacity * 0.4);
     graphics.fillCircle(0, 0, auraSize + 15);
@@ -9120,18 +9171,18 @@ export class GameScene extends Phaser.Scene {
     graphics.fillStyle(auraColorInner, auraOpacity * 0.8);
     graphics.fillCircle(0, 0, auraSize - 12);
     
-    // Draw Medic ghost if Übered (in addition to blue charge aura)
+    // Draw Medic ghost if Übered (in addition to red charge aura)
     if (isUbered) {
       // Draw small Medic ghost hovering near head
       const ghostX = 38;
       const ghostY = -25;
       
       // Ghost outer glow
-      graphics.fillStyle(0x4488ff, 0.2);
+      graphics.fillStyle(0xff4444, 0.2);
       graphics.fillCircle(ghostX, ghostY, 18);
       
-      // Ghost body (translucent blue)
-      graphics.fillStyle(0x4488ff, 0.5);
+      // Ghost body (translucent red)
+      graphics.fillStyle(0xff4444, 0.5);
       graphics.fillCircle(ghostX, ghostY - 4, 6);
       graphics.beginPath();
       graphics.moveTo(ghostX - 6, ghostY + 2);
@@ -9147,7 +9198,7 @@ export class GameScene extends Phaser.Scene {
       graphics.fillRect(ghostX - 2, ghostY + 6, 4, 2);
       
       // Ghost eyes
-      graphics.fillStyle(0x88ccff, 0.9);
+      graphics.fillStyle(0xff8888, 0.9);
       graphics.fillCircle(ghostX - 2, ghostY - 5, 1.5);
       graphics.fillCircle(ghostX + 2, ghostY - 5, 1.5);
     }
@@ -9180,16 +9231,27 @@ export class GameScene extends Phaser.Scene {
     graphics.fillCircle(12, -5, 12);
     graphics.fillRect(10, -22, 6, 18);
     
-    // Eye socket / glow - use blue when Übered
-    const eyeGlowColor = isUbered ? 0x4488ff : 0x00ff44;
-    if (this.demoman.isEyeGlowing() && this.demoman.activeEye === 'LEFT') {
+    // Eye socket / glow - use red when Übered
+    const eyeGlowColor = isUbered ? 0xff4444 : 0x00ff44;
+    
+    // For Spy's fake head: show the WRONG eye glowing!
+    const demoEyeGlowing = this.demoman.isEyeGlowing();
+    const realActiveEye = this.demoman.activeEye;
+    const showLeftGlow = isFakeHead 
+      ? (demoEyeGlowing && realActiveEye === 'RIGHT')
+      : (demoEyeGlowing && realActiveEye === 'LEFT');
+    const showRightGlow = isFakeHead
+      ? (demoEyeGlowing && realActiveEye === 'LEFT')
+      : (demoEyeGlowing && realActiveEye === 'RIGHT');
+    
+    if (showLeftGlow) {
       graphics.fillStyle(eyeGlowColor, 0.8);
       graphics.fillCircle(-12, -5, 15);
       graphics.fillStyle(eyeGlowColor, 1);
       graphics.fillCircle(-12, -5, 8);
     } else if (isUbered) {
-      // Blue aura in socket when Übered
-      graphics.fillStyle(0x4488ff, 0.4);
+      // Red aura in socket when Übered
+      graphics.fillStyle(0xff4444, 0.4);
       graphics.fillCircle(-12, -5, 12);
       graphics.fillStyle(0x000000, 1);
       graphics.fillCircle(-12, -5, 8);
@@ -9198,12 +9260,12 @@ export class GameScene extends Phaser.Scene {
       graphics.fillCircle(-12, -5, 10);
     }
     
-    if (this.demoman.isEyeGlowing() && this.demoman.activeEye === 'RIGHT') {
+    if (showRightGlow) {
       graphics.fillStyle(eyeGlowColor, 0.6);
       graphics.fillCircle(12, -5, 14);
     } else if (isUbered) {
-      // Blue glow visible through eyepatch when Übered
-      graphics.fillStyle(0x4488ff, 0.3);
+      // Red glow visible through eyepatch when Übered
+      graphics.fillStyle(0xff4444, 0.3);
       graphics.fillCircle(12, -5, 10);
     }
   }
@@ -10462,10 +10524,10 @@ export class GameScene extends Phaser.Scene {
       0xaa5544, // Soldier  
       0x44cc44, // Demoman
       0xaa7744, // Heavy
-      0x5588cc, // Sniper
+      0xff4444, // Sniper
       0x666677, // Spy
       0xff6622, // Pyro
-      0x4488ff, // Medic
+      0xff4444, // Medic
       0xff6600, // Engineer (center, golden)
     ];
     
@@ -10833,8 +10895,9 @@ export class GameScene extends Phaser.Scene {
     // We achieve this by scaling delta slightly higher
     const timerScaleFactor = timerReduction > 0 ? 1 + (timerReduction / 10000) : 1;  // Gradual scaling
     
-    // Update Scout (if enabled)
-    if (this.isScoutEnabled()) {
+    // Update Scout (if enabled and started)
+    // Night 1: Scout doesn't start until 1am to give player time to learn
+    if (this.isScoutEnabled() && this.hasScoutStarted()) {
       const scoutDelta = delta * timerScaleFactor;
       const scoutResult = this.scout.update(scoutDelta);
       
@@ -10880,8 +10943,9 @@ export class GameScene extends Phaser.Scene {
       }
     }
     
-    // Update Soldier (if enabled)
-    if (this.isSoldierEnabled()) {
+    // Update Soldier (if enabled and started)
+    // Night 1: Soldier doesn't start until 1am to give player time to learn
+    if (this.isSoldierEnabled() && this.hasSoldierStarted()) {
       const soldierDelta = delta * timerScaleFactor;
       const soldierResult = this.soldier.update(soldierDelta);
       
@@ -10918,8 +10982,9 @@ export class GameScene extends Phaser.Scene {
       }
     }
     
-    // Update Demoman (if enabled)
-    if (this.isDemomanEnabled()) {
+    // Update Demoman (if enabled and started)
+    // Night 2: Demoman doesn't start until 1am to give player time to learn
+    if (this.isDemomanEnabled() && this.hasDemomanStarted()) {
       // Check if player is watching Demoman's head
       // Can watch on cameras OR if head is in Intel room (cameras down = watching it)
       // BUT destroyed cameras don't count as watching!
@@ -11141,8 +11206,9 @@ export class GameScene extends Phaser.Scene {
       }
     }
     
-    // Update Heavy (if enabled)
-    if (heavyEnabled) {
+    // Update Heavy (if enabled and started)
+    // Night 3: Heavy doesn't start until 1am to give player time to learn
+    if (heavyEnabled && this.hasHeavyStarted()) {
       // Heavy moves faster in endless mode
       const heavyDelta = delta * timerScaleFactor;
       const heavyResult = this.heavy.update(heavyDelta);
@@ -11496,9 +11562,9 @@ export class GameScene extends Phaser.Scene {
     if (healthPercent < 0.3) {
       this.sentryBody.setFillStyle(0xff4444); // Critical
     } else if (healthPercent < 0.6) {
-      this.sentryBody.setFillStyle(0x6699dd); // Damaged (lighter blue)
+      this.sentryBody.setFillStyle(0xDD6666); // Damaged (lighter red)
     } else {
-      this.sentryBody.setFillStyle(0x4488bb); // Healthy BLU
+      this.sentryBody.setFillStyle(0xBB4444); // Healthy RED
     }
     
     if (this.sentry.hp <= 0) {
@@ -11590,14 +11656,14 @@ export class GameScene extends Phaser.Scene {
     }
     
     // Update eye glow based on Demoman state
-    // Check if Übered - use blue glow instead of green
+    // Check if Übered - use red glow instead of green
     const isUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
-    const glowColor = isUbered ? 0x4488ff : 0x00ff44;  // Blue when Übered, green otherwise
+    const glowColor = isUbered ? 0xff4444 : 0x00ff44;  // Red when Übered, green otherwise
     
     this.demomanHeadEyeGlow.clear();
     if (eyeGlowing) {
       const eyeX = this.demoman.activeEye === 'LEFT' ? -10 : 10;
-      // Glowing eye (blue when Übered, green otherwise)
+      // Glowing eye (red when Übered, green otherwise)
       this.demomanHeadEyeGlow.fillStyle(glowColor, 0.6);
       this.demomanHeadEyeGlow.fillCircle(eyeX, -5, 15);
       this.demomanHeadEyeGlow.fillStyle(glowColor, 1);
@@ -11605,16 +11671,16 @@ export class GameScene extends Phaser.Scene {
       this.demomanHeadEyeGlow.fillStyle(0xffffff, 1);
       this.demomanHeadEyeGlow.fillCircle(eyeX - 2, -7, 2);
       
-      // Add outer blue glow ring when Übered
+      // Add outer red glow ring when Übered
       if (isUbered) {
-        this.demomanHeadEyeGlow.fillStyle(0x4488ff, 0.2);
+        this.demomanHeadEyeGlow.fillStyle(0xff4444, 0.2);
         this.demomanHeadEyeGlow.fillCircle(0, 0, 50);
       }
     } else if (isUbered && headVisibleInRoom) {
-      // Even when not actively glowing, show blue Über aura around head
-      this.demomanHeadEyeGlow.fillStyle(0x4488ff, 0.15);
+      // Even when not actively glowing, show red Über aura around head
+      this.demomanHeadEyeGlow.fillStyle(0xff4444, 0.15);
       this.demomanHeadEyeGlow.fillCircle(0, 0, 45);
-      this.demomanHeadEyeGlow.fillStyle(0x4488ff, 0.25);
+      this.demomanHeadEyeGlow.fillStyle(0xff4444, 0.25);
       this.demomanHeadEyeGlow.fillCircle(0, 0, 30);
     }
   }
@@ -11658,9 +11724,9 @@ export class GameScene extends Phaser.Scene {
     // Get attack progress (0 to 1 over 1.5 seconds)
     const progress = this.demoman.getAttackProgress();
     
-    // Check if Demoman is Übered - use blue glow instead of green
+    // Check if Demoman is Übered - use red glow instead of green
     const isUbered = this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN');
-    const glowColor = isUbered ? 0x4488ff : 0x00ff44;  // Blue when Übered, green otherwise
+    const glowColor = isUbered ? 0xff4444 : 0x00ff44;  // Red when Übered, green otherwise
     
     // First 0.75s (75%): approaching glow | Last 0.25s (25%): body visible
     if (progress < 0.75) {

@@ -816,7 +816,7 @@ export class BootScene extends Phaser.Scene {
       sniper: 0x5599cc,
       spy: 0x666677,
       pyro: 0xdd6622,
-      medic: 0x4488ff,
+      medic: 0xff4444,
     };
     const enemyLabels: Record<string, string> = {
       scout: 'SCT', soldier: 'SOL', demoman: 'DEM', heavy: 'HVY',
@@ -1469,7 +1469,7 @@ export class BootScene extends Phaser.Scene {
         // Scout - lean Boston speedster with iconic look
         
         // Glow effect behind
-        graphics.fillStyle(0x3366aa, 0.15);
+        graphics.fillStyle(0xCC4444, 0.15);
         graphics.fillCircle(x, y, 75);
         
         // Ground shadow
@@ -1493,8 +1493,8 @@ export class BootScene extends Phaser.Scene {
         graphics.fillRect(x - 14, y + 55, 8, 3);
         graphics.fillRect(x + 6, y + 55, 8, 3);
         
-        // Lean athletic torso - BLU team t-shirt
-        graphics.fillStyle(0x335599, 1);
+        // Lean athletic torso - RED team t-shirt
+        graphics.fillStyle(0xCC4444, 1);
         graphics.beginPath();
         graphics.moveTo(x - 20, y - 20);
         graphics.lineTo(x + 18, y - 20);
@@ -1521,8 +1521,8 @@ export class BootScene extends Phaser.Scene {
           graphics.fillRect(x + 27, y - 23 + i * 4, 10, 2);
         }
         
-        // Arms - BLU team
-        graphics.fillStyle(0x335599, 1);
+        // Arms - RED team
+        graphics.fillStyle(0xCC4444, 1);
         graphics.fillCircle(x - 22, y - 14, 10);
         graphics.fillCircle(x + 20, y - 14, 10);
         graphics.fillRect(x - 42, y - 18, 22, 12);
@@ -1621,17 +1621,17 @@ export class BootScene extends Phaser.Scene {
         graphics.fillRect(x - 28, y + 62, 24, 3);
         graphics.fillRect(x + 4, y + 62, 24, 3);
         
-        // Stocky military torso - BLU team
-        graphics.fillStyle(0x224488, 1);
+        // Stocky military torso - RED team
+        graphics.fillStyle(0xBD3B3B, 1);
         graphics.fillRoundedRect(x - 32, y - 18, 64, 45, 6);
         // Jacket center seam
-        graphics.fillStyle(0x1a3377, 1);
+        graphics.fillStyle(0x9A2A2A, 1);
         graphics.fillRect(x - 3, y - 15, 6, 40);
         // Jacket collar
-        graphics.fillStyle(0x1a2a66, 1);
+        graphics.fillStyle(0x8B2222, 1);
         graphics.fillRect(x - 18, y - 20, 36, 8);
         // Chest pockets
-        graphics.fillStyle(0x335599, 0.5);
+        graphics.fillStyle(0xDD5555, 0.5);
         graphics.fillRect(x - 26, y - 8, 14, 12);
         graphics.fillRect(x + 12, y - 8, 14, 12);
         // Pocket buttons
@@ -1648,8 +1648,8 @@ export class BootScene extends Phaser.Scene {
         graphics.fillRect(x - 30, y + 14, 14, 5);
         graphics.fillRect(x + 16, y + 14, 14, 5);
         
-        // Strong arms - BLU team
-        graphics.fillStyle(0x224488, 1);
+        // Strong arms - RED team
+        graphics.fillStyle(0xBD3B3B, 1);
         graphics.fillCircle(x - 32, y - 8, 14);
         graphics.fillCircle(x + 32, y - 8, 14);
         // Left arm down at side
@@ -1761,8 +1761,8 @@ export class BootScene extends Phaser.Scene {
         graphics.fillRoundedRect(x - 24, y + 56, 22, 12, 3);
         graphics.fillRoundedRect(x + 2, y + 56, 22, 12, 3);
         
-        // Torso - sturdy Scottish build - BLU team
-        graphics.fillStyle(0x224488, 1);
+        // Torso - sturdy Scottish build - RED team
+        graphics.fillStyle(0xBD3B3B, 1);
         graphics.fillRoundedRect(x - 28, y - 20, 56, 42, 6);
         // Vest/harness
         graphics.fillStyle(0x3a2a1a, 1);
@@ -1789,8 +1789,8 @@ export class BootScene extends Phaser.Scene {
           graphics.fillStyle(0x333333, 1);
         }
         
-        // Arms - BLU team
-        graphics.fillStyle(0x224488, 1);
+        // Arms - RED team
+        graphics.fillStyle(0xBD3B3B, 1);
         graphics.fillCircle(x - 28, y - 10, 12);
         graphics.fillCircle(x + 28, y - 10, 12);
         // Left arm down
@@ -1878,7 +1878,7 @@ export class BootScene extends Phaser.Scene {
         // Heavy - massive Russian weapons guy with Sasha
         
         // Red glow behind
-        graphics.fillStyle(0xaa3333, 0.12);
+        graphics.fillStyle(0xCC4444, 0.12);
         graphics.fillCircle(x, y, 90);
         
         // Ground shadow - very large
@@ -1902,16 +1902,16 @@ export class BootScene extends Phaser.Scene {
         graphics.fillRect(x - 22, y + 60, 10, 2);
         graphics.fillRect(x + 12, y + 60, 10, 2);
         
-        // MASSIVE barrel chest - BLU team
-        graphics.fillStyle(0x224488, 1);
+        // MASSIVE barrel chest - RED team
+        graphics.fillStyle(0xBD3B3B, 1);
         graphics.fillRoundedRect(x - 50, y - 30, 100, 60, 12);
         // Pec muscle definition
-        graphics.fillStyle(0x1a3377, 0.4);
+        graphics.fillStyle(0x9A2A2A, 0.4);
         graphics.fillEllipse(x - 22, y - 5, 22, 28);
         graphics.fillEllipse(x + 22, y - 5, 22, 28);
         
         // Vest with buckles
-        graphics.fillStyle(0x1a2a55, 1);
+        graphics.fillStyle(0x8B2222, 1);
         graphics.fillRect(x - 6, y - 25, 12, 55);
         // Buckles
         graphics.fillStyle(0xaa9944, 1);
@@ -1939,8 +1939,8 @@ export class BootScene extends Phaser.Scene {
           graphics.fillStyle(0xccaa33, 1);
         }
         
-        // HUGE arms - BLU team
-        graphics.fillStyle(0x224488, 1);
+        // HUGE arms - RED team
+        graphics.fillStyle(0xBD3B3B, 1);
         // Left arm - massive bicep
         graphics.fillCircle(x - 50, y - 15, 22);
         graphics.fillRect(x - 70, y - 20, 28, 55);
@@ -2064,10 +2064,10 @@ export class BootScene extends Phaser.Scene {
       case 'SNIPER':
         // Sniper - aiming pose, rifle pointed at viewer
         
-        // Eerie blue glow behind - signature Sniper look
-        graphics.fillStyle(0x4488ff, 0.25);
+        // Eerie red glow behind - signature Sniper look
+        graphics.fillStyle(0xff4444, 0.25);
         graphics.fillCircle(x, y - 10, 90);
-        graphics.fillStyle(0x2266dd, 0.2);
+        graphics.fillStyle(0xCC3333, 0.2);
         graphics.fillCircle(x, y - 30, 50);
         
         // Ground shadow
@@ -2087,8 +2087,8 @@ export class BootScene extends Phaser.Scene {
         graphics.fillRoundedRect(x - 18, y + 54, 16, 14, 2);
         graphics.fillRoundedRect(x + 2, y + 54, 16, 14, 2);
         
-        // Lean vest - body angled slightly - BLU team
-        graphics.fillStyle(0x224488, 1);
+        // Lean vest - body angled slightly - RED team
+        graphics.fillStyle(0xBD3B3B, 1);
         graphics.beginPath();
         graphics.moveTo(x - 24, y - 28);
         graphics.lineTo(x + 20, y - 28);
@@ -2097,14 +2097,14 @@ export class BootScene extends Phaser.Scene {
         graphics.closePath();
         graphics.fillPath();
         // Vest details
-        graphics.fillStyle(0x1a3377, 1);
+        graphics.fillStyle(0x9A2A2A, 1);
         graphics.fillRect(x - 3, y - 25, 4, 40);
         // Shirt collar
         graphics.fillStyle(0xaa9988, 1);
         graphics.fillRect(x - 14, y - 32, 26, 6);
         
-        // Arms in aiming position - both forward - BLU team
-        graphics.fillStyle(0x224488, 1);
+        // Arms in aiming position - both forward - RED team
+        graphics.fillStyle(0xBD3B3B, 1);
         // Shoulders
         graphics.fillCircle(x - 24, y - 20, 12);
         graphics.fillCircle(x + 20, y - 20, 12);
@@ -2142,20 +2142,20 @@ export class BootScene extends Phaser.Scene {
         graphics.fillStyle(0x3a2a1a, 1);
         graphics.fillRect(x - 3, y - 78, 16, 6);
         
-        // Blue visor (glowing) - spans across both eyes
+        // Red visor (glowing) - spans across both eyes
         // Visor frame
         graphics.fillStyle(0x222222, 1);
         graphics.fillRoundedRect(x - 14, y - 58, 38, 14, 4);
-        // Visor glass - glowing blue
-        graphics.fillStyle(0x00aaff, 0.3);
+        // Visor glass - glowing red
+        graphics.fillStyle(0xff4444, 0.3);
         graphics.fillRoundedRect(x - 12, y - 56, 34, 10, 3);
-        graphics.fillStyle(0x00aaff, 0.7);
+        graphics.fillStyle(0xff4444, 0.7);
         graphics.fillRoundedRect(x - 10, y - 54, 30, 6, 2);
         // Bright center glow
-        graphics.fillStyle(0x00aaff, 1);
+        graphics.fillStyle(0xff4444, 1);
         graphics.fillRoundedRect(x - 6, y - 53, 22, 4, 2);
         // Outer glow effect
-        graphics.fillStyle(0x00aaff, 0.2);
+        graphics.fillStyle(0xff4444, 0.2);
         graphics.fillRoundedRect(x - 16, y - 60, 42, 18, 5);
         
         // Slight focused expression
@@ -2177,14 +2177,14 @@ export class BootScene extends Phaser.Scene {
         graphics.fillCircle(x - 5, y - 22, 18);
         graphics.fillStyle(0x222222, 1);
         graphics.fillCircle(x - 5, y - 22, 14);
-        // Scope lens - GLOWING BLUE (aimed at you!)
+        // Scope lens - GLOWING RED (aimed at you!)
         graphics.fillStyle(0x1a1a1a, 1);
         graphics.fillCircle(x - 5, y - 22, 10);
-        graphics.fillStyle(0x4488ff, 0.4);
+        graphics.fillStyle(0xff4444, 0.4);
         graphics.fillCircle(x - 5, y - 22, 10);
-        graphics.fillStyle(0x4488ff, 1);
+        graphics.fillStyle(0xff4444, 1);
         graphics.fillCircle(x - 5, y - 22, 6);
-        graphics.fillStyle(0x88ccff, 1);
+        graphics.fillStyle(0xff8888, 1);
         graphics.fillCircle(x - 7, y - 24, 3);
         // Scope crosshair hint
         graphics.fillStyle(0x000000, 0.5);
