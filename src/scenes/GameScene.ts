@@ -575,7 +575,7 @@ export class GameScene extends Phaser.Scene {
         // Set up minimal state for dark ending
         this.isBadEndingNight6 = true;
         this.endlessDay = 2;  // Show some survival time
-        this.endlessSurvivalMinutes = 183;  // 3 hours 3 minutes
+        this.endlessSurvivalMinutes = 359;  // 5 hours 59 minutes - so close to freedom
         this.endScreen.removeAll(true);
         this.endScreen.setVisible(true);
         const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.95);
@@ -4160,7 +4160,7 @@ export class GameScene extends Phaser.Scene {
     graphics.fillCircle(0, 0, 90);
     
     // Thick powerful legs
-    const bodyColor = isLured ? 0x6a5a2a : 0xBD3B3B;  // RED team color when not lured
+    const bodyColor = 0xBD3B3B;  // RED team color (doesn't change when lured)
     graphics.fillStyle(0x4a4a5a, 1);
     graphics.fillRect(-30, 25, 26, 38);
     graphics.fillRect(4, 25, 26, 38);
@@ -4181,7 +4181,7 @@ export class GameScene extends Phaser.Scene {
     graphics.fillStyle(bodyColor, 1);
     graphics.fillRoundedRect(-50, -30, 100, 60, 12);
     // Pec definition
-    graphics.fillStyle(isLured ? 0x5a4a1a : 0x9A2A2A, 0.4);
+    graphics.fillStyle(0x9A2A2A, 0.4);
     graphics.fillEllipse(-22, -5, 22, 28);
     graphics.fillEllipse(22, -5, 22, 28);
     
@@ -4351,8 +4351,8 @@ export class GameScene extends Phaser.Scene {
     graphics.fillRoundedRect(-18, 70, 16, 16, 2);
     graphics.fillRoundedRect(2, 72, 16, 16, 2);
     
-    // Lean vest (yellowish when lured)
-    const bodyColor = isLured ? 0x6a5a2a : 0xBD3B3B;  // RED team color when not lured
+    // Lean vest (always red - only visor/scope change when lured)
+    const bodyColor = 0xBD3B3B;  // RED team color (doesn't change when lured)
     graphics.fillStyle(bodyColor, 1);
     graphics.beginPath();
     graphics.moveTo(-26, -32);
@@ -4362,7 +4362,7 @@ export class GameScene extends Phaser.Scene {
     graphics.closePath();
     graphics.fillPath();
     // Vest details
-    graphics.fillStyle(isLured ? 0x5a4a1a : 0x9A2A2A, 1);
+    graphics.fillStyle(0x9A2A2A, 1);
     graphics.fillRect(-3, -28, 4, 50);
     // Shirt collar
     graphics.fillStyle(0xaa9988, 1);
@@ -8378,6 +8378,12 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     
+    // Can't build remotely - must be in Intel room
+    if (this.isTeleported) {
+      this.showAlert('Return to Intel to build!', 0xff6600);
+      return;
+    }
+    
     if (this.metal < GAME_CONSTANTS.BUILD_SENTRY_COST) {
       this.showAlert('Not enough metal! (100 required)', 0xff0000);
       return;
@@ -8409,6 +8415,12 @@ export class GameScene extends Phaser.Scene {
     // Can't upgrade when cameras are up - must lower cameras first
     if (this.isCameraMode) {
       this.showAlert('Lower cameras first! (TAB)', 0xff6600);
+      return;
+    }
+    
+    // Can't upgrade remotely - must be in Intel room
+    if (this.isTeleported) {
+      this.showAlert('Return to Intel to upgrade!', 0xff6600);
       return;
     }
     
@@ -8447,6 +8459,12 @@ export class GameScene extends Phaser.Scene {
     // Can't repair when cameras are up - must lower cameras first
     if (this.isCameraMode) {
       this.showAlert('Lower cameras first! (TAB)', 0xff6600);
+      return;
+    }
+    
+    // Can't repair remotely - must be in Intel room
+    if (this.isTeleported) {
+      this.showAlert('Return to Intel to repair!', 0xff6600);
       return;
     }
     
