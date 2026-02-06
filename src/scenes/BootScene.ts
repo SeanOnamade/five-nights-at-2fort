@@ -30,6 +30,7 @@ export class BootScene extends Phaser.Scene {
   // Developer password tracking
   private devPasswordBuffer: string = '';
   private readonly DEV_PASSWORD = '2FORT';
+  private devInputEl: HTMLInputElement | null = null;
   
   constructor() {
     super({ key: 'BootScene' });
@@ -270,7 +271,8 @@ export class BootScene extends Phaser.Scene {
       this.createPreGameMenu(width, height, hasExistingSave, startGame);
     }
     
-    // ===== DEVELOPER PASSWORD LISTENER =====
+    // ===== DEVELOPER PASSWORD (hidden text input + keyboard fallback) =====
+    this.setupDevPasswordInput();
     this.setupDevPasswordListener();
     
     // ===== SIDE MENU BUTTONS (right side - with button backgrounds) =====
@@ -906,7 +908,62 @@ export class BootScene extends Phaser.Scene {
   }
   
   /**
-   * Setup developer password listener (hidden FNAF-style unlock)
+   * Create unlabeled text input on main menu for dev code (mobile-friendly).
+   * Intentionally unlabeled so it's not obvious; devs often use a small corner field.
+   */
+  private setupDevPasswordInput(): void {
+    const id = 'boot-dev-input';
+    const existing = document.getElementById(id);
+    if (existing) existing.remove();
+
+    const container = document.getElementById('game-container');
+    if (!container) return;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = id;
+    input.autocomplete = 'off';
+    input.setAttribute('aria-label', ' ');
+    Object.assign(input.style, {
+      position: 'absolute',
+      left: '8px',
+      bottom: '8px',
+      width: '72px',
+      height: '18px',
+      padding: '0 4px',
+      fontFamily: 'Courier New, monospace',
+      fontSize: '10px',
+      color: '#333344',
+      background: 'rgba(10, 15, 40, 0.6)',
+      border: '1px solid #222233',
+      borderRadius: '2px',
+      outline: 'none',
+      caretColor: '#333344',
+      boxSizing: 'border-box',
+    });
+    container.style.position = 'relative';
+    container.appendChild(input);
+    this.devInputEl = input;
+
+    const check = () => {
+      const value = (input.value || '').toUpperCase().trim();
+      if (value === this.DEV_PASSWORD) {
+        input.value = '';
+        input.blur();
+        this.onDevPasswordEntered();
+      }
+    };
+    input.addEventListener('input', check);
+    input.addEventListener('change', check);
+
+    this.events.once('shutdown', () => {
+      input.remove();
+      this.devInputEl = null;
+    });
+  }
+
+  /**
+   * Setup developer password listener (keyboard fallback for desktop)
    */
   private setupDevPasswordListener(): void {
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
