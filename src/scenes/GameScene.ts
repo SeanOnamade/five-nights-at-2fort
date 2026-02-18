@@ -1228,7 +1228,7 @@ export class GameScene extends Phaser.Scene {
       tapZone.setInteractive({ useHandCursor: true });
       tapZone.on('pointerdown', () => {
         if (this.gameStatus !== 'PLAYING' || this.isPaused) return;
-        if (!this.isSpyEnabled() || !this.spy || !this.spy.isSapping()) return;
+        if (!this.isSpyEnabled() || !this.spy || !this.spy.isSapping() || this.isTeleported) return;
         
         this.sapperRemoveClicks++;
         this.sapperRemoveTimeout = 2000;
@@ -6915,8 +6915,8 @@ export class GameScene extends Phaser.Scene {
       if (this.isPaused) return;
       if (!this.sentry.exists) return;
       
-      // Night 5+: Handle sapper removal - NO wrangler needed, NO cost!
-      if (this.isSpyEnabled() && this.spy && this.spy.isSapping()) {
+      // Night 5+: Handle sapper removal - only when in Intel (can't remove sapper when teleported away)
+      if (this.isSpyEnabled() && this.spy && this.spy.isSapping() && !this.isTeleported) {
         this.sapperRemoveClicks++;
         this.sapperRemoveTimeout = 2000; // Reset timeout (2 seconds to press again)
         
@@ -7208,8 +7208,8 @@ export class GameScene extends Phaser.Scene {
    * Handle mobile action button press (context-sensitive)
    */
   private handleMobileAction(): void {
-    // Check for sapper removal first
-    if (this.isSpyEnabled() && this.spy && this.spy.isSapping()) {
+    // Check for sapper removal first (only when in Intel - can't remove sapper when teleported away)
+    if (this.isSpyEnabled() && this.spy && this.spy.isSapping() && !this.isTeleported) {
       this.sapperRemoveClicks++;
       this.sapperRemoveTimeout = 2000;
       
