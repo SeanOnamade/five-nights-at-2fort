@@ -350,6 +350,45 @@ export class BootScene extends Phaser.Scene {
       endingsBtnBg.on('pointerdown', () => this.showEndingsMenu());
     }
     
+    // Audio logs toggle (default ON) - persist in localStorage
+    const audioLogsY = save?.hasBeatenNight5 ? 445 : 420;
+    const audioLogsStorage = localStorage.getItem('audioLogsEnabled');
+    let audioLogsOn = audioLogsStorage === null || audioLogsStorage === 'true';
+    
+    const audioLogsBg = this.add.rectangle(menuX, audioLogsY, 130, 32, 0x0f1510);
+    audioLogsBg.setStrokeStyle(1, 0x334444);
+    audioLogsBg.setInteractive({ useHandCursor: true });
+    const audioLogsLabel = this.add.text(menuX - 28, audioLogsY, 'AUDIO LOGS', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '10px',
+      color: '#668877',
+    }).setOrigin(0.5);
+    const audioLogsValue = this.add.text(menuX + 42, audioLogsY, audioLogsOn ? 'ON' : 'OFF', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '11px',
+      color: audioLogsOn ? '#55aa55' : '#886644',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    
+    const updateAudioLogsToggle = () => {
+      audioLogsValue.setText(audioLogsOn ? 'ON' : 'OFF');
+      audioLogsValue.setColor(audioLogsOn ? '#55aa55' : '#886644');
+      localStorage.setItem('audioLogsEnabled', audioLogsOn ? 'true' : 'false');
+    };
+    
+    audioLogsBg.on('pointerover', () => {
+      audioLogsBg.setFillStyle(0x152520);
+      audioLogsBg.setStrokeStyle(1, 0x558877);
+    });
+    audioLogsBg.on('pointerout', () => {
+      audioLogsBg.setFillStyle(0x0f1510);
+      audioLogsBg.setStrokeStyle(1, 0x334444);
+    });
+    audioLogsBg.on('pointerdown', () => {
+      audioLogsOn = !audioLogsOn;
+      updateAudioLogsToggle();
+    });
+    
     // Create tutorial overlay
     this.createTutorialOverlay();
     

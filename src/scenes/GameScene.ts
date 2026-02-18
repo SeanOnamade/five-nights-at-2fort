@@ -103,6 +103,7 @@ export class GameScene extends Phaser.Scene {
     "When teleporting, if an enemy is in an adjacent room, they will hear you and approach.",
     "Demo will never begin his attack while you're watching him.",
     // Additional hints
+    "One sentry attack can affect multiple enemies.",
     "Heavy will destroy your camera if you stare too long. Sniper will headshot you through it!",
     "Lures can distract certain enemies, buying you precious time!",
     "Metal regenerates over time -- manage it wisely!",
@@ -333,6 +334,7 @@ export class GameScene extends Phaser.Scene {
   private recordingStartDelay: number = 5000; // 5 seconds into night
   private recordingStartTimer: number = 0;
   private hasPlayedRecording: boolean = false;
+  private audioLogsEnabled: boolean = true; // Main menu toggle; when false, no recording each night
   
   // ============================================
   // MOBILE CONTROLS
@@ -511,6 +513,9 @@ export class GameScene extends Phaser.Scene {
       this.recordingAudio.pause();
       this.recordingAudio = null;
     }
+    // Respect main menu "Audio logs" toggle (default on)
+    this.audioLogsEnabled = localStorage.getItem('audioLogsEnabled') !== 'false';
+    if (!this.audioLogsEnabled) this.hasPlayedRecording = true; // Skip recording this night
     
     // Reset sapper state for Night 5
     this.sapperRemoveClicks = 0;
