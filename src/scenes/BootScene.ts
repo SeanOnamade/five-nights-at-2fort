@@ -226,7 +226,7 @@ export class BootScene extends Phaser.Scene {
     let started = false;
     
     // Start game function - reused by multiple buttons
-    const startGame = (night: number, isCustomNight: boolean = false, isBadEndingNight6: boolean = false) => {
+    const startGame = (night: number, isCustomNight: boolean = false, isBadEndingNight6: boolean = false, isNightmareMode: boolean = false) => {
       if (started) return;
       started = true;
       
@@ -240,6 +240,22 @@ export class BootScene extends Phaser.Scene {
             night: 7, // Use 7 for custom night to distinguish from story Night 6
             customEnemies: { ...customNightEnemies },
             isCustomNight: true
+          });
+        } else if (isNightmareMode) {
+          // Nightmare Mode - all enemies, starts at 10 AM difficulty, endless
+          this.scene.start('GameScene', {
+            night: 8,
+            isNightmareMode: true,
+            customEnemies: {
+              scout: true,
+              soldier: true,
+              demoman: true,
+              heavy: true,
+              sniper: true,
+              spy: true,
+              pyro: true,
+              medic: true
+            }
           });
         } else if (isBadEndingNight6) {
           // Bad ending Night 6 - all enemies + medic forced on
@@ -413,7 +429,7 @@ export class BootScene extends Phaser.Scene {
     width: number, 
     height: number, 
     hasExistingSave: boolean,
-    startGame: (night: number, isCustomNight?: boolean, isBadEndingNight6?: boolean) => void
+    startGame: (night: number, isCustomNight?: boolean, isBadEndingNight6?: boolean, isNightmareMode?: boolean) => void
   ): void {
     const centerY = 300;
     const btnWidth = 280;
@@ -523,7 +539,7 @@ export class BootScene extends Phaser.Scene {
     height: number, 
     customNightEnemies: Record<string, boolean>,
     customNightUI: Phaser.GameObjects.Container | null,
-    startGame: (night: number, isCustomNight?: boolean, isBadEndingNight6?: boolean) => void,
+    startGame: (night: number, isCustomNight?: boolean, isBadEndingNight6?: boolean, isNightmareMode?: boolean) => void,
     save: SaveData | null
   ): void {
     // Calculate total destructions to determine if good ending is available
@@ -938,6 +954,46 @@ export class BootScene extends Phaser.Scene {
       customNightUI!.setVisible(customNightOpen);
       customBtnText.setText(customNightOpen ? '✕ CLOSE' : '★ CUSTOM NIGHT');
     });
+    
+    // ===== NIGHTMARE MODE BUTTON (below custom night button) =====
+    // Nightmare Mode is available after beating Night 5 (same unlock as Custom Night)
+    const nightmareBtnY = customBtnY + 50;
+    const nightmareBtnBg = this.add.rectangle(width / 2, nightmareBtnY, 220, 40, 0x150505);
+    nightmareBtnBg.setStrokeStyle(2, 0x882222);
+    
+    const nightmareBtnText = this.add.text(width / 2, nightmareBtnY, '☠ NIGHTMARE MODE', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '16px',
+      color: '#cc4444',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    
+    if (customNightUnlocked) {
+      nightmareBtnBg.setInteractive({ useHandCursor: true });
+      
+      nightmareBtnBg.on('pointerover', () => {
+        nightmareBtnBg.setFillStyle(0x251010);
+        nightmareBtnBg.setStrokeStyle(2, 0xcc4444);
+        nightmareBtnText.setColor('#ff6666');
+      });
+      
+      nightmareBtnBg.on('pointerout', () => {
+        nightmareBtnBg.setFillStyle(0x150505);
+        nightmareBtnBg.setStrokeStyle(2, 0x882222);
+        nightmareBtnText.setColor('#cc4444');
+      });
+      
+      nightmareBtnBg.on('pointerdown', () => {
+        nightmareBtnText.setText('LOADING...');
+        startGame(8, false, false, true);
+      });
+    } else {
+      // Locked appearance
+      nightmareBtnBg.setFillStyle(0x0a0505);
+      nightmareBtnBg.setStrokeStyle(1, 0x441111);
+      nightmareBtnText.setColor('#442222');
+      nightmareBtnText.setText('🔒 NIGHTMARE MODE');
+    }
     
     // Keyboard shortcut
     this.input.keyboard?.on('keydown-SPACE', () => {

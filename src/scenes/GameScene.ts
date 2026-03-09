@@ -136,6 +136,7 @@ export class GameScene extends Phaser.Scene {
   private sessionDestructions: number = 0;  // Sentry destructions this night
   private isBadEndingNight6: boolean = false;  // True if playing bad ending Night 6
   private isCustomNightMode: boolean = false;  // True if playing custom night (extras)
+  private isNightmareMode: boolean = false;  // True if playing Nightmare Mode (night 8, starts at 10 AM difficulty)
   
   // Endless Night 6 (bad ending) tracking
   private endlessDay: number = 7;  // Current day in endless mode (Day 7 when 6 AM first reached)
@@ -439,8 +440,9 @@ export class GameScene extends Phaser.Scene {
    * -1 second per hour after 6 AM, capped at reasonable minimums
    */
   private getEndlessTimerReduction(): number {
-    if (!this.isBadEndingNight6 || !this.hasReached6AM) return 0;
-    return this.hoursAfter6AM * 1000;  // 1 second per hour
+    if ((!this.isBadEndingNight6 && !this.isNightmareMode) || !this.hasReached6AM) return 0;
+    const hours = this.isNightmareMode ? Math.min(this.hoursAfter6AM, 3) : this.hoursAfter6AM;
+    return hours * 1000;  // 1 second per hour
   }
   
   /**
@@ -448,8 +450,9 @@ export class GameScene extends Phaser.Scene {
    * Starts at 1.0, increases by 0.2 per hour after 6 AM (1.2x, 1.4x, 1.6x, etc.)
    */
   private getDemomanSpeedMultiplier(): number {
-    if (!this.isBadEndingNight6 || !this.hasReached6AM) return 1.0;
-    return 1.0 + (this.hoursAfter6AM * 0.2);
+    if ((!this.isBadEndingNight6 && !this.isNightmareMode) || !this.hasReached6AM) return 1.0;
+    const hours = this.isNightmareMode ? Math.min(this.hoursAfter6AM, 3) : this.hoursAfter6AM;
+    return 1.0 + (hours * 0.2);
   }
   
   /**
@@ -457,8 +460,9 @@ export class GameScene extends Phaser.Scene {
    * Reduces teleport interval by 500ms per hour after 6 AM
    */
   private getPyroTeleportReduction(): number {
-    if (!this.isBadEndingNight6 || !this.hasReached6AM) return 0;
-    return this.hoursAfter6AM * 500;  // 0.5 seconds per hour
+    if ((!this.isBadEndingNight6 && !this.isNightmareMode) || !this.hasReached6AM) return 0;
+    const hours = this.isNightmareMode ? Math.min(this.hoursAfter6AM, 3) : this.hoursAfter6AM;
+    return hours * 500;  // 0.5 seconds per hour
   }
 
   /**
@@ -523,8 +527,9 @@ export class GameScene extends Phaser.Scene {
     
     // Reset endless Night 6 state (Day 7 when first 6 AM is reached)
     this.endlessDay = 7;
-    this.hoursAfter6AM = 0;
-    this.hasReached6AM = false;
+    // Nightmare Mode pre-seeds difficulty to 9 AM equivalent (hoursAfter6AM = 3)
+    this.hoursAfter6AM = this.isNightmareMode ? 3 : 0;
+    this.hasReached6AM = this.isNightmareMode ? true : false;
     this.endlessSurvivalMinutes = 0;
     this.medicGhostActive = false;
     this.medicGhostSide = null;
@@ -543,6 +548,11 @@ export class GameScene extends Phaser.Scene {
   }
   
   create(): void {
+    // Read mode flags from scene data BEFORE resetGameState so pre-seeding works correctly
+    const earlyData = this.scene.settings.data as { isNightmareMode?: boolean; isBadEndingNight6?: boolean } | undefined;
+    this.isNightmareMode = earlyData?.isNightmareMode ?? false;
+    this.isBadEndingNight6 = earlyData?.isBadEndingNight6 ?? false;
+    
     // Reset all state for clean restart
     this.resetGameState();
     
@@ -563,6 +573,7 @@ export class GameScene extends Phaser.Scene {
       };
       isBadEndingNight6?: boolean;
       isCustomNight?: boolean;
+      isNightmareMode?: boolean;
       previewEnding?: 'good' | 'badIntro' | 'dark';  // For endings preview
     } | undefined;
     
@@ -593,20 +604,21 @@ export class GameScene extends Phaser.Scene {
     this.nightNumber = data?.night ?? 1;
     this.isBadEndingNight6 = data?.isBadEndingNight6 ?? false;
     this.isCustomNightMode = data?.isCustomNight ?? false;
+    this.isNightmareMode = data?.isNightmareMode ?? false;
     this.sessionDestructions = 0;  // Reset for this session
     
-    // For custom night (night 7) or bad ending night 6, use the enemy toggles
-    const isCustomNight = this.nightNumber === 7 || this.isBadEndingNight6 || (this.nightNumber === 6 && !this.isBadEndingNight6);
+    // For custom night (night 7), bad ending night 6, or nightmare mode (night 8), use the enemy toggles
+    const isCustomNight = this.nightNumber === 7 || this.nightNumber === 8 || this.isBadEndingNight6 || (this.nightNumber === 6 && !this.isBadEndingNight6);
     
-    // Display night number (7 shows as "Custom", 6 shows as "6")
-    const displayNightNumber = this.nightNumber === 7 ? 'Custom' : this.nightNumber;
+    // Display night number (7 shows as "Custom", 8 shows as "Nightmare")
+    const displayNightNumber = this.nightNumber === 7 ? 'Custom' : this.nightNumber === 8 ? 'Nightmare' : this.nightNumber;
     const customEnemies = {
       scout: true, soldier: true, demoman: true, 
       heavy: true, sniper: true, spy: true, pyro: false, medic: false,
       ...data?.customEnemies,  // Override with passed values (backward compatible)
     };
     
-    console.log(`🌙 Starting Night ${this.nightNumber}${isCustomNight ? ' (Custom)' : ''}`);
+    console.log(`🌙 Starting Night ${this.nightNumber}${isCustomNight ? ' (Custom)' : ''}${this.isNightmareMode ? ' [NIGHTMARE]' : ''}`);
     if (isCustomNight) {
       console.log('Custom enemies:', JSON.stringify(customEnemies, null, 2));
       console.log(`Scout: ${customEnemies.scout}, Soldier: ${customEnemies.soldier}, Demo: ${customEnemies.demoman}, Heavy: ${customEnemies.heavy}, Sniper: ${customEnemies.sniper}, Spy: ${customEnemies.spy}, Pyro: ${customEnemies.pyro}`);
@@ -9805,7 +9817,7 @@ export class GameScene extends Phaser.Scene {
     const hours24 = Math.floor(this.gameMinutes / 60);
     const displayHours = hours24 === 0 ? 12 : hours24;  // 00:XX becomes 12:XX
     
-    // For endless Night 6, only show day after first 6 AM
+    // For endless Night 6, show day tracking after first 6 AM
     if (this.isBadEndingNight6 && this.hasReached6AM) {
       this.timeText.setText(`DAY ${this.endlessDay} - ${displayHours} AM`);
     } else {
@@ -10346,6 +10358,9 @@ export class GameScene extends Phaser.Scene {
       // Survived Night 6 (bad ending path) - show dark ending
       updateSaveOnNight6Complete();
       this.showDarkEnding();
+    } else if (this.isNightmareMode) {
+      // Nightmare Mode - fixed difficulty finite night, show standard victory
+      this.showStandardVictoryScreen();
     } else {
       // Story nights 1-5 - save progress and check for endings
       const { triggeredBadEnding, triggeredGoodEnding } = updateSaveOnVictory(
@@ -10383,7 +10398,7 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.endScreen.add(time);
     
-    const displayNight = this.nightNumber === 7 ? 'CUSTOM' : this.nightNumber;
+    const displayNight = this.nightNumber === 7 ? 'CUSTOM' : this.nightNumber === 8 ? 'NIGHTMARE' : this.nightNumber;
     const title = this.add.text(640, 300, `NIGHT ${displayNight} COMPLETE!`, {
       fontFamily: 'Courier New, monospace',
       fontSize: '48px',
@@ -10845,7 +10860,7 @@ export class GameScene extends Phaser.Scene {
             console.log(`🌙 Endless Night 6 - Day ${this.endlessDay} begins!`);
           }
         } else {
-          // Normal night - victory!
+          // Normal night or Nightmare Mode - victory!
           this.victory();
           return;
         }

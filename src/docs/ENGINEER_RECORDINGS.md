@@ -80,17 +80,17 @@ These recordings play during each night, like FNAF phone calls. Engineer is leav
 
 > *[CLICK - tape recorder starts]*
 > 
-> "Log four. I dreamt about Pyro this morning. Or more accurately, I had a nightmare. Poor fella is being subjected to whatever the hell this is, and I can't stand to think about it.
+> "Log Four. I dreamt about Pyro this mornin'. Or more accurately, I had a nightmare about 'im. Poor fella's definitely being subjected to whatever the hell this disease is, and I can't stand to think about it.
 > 
-> We thought we'd drawn Sniper over today. Medic stood out in the open for a second too long, and I thought he was a goner, but Sniper didn't shoot. In fact, he simply began to make his way over to us. Medic thought that this was it, that we would get the sample we needed.
+> This morning, we thought we'd drawn Sniper over. Medic stood out in the open for a second too long, and I thought he was a goner, but Sniper didn't shoot. In fact, he simply began to make his way over to us. Medic thought that this was it, that we would finally get the sample we needed.
 > 
-> It turned out to be Spy, wearing his face. His disguise was top-notch. He didn't attack us, though... he seemed to just want to mess with us, the darn saboteur that he is. Or maybe he thinks he's too refined to get our blood on his knife.
+> Lo and behold, it turned out to be Spy, wearing Sniper's face. His disguise was top-notch. He didn't attack us, though; he seemed to just want to mess with us, the saboteur that he is. Or maybe he thinks he's too refined to get our blood on his knife.
 > 
-> The fact that he's now around means I'll have to keep an eye on my sentry. Just because he's lost his mind doesn't mean he's forgotten how to use that damn sapper of his.
+> He's lurking around the base now, meaning I'll have to keep an eye on my sentry. Just because he's lost his mind doesn't mean he's forgotten how to use that damned sapper of his.
 > 
-> Right before I went down to intel tonight, Sniper—the real Sniper—zipped over to Blu Fort. As if he teleported using a bullet. At least he's over here now. So tonight, Doc'll get some rest, and I'll keep us safe. And when he wakes up tomorrow, we can get the sample we need from Sniper. And then we can end this all.
+> Right before I went down to Intel tonight, Sniper — the real Sniper — zipped across the bridge to our side. As if he teleported using a bullet. Meaning he's finally joined the fray in earnest. Tonight, Doc'll get some rest, and I'll keep us safe. And when Doc wakes up tomorrow, we can collect the sample we need. Then we can end all this nonsense for good.
 > 
-> One more day, Doc told me through gritted teeth. He's clearly approaching his breaking point. One more damn day.
+> "One more day," Doc told me through gritted teeth. He's clearly approaching his breaking point. "One more damn day."
 > 
 > *[CLICK - tape recorder stops]*
 
