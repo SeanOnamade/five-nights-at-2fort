@@ -441,7 +441,7 @@ export class GameScene extends Phaser.Scene {
    */
   private getEndlessTimerReduction(): number {
     if ((!this.isBadEndingNight6 && !this.isNightmareMode) || !this.hasReached6AM) return 0;
-    const hours = this.isNightmareMode ? Math.min(this.hoursAfter6AM, 3) : this.hoursAfter6AM;
+    const hours = this.isNightmareMode ? Math.min(this.hoursAfter6AM, 2) : this.hoursAfter6AM;
     return hours * 1000;  // 1 second per hour
   }
   
@@ -451,7 +451,8 @@ export class GameScene extends Phaser.Scene {
    */
   private getDemomanSpeedMultiplier(): number {
     if ((!this.isBadEndingNight6 && !this.isNightmareMode) || !this.hasReached6AM) return 1.0;
-    const hours = this.isNightmareMode ? Math.min(this.hoursAfter6AM, 3) : this.hoursAfter6AM;
+    // Nightmare Mode caps Demoman at 2 hours (1.4x) — one level below other enemies
+    const hours = this.isNightmareMode ? Math.min(this.hoursAfter6AM, 2) : this.hoursAfter6AM;
     return 1.0 + (hours * 0.2);
   }
   
@@ -527,8 +528,8 @@ export class GameScene extends Phaser.Scene {
     
     // Reset endless Night 6 state (Day 7 when first 6 AM is reached)
     this.endlessDay = 7;
-    // Nightmare Mode pre-seeds difficulty to 9 AM equivalent (hoursAfter6AM = 3)
-    this.hoursAfter6AM = this.isNightmareMode ? 3 : 0;
+    // Nightmare Mode pre-seeds difficulty to 8 AM equivalent (hoursAfter6AM = 2)
+    this.hoursAfter6AM = this.isNightmareMode ? 2 : 0;
     this.hasReached6AM = this.isNightmareMode ? true : false;
     this.endlessSurvivalMinutes = 0;
     this.medicGhostActive = false;
