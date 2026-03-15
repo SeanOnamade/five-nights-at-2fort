@@ -211,10 +211,15 @@ export class BootScene extends Phaser.Scene {
       spy: false,
       pyro: false,
       medic: false,
+      pauling: false,
     };
     // Ensure medic key exists for older saved settings
     if (customNightEnemies.medic === undefined) {
       customNightEnemies.medic = false;
+    }
+    // Ensure pauling key exists for older saved settings
+    if (customNightEnemies.pauling === undefined) {
+      customNightEnemies.pauling = false;
     }
     
     // Custom night UI container (created later, shown when Custom Night selected)
@@ -254,7 +259,8 @@ export class BootScene extends Phaser.Scene {
               sniper: true,
               spy: true,
               pyro: true,
-              medic: true
+              medic: true,
+              pauling: false,
             }
           });
         } else if (isBadEndingNight6) {
@@ -270,7 +276,8 @@ export class BootScene extends Phaser.Scene {
               sniper: true,
               spy: true,
               pyro: true,
-              medic: true
+              medic: true,
+              pauling: false,
             }
           });
         } else {
@@ -852,7 +859,7 @@ export class BootScene extends Phaser.Scene {
     customNightUI = this.add.container(width / 2, customBtnY - 60);
     customNightUI.setVisible(false);
     
-    const customPanelBg = this.add.rectangle(0, 0, 580, 60, 0x101815, 0.98);
+    const customPanelBg = this.add.rectangle(0, 0, 640, 60, 0x101815, 0.98);
     customPanelBg.setStrokeStyle(2, 0x554488);
     customNightUI.add(customPanelBg);
     
@@ -864,7 +871,7 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5);
     customNightUI.add(customTitle);
     
-    const enemyTypes = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy', 'pyro', 'medic'] as const;
+    const enemyTypes = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy', 'pyro', 'medic', 'pauling'] as const;
     const enemyColors: Record<string, number> = {
       scout: 0x7755aa,
       soldier: 0x6688aa,
@@ -874,14 +881,15 @@ export class BootScene extends Phaser.Scene {
       spy: 0x666677,
       pyro: 0xdd6622,
       medic: 0xff4444,
+      pauling: 0xff0088,
     };
     const enemyLabels: Record<string, string> = {
       scout: 'SCT', soldier: 'SOL', demoman: 'DEM', heavy: 'HVY',
-      sniper: 'SNP', spy: 'SPY', pyro: 'PYR', medic: 'MED',
+      sniper: 'SNP', spy: 'SPY', pyro: 'PYR', medic: 'MED', pauling: 'PAU',
     };
     
     enemyTypes.forEach((enemy, i) => {
-      const ex = -217 + i * 62;
+      const ex = -240 + i * 60;
       const ey = 10;
       
       const toggleBg = this.add.rectangle(ex, ey, 55, 28, enemyColors[enemy], 0.5);

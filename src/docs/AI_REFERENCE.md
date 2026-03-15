@@ -289,6 +289,59 @@ Support enemy that makes others invincible via Übercharge. **CUSTOM NIGHT ONLY*
 
 ---
 
+## Custom Night Enemy
+
+### 📋 MS. PAULING
+Remote saboteur. Hacks teleporter nodes to cut off Engineer's escape routes. **CUSTOM NIGHT ONLY**
+
+| Parameter | Value |
+|-----------|-------|
+| Visibility | **NEVER visible** on cameras |
+| Target Delay | 15–30 sec (random) |
+| Hack Duration | 8 sec |
+| Repair Duration | 10 sec (hold from Intel) |
+| Scare Cooldown | 5 sec (after teleport scare) |
+
+**LORE:**
+- Pauling was the last person to see Sniper before he turned
+- She's working remotely to cut off Engineer's escape routes before moving in
+- She never enters 2Fort — she won't go anywhere near the infected mercs
+
+**States:**
+- **IDLE:** Between targets, waiting before picking the next room
+- **TARGETING:** Has chosen a room. Empty hack bar appears on that camera. Teleporting to the room during this state scares her off
+- **HACKING:** Hack bar fills over 8 seconds. A single click on the bar interrupts and resets her. Teleporting to the room does nothing (she's remote)
+- **SCARED:** Player teleported to her target room during TARGETING. 5 sec cooldown before she picks a new target
+
+**When hack completes:**
+- Teleporter for that room goes **offline** — player cannot teleport there
+- A red ✕ appears on that node in the camera map overview
+- Room stays offline until repaired
+
+**Repair:**
+- Open the hacked room's camera from Intel
+- A **TELEPORTER OFFLINE** overlay appears with a repair bar
+- Hold the bar for **10 seconds** to restore the teleporter
+- No metal cost — costs attention and time
+
+**Counters:**
+- Scan cameras for the pink hack bar (TARGETING = empty bar, HACKING = filling)
+- Click the bar during HACKING to interrupt with zero cost
+- Teleport to her target room during TARGETING to scare her off (free, but costs a teleport trip)
+- If a room goes offline, open its camera and hold the repair bar (10 sec)
+
+**Sentry / Lure interaction:** None. She ignores both completely.
+
+**Synergies with other enemies:**
+| Enemy | Synergy |
+|-------|---------|
+| Heavy | Hacking BRIDGE or SEWER blocks lure placement near his spawn |
+| Sniper | Hacking STAIRCASE or SPIRAL removes rooms to lure Sniper away from hallways |
+| Pyro | Fewer available rooms = fewer escape destinations during Intel attacks |
+| Medic | Übered enemy approaching + Pauling mid-hack = impossible to handle both at once |
+
+---
+
 ## Defense Mechanics
 
 ### Sentry
@@ -335,4 +388,4 @@ Support enemy that makes others invincible via Übercharge. **CUSTOM NIGHT ONLY*
 
 ---
 
-*Last updated: Night progression revised (Spy N4, Pyro N5, Medic Custom-only)*
+*Last updated: Ms. Pauling added (Custom Night teleporter hacking)*

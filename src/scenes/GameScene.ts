@@ -8,6 +8,7 @@ import {
   GAME_CONSTANTS,
   CAMERAS,
   CameraState,
+  HackedRoomState,
   LureData,
   ROOM_ADJACENCY,
 } from '../types';
@@ -24,6 +25,7 @@ import { SniperEnemy } from '../entities/SniperEnemy';
 import { SpyEnemy } from '../entities/SpyEnemy';
 import { PyroEnemy } from '../entities/PyroEnemy';
 import { MedicEnemy, UberTarget } from '../entities/MedicEnemy';
+import { PaulingEnemy } from '../entities/PaulingEnemy';
 
 /**
  * GameScene - Main gameplay scene for Night 1
@@ -128,6 +130,14 @@ export class GameScene extends Phaser.Scene {
   private spy!: SpyEnemy;
   private pyro!: PyroEnemy;
   private medic!: MedicEnemy;
+  private pauling!: PaulingEnemy;
+
+  // Hacked teleporter rooms (Ms. Pauling - Custom Night)
+  private hackedRooms: Map<NodeId, HackedRoomState> = new Map();
+
+  // Pauling dual-mode tracking fields
+  private lastTeleportedRoom: NodeId | null = null;   // last room player arrived at via teleport
+  private paulingNoTeleportTimer: number = 0;         // counts up; triggers Mode 2 at PAULING_NO_TELEPORT_THRESHOLD
   
   // Night number (determines which enemies are active)
   private nightNumber: number = 1;
@@ -164,6 +174,7 @@ export class GameScene extends Phaser.Scene {
     spy: boolean;
     pyro: boolean;
     medic: boolean;
+    pauling: boolean;
   } | null = null;
   
   // Night 5+ features - Spy sapper
@@ -258,6 +269,8 @@ export class GameScene extends Phaser.Scene {
   // Camera UI container (FNAF-style with map + camera feed)
   private cameraUI!: Phaser.GameObjects.Container;
   private cameraMapNodes: Map<string, Phaser.GameObjects.Container> = new Map();
+  // Map of NodeId -> red X text overlay on the camera map (shown when teleporter is hacked)
+  private hackedRoomMapIndicators: Map<string, Phaser.GameObjects.Text> = new Map();
   private scoutMapIcon!: Phaser.GameObjects.Container;
   private soldierMapIcon!: Phaser.GameObjects.Container;
   private intelRoomIcon!: Phaser.GameObjects.Arc;
@@ -283,11 +296,24 @@ export class GameScene extends Phaser.Scene {
   // Camera watch warning (Heavy/Sniper about to break camera)
   private cameraWatchWarning!: Phaser.GameObjects.Container;
   private cameraWatchBar!: Phaser.GameObjects.Rectangle;
+
+  // Pauling hack bar (teleporter hacking indicator on camera feed)
+  private paulingHackBarContainer!: Phaser.GameObjects.Container;
+  private paulingHackBarFill!: Phaser.GameObjects.Rectangle;
+  private paulingHackBarBorder!: Phaser.GameObjects.Rectangle;
+  private paulingHackBarCross!: Phaser.GameObjects.Graphics; // diagonal cross shown when bar is empty
+  // Repair overlay for hacked teleporter rooms
+  private paulingRepairOverlay!: Phaser.GameObjects.Container;
+  private paulingRepairBarFill!: Phaser.GameObjects.Rectangle;
+  private paulingRepairActive: boolean = false;
   
   // Teleporter UI (Night 3+)
   private teleportButton!: Phaser.GameObjects.Container;
   private teleportButtonBg!: Phaser.GameObjects.Rectangle;
   private teleportButtonText!: Phaser.GameObjects.Text;
+  // Pauling repair bar embedded in teleport button
+  private teleportRepairBarBg!: Phaser.GameObjects.Rectangle;
+  private teleportRepairBarFill!: Phaser.GameObjects.Rectangle;
   private cameraLureButton!: Phaser.GameObjects.Container;  // Play lure from camera view
   private roomViewUI!: Phaser.GameObjects.Container;
   private roomViewHeader!: Phaser.GameObjects.Text;  // Room name header
@@ -393,6 +419,28 @@ export class GameScene extends Phaser.Scene {
   private isMedicEnabled(): boolean {
     // Medic is CUSTOM NIGHT ONLY - never appears in regular nights
     return this.customEnemies ? this.customEnemies.medic : false;
+  }
+
+  private isPaulingEnabled(): boolean {
+    // Pauling is CUSTOM NIGHT ONLY - never appears in regular nights
+    return this.customEnemies ? this.customEnemies.pauling ?? false : false;
+  }
+
+  /** Returns true if the currently selected camera's room has a hacked teleporter */
+  private isSelectedCameraHacked(): boolean {
+    if (!this.isPaulingEnabled()) return false;
+    const cam = CAMERAS[this.selectedCamera];
+    if (!cam) return false;
+    const state = this.hackedRooms.get(cam.node);
+    return !!state?.hacked;
+  }
+
+  /** Returns true if the camera covering a given node is currently destroyed */
+  private isNodeCameraDestroyed(node: NodeId): boolean {
+    const cam = CAMERAS.find(c => c.node === node);
+    if (!cam) return false;
+    const state = this.cameraStates.get(cam.id);
+    return !!state?.destroyed;
   }
   
   /**
@@ -615,7 +663,7 @@ export class GameScene extends Phaser.Scene {
     const displayNightNumber = this.nightNumber === 7 ? 'Custom' : this.nightNumber === 8 ? 'Nightmare' : this.nightNumber;
     const customEnemies = {
       scout: true, soldier: true, demoman: true, 
-      heavy: true, sniper: true, spy: true, pyro: false, medic: false,
+      heavy: true, sniper: true, spy: true, pyro: false, medic: false, pauling: false,
       ...data?.customEnemies,  // Override with passed values (backward compatible)
     };
     
@@ -738,6 +786,18 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.medic.forceDespawn();
     }
+
+    // Only create Pauling on custom night with pauling enabled
+    this.pauling = new PaulingEnemy();
+    // Reset dual-mode tracking fields on each game start
+    this.lastTeleportedRoom = null;
+    this.paulingNoTeleportTimer = 0;
+    this.paulingRepairActive = false;
+    if (isCustomNight && customEnemies.pauling) {
+      this.pauling.activate();
+    } else {
+      this.pauling.forceDespawn();
+    }
     
     // Spy callbacks are now set up when Spy is created above
     
@@ -745,6 +805,12 @@ export class GameScene extends Phaser.Scene {
     this.cameraStates.clear();
     CAMERAS.forEach((cam) => {
       this.cameraStates.set(cam.id, { destroyed: false, destroyedUntil: 0, destroyedBy: null });
+    });
+
+    // Initialize hacked room states (Ms. Pauling)
+    this.hackedRooms.clear();
+    (['BRIDGE', 'COURTYARD', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 'LEFT_HALL', 'RIGHT_HALL'] as NodeId[]).forEach((node) => {
+      this.hackedRooms.set(node, { hacked: false, repairProgress: 0 });
     });
     
     // Set up enemy event listeners (remove old ones first to prevent duplicates)
@@ -2026,6 +2092,20 @@ export class GameScene extends Phaser.Scene {
       this.cameraMapNodes.set(cam.node, nodeContainer);
       this.cameraUI.add(nodeContainer);
     });
+
+    // Create hacked room X indicators on the map (hidden by default, shown when Pauling hacks a room)
+    CAMERAS.forEach((cam) => {
+      const nodeX = mapOffsetX + cam.mapX * mapScale;
+      const nodeY = mapOffsetY + cam.mapY * mapScale;
+      const hackIndicator = this.add.text(nodeX + 14, nodeY - 14, '✕', {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '14px',
+        color: '#ff0088',
+        fontStyle: 'bold',
+      }).setOrigin(0.5).setVisible(false).setDepth(106);
+      this.hackedRoomMapIndicators.set(cam.node, hackIndicator);
+      this.cameraUI.add(hackIndicator);
+    });
     
     // Intel Room marker (your position) - directly below Left Hall
     const intelMarkerX = mapOffsetX + 55;   // Same X as Left Hall
@@ -2102,6 +2182,9 @@ export class GameScene extends Phaser.Scene {
     
     // Create camera destroyed overlay (Night 3+)
     this.createCameraDestroyedOverlay();
+
+    // Create Pauling hack bar overlay (Custom Night)
+    this.createPaulingHackUI();
     
     // Static burst overlay for camera switching (all nights)
     // Added last in createCameraUI so it renders on top of everything
@@ -2308,7 +2391,77 @@ export class GameScene extends Phaser.Scene {
     this.cameraBootOverlay.setVisible(false);
     this.cameraUI.add(this.cameraBootOverlay);
   }
-  
+
+  /**
+   * Create Pauling hack bar and teleporter repair overlay (Custom Night)
+   */
+  private createPaulingHackUI(): void {
+    // ---- Hack bar: shown at bottom of camera feed when Pauling is targeting/hacking ----
+    // Camera panel is centered at 420,350 and is 510×410 — bottom edge is at y≈555.
+    // Place bar near the bottom inside the panel: y=510 (45px from bottom edge).
+    this.paulingHackBarContainer = this.add.container(420, 510);
+    this.paulingHackBarContainer.setVisible(false);
+    this.paulingHackBarContainer.setDepth(104);
+
+    // Semi-transparent backing strip — fully transparent so it doesn't obscure camera feed
+    const hackBarBacking = this.add.rectangle(0, 0, 510, 44, 0x000000, 0);
+    this.paulingHackBarContainer.add(hackBarBacking);
+
+    // Bar background
+    this.paulingHackBarBorder = this.add.rectangle(0, 6, 360, 16, 0x111111);
+    this.paulingHackBarBorder.setStrokeStyle(2, 0x555555);
+    this.paulingHackBarContainer.add(this.paulingHackBarBorder);
+
+    // Bar fill (scales 0→1 left-to-right)
+    this.paulingHackBarFill = this.add.rectangle(-178, 6, 356, 10, 0x444444, 0.7);
+    this.paulingHackBarFill.setOrigin(0, 0.5);
+    this.paulingHackBarContainer.add(this.paulingHackBarFill);
+
+    // Diagonal cross — drawn over the bar track when empty (TARGETING phase warning)
+    this.paulingHackBarCross = this.add.graphics();
+    this.paulingHackBarCross.lineStyle(2, 0x885566, 0.8);
+    this.paulingHackBarCross.lineBetween(-178, -2, 178, 14);  // top-left → bottom-right
+    this.paulingHackBarCross.lineBetween(-178, 14, 178, -2);  // bottom-left → top-right
+    this.paulingHackBarContainer.add(this.paulingHackBarCross);
+
+    // Label text (left of bar)
+    const hackLabel = this.add.text(-178, -10, 'TELEPORTER HACK', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '10px',
+      color: '#ff44aa',
+      fontStyle: 'bold',
+    }).setOrigin(0, 0.5);
+    this.paulingHackBarContainer.add(hackLabel);
+
+    // Hint text (right of bar)
+    const hackHint = this.add.text(178, -10, 'CLICK TO INTERRUPT', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '10px',
+      color: '#aa4488',
+    }).setOrigin(1, 0.5);
+    this.paulingHackBarContainer.add(hackHint);
+
+    // Clickable hit area over the whole strip
+    const hackHitArea = this.add.rectangle(0, 0, 510, 44, 0x000000, 0);
+    hackHitArea.setInteractive({ useHandCursor: true });
+    hackHitArea.on('pointerdown', () => {
+      if (this.isPaulingEnabled() && this.pauling && this.pauling.getState() === 'HACKING') {
+        this.pauling.interruptHack();
+        this.showAlert('Hack interrupted!', 0x00ff88);
+      }
+    });
+    this.paulingHackBarContainer.add(hackHitArea);
+
+    this.cameraUI.add(this.paulingHackBarContainer);
+
+    // ---- Repair bar: embedded in the teleport button (see createTeleporterUI / updateTeleportButtonAppearance) ----
+    // The repair overlay is no longer a camera overlay — repair is done via the TELEPORT HERE button.
+    // paulingRepairOverlay is kept as a stub so existing references don't crash.
+    this.paulingRepairOverlay = this.add.container(0, 0);
+    this.paulingRepairOverlay.setVisible(false);
+    this.paulingRepairBarFill = this.add.rectangle(0, 0, 0, 0, 0x000000, 0); // invisible stub
+  }
+
   /**
    * Create teleporter UI for Night 3+
    */
@@ -2326,21 +2479,41 @@ export class GameScene extends Phaser.Scene {
       color: '#ff8888',
       fontStyle: 'bold',
     }).setOrigin(0.5);
+
+    // Repair bar (hidden by default, shown when room is hacked)
+    this.teleportRepairBarBg = this.add.rectangle(0, 10, 156, 7, 0x220011);
+    this.teleportRepairBarBg.setStrokeStyle(1, 0xff44aa);
+    this.teleportRepairBarBg.setVisible(false);
+
+    this.teleportRepairBarFill = this.add.rectangle(-76, 10, 152, 3, 0x00ff88, 0.9);
+    this.teleportRepairBarFill.setOrigin(0, 0.5);
+    this.teleportRepairBarFill.setScale(0, 1);
+    this.teleportRepairBarFill.setVisible(false);
     
-    this.teleportButton.add([this.teleportButtonBg, this.teleportButtonText]);
+    this.teleportButton.add([
+      this.teleportButtonBg,
+      this.teleportButtonText,
+      this.teleportRepairBarBg,
+      this.teleportRepairBarFill,
+    ]);
     this.teleportButton.setVisible(false);
     this.cameraUI.add(this.teleportButton);
     
     this.teleportButtonBg.on('pointerover', () => {
       if (this.isTeleportAnimating) {
         this.teleportButtonBg.setFillStyle(0x664422);
+      } else if (this.isSelectedCameraHacked()) {
+        this.teleportButtonBg.setFillStyle(0x222222);
       } else {
         this.teleportButtonBg.setFillStyle(0x663333);
       }
     });
     this.teleportButtonBg.on('pointerout', () => {
+      this.paulingRepairActive = false;
       if (this.isTeleportAnimating) {
         this.teleportButtonBg.setFillStyle(0x553311);
+      } else if (this.isSelectedCameraHacked()) {
+        this.teleportButtonBg.setFillStyle(0x1a1a1a);
       } else {
         this.teleportButtonBg.setFillStyle(0x442222);
       }
@@ -2351,8 +2524,17 @@ export class GameScene extends Phaser.Scene {
         this.cancelTeleport();
         return;
       }
+      // If room is hacked, start hold-to-repair
+      if (this.isSelectedCameraHacked()) {
+        this.paulingRepairActive = true;
+        this._paulingRepairSoundTimer = 0; // fire first tick immediately
+        return;
+      }
       const cam = CAMERAS[this.selectedCamera];
       this.teleportToRoom(cam.node);
+    });
+    this.teleportButtonBg.on('pointerup', () => {
+      this.paulingRepairActive = false;
     });
     
     // Camera lure button (play or remove lure from camera view)
@@ -2706,6 +2888,12 @@ export class GameScene extends Phaser.Scene {
       this.showAlert('Cannot teleport to Intel room!', 0xff0000);
       return;
     }
+
+    // Block teleport if Pauling has hacked this room's teleporter
+    if (this.isPaulingEnabled() && this.hackedRooms.get(node)?.hacked) {
+      this.showAlert('TELEPORTER OFFLINE', 0xff4444);
+      return;
+    }
     
     // Store pending destination (for cancel feature)
     this.pendingTeleportDestination = node;
@@ -2822,6 +3010,17 @@ export class GameScene extends Phaser.Scene {
       this.teleportEscapeTimer = 0;
       this.enemyApproachingRoom = false;
       this.approachingEnemyType = 'an enemy';
+
+      // Track last teleported room for Pauling Mode 1; reset no-teleport timer for Mode 2
+      this.lastTeleportedRoom = node;
+      this.paulingNoTeleportTimer = 0;
+
+      // Scare Pauling if she was targeting this room during TARGETING phase
+      if (this.isPaulingEnabled() && this.pauling && this.pauling.isActive()) {
+        if (this.pauling.getCurrentTarget() === node && this.pauling.getState() === 'TARGETING') {
+          this.pauling.scarePauling();
+        }
+      }
       
       // Stop dispenser hum when leaving Intel room
       this.stopDispenserHum();
@@ -2950,7 +3149,49 @@ export class GameScene extends Phaser.Scene {
         this.gameOver('Demoman was waiting for you!');
         return;
       }
+
+      // Pauling Mode 1: auto-hack last teleported room on return to Intel
+      this.handlePaulingMode1();
     });
+  }
+
+  /**
+   * Pauling Mode 1 — instant auto-hack triggered when player returns to Intel.
+   * Hacks the last room the player teleported to (if not already hacked).
+   * Every return trip triggers this — no cooldown cap.
+   */
+  private handlePaulingMode1(): void {
+    if (!this.isPaulingEnabled() || !this.pauling?.isActive()) return;
+    if (!this.lastTeleportedRoom) return; // no teleport yet this night
+
+    const validRooms = PaulingEnemy.VALID_ROOMS;
+
+    // Target is always the last teleported room (if valid and not already hacked)
+    let target: NodeId | null = null;
+
+    if (validRooms.includes(this.lastTeleportedRoom)) {
+      const roomState = this.hackedRooms.get(this.lastTeleportedRoom);
+      if (roomState && !roomState.hacked && !this.isNodeCameraDestroyed(this.lastTeleportedRoom)) {
+        target = this.lastTeleportedRoom;
+      }
+      // If already hacked or camera is destroyed, do nothing
+    }
+
+    if (!target) return;
+
+    // Instantly hack the room
+    const roomState = this.hackedRooms.get(target)!;
+    roomState.hacked = true;
+    roomState.repairProgress = 0;
+
+    // Reset the no-teleport timer so Mode 2 doesn't fire right after a Mode 1 hack
+    this.paulingNoTeleportTimer = 0;
+
+    this.showAlert(`⚠ PAULING: ${target.replace('_', ' ')} TELEPORTER HACKED`, 0xff0088);
+    this.updateHackedRoomMapIndicators();
+    this.updateTeleportButtonAppearance();
+    this.playPaulingHackSound();
+    console.log(`📋 Pauling (Mode 1) instantly hacked ${target}.`);
   }
   
   /**
@@ -3129,19 +3370,33 @@ export class GameScene extends Phaser.Scene {
    */
   private updateTeleportButtonAppearance(): void {
     if (!this.teleportButtonBg || !this.teleportButtonText) return;
-    
-    if (this.isTeleportAnimating) {
+
+    const hacked = this.isSelectedCameraHacked();
+
+    if (hacked) {
+      // Hacked state — grayed out, shows repair bar
+      this.teleportButtonBg.setFillStyle(0x1a1a1a);
+      this.teleportButtonBg.setStrokeStyle(2, 0xff44aa);
+      this.teleportButtonText.setText('✕ HACKED');
+      this.teleportButtonText.setColor('#ff44aa');
+      this.teleportRepairBarBg?.setVisible(true);
+      this.teleportRepairBarFill?.setVisible(true);
+    } else if (this.isTeleportAnimating) {
       // Cancel mode - orange/warning colors
       this.teleportButtonBg.setFillStyle(0x553311);
       this.teleportButtonBg.setStrokeStyle(2, 0xffaa44);
       this.teleportButtonText.setText('✕ CANCEL');
       this.teleportButtonText.setColor('#ffaa44');
+      this.teleportRepairBarBg?.setVisible(false);
+      this.teleportRepairBarFill?.setVisible(false);
     } else {
       // Normal mode - red colors (RED team)
       this.teleportButtonBg.setFillStyle(0x442222);
       this.teleportButtonBg.setStrokeStyle(2, 0xcc4444);
       this.teleportButtonText.setText('TELEPORT HERE');
       this.teleportButtonText.setColor('#ff8888');
+      this.teleportRepairBarBg?.setVisible(false);
+      this.teleportRepairBarFill?.setVisible(false);
     }
   }
   
@@ -3433,7 +3688,18 @@ export class GameScene extends Phaser.Scene {
       }
     });
   }
-  
+
+  /**
+   * Update the hacked room X indicators on the camera map
+   * Called when a room is hacked or repaired by Pauling
+   */
+  private updateHackedRoomMapIndicators(): void {
+    this.hackedRoomMapIndicators.forEach((indicator, node) => {
+      const hackedState = this.hackedRooms.get(node as NodeId);
+      indicator.setVisible(!!(hackedState && hackedState.hacked));
+    });
+  }
+
   /**
    * Select a camera and update the feed view
    * Note: Camera switching is allowed during boot so player can select teleport destination
@@ -3443,6 +3709,10 @@ export class GameScene extends Phaser.Scene {
     if (this.nightNumber >= 3 && this.teleportButton) {
       this.teleportButton.setVisible(true);
     }
+
+    // Stop repair if switching cameras mid-hold
+    this.paulingRepairActive = false;
+    this.updateTeleportButtonAppearance();
     
     // Don't do anything else if clicking the camera we're already on
     if (this.selectedCamera === index) {
@@ -8060,7 +8330,172 @@ export class GameScene extends Phaser.Scene {
       // Already stopped
     }
   }
-  
+
+  /**
+   * Play sound when Pauling selects a Mode 2 target — tense, urgent radio-static ping
+   * Signals the player to check cameras and be ready to interrupt
+   */
+  private playPaulingTargetingSound(): void {
+    if (this.gameStatus !== 'PLAYING') return;
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = this.sharedAudioContext;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+
+      // Two sharp ascending pings — like a radar/sonar alert
+      [0, 0.18].forEach((offset) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime + offset);
+        osc.frequency.linearRampToValueAtTime(1320, ctx.currentTime + offset + 0.08);
+        osc.connect(gain);
+        osc.start(ctx.currentTime + offset);
+        osc.stop(ctx.currentTime + offset + 0.1);
+      });
+
+      // Short static burst underneath for urgency
+      const noise = ctx.createOscillator();
+      noise.type = 'square';
+      noise.frequency.setValueAtTime(180, ctx.currentTime);
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.04, ctx.currentTime);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      noise.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noise.start(ctx.currentTime);
+      noise.stop(ctx.currentTime + 0.15);
+
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
+  /**
+   * Play sound when Pauling hacks a teleporter room — ominous digital glitch/power-down
+   */
+  private playPaulingHackSound(): void {
+    if (this.gameStatus !== 'PLAYING') return;
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = this.sharedAudioContext;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+
+      // Descending pitch sweep — "power-down" feel
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(600, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.35);
+
+      // Digital noise burst via second osc
+      const noise = ctx.createOscillator();
+      noise.type = 'square';
+      noise.frequency.setValueAtTime(220, ctx.currentTime);
+      noise.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.25);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.06, ctx.currentTime);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+
+      osc.connect(gain);
+      noise.connect(noiseGain);
+      noiseGain.connect(gain);
+
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+      noise.start(ctx.currentTime);
+      noise.stop(ctx.currentTime + 0.3);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
+  /**
+   * Play looping repair buzz while player holds the repair bar
+   * Called each frame while paulingRepairActive; manages its own throttle via _paulingRepairSoundTimer
+   */
+  private _paulingRepairSoundTimer: number = 0;
+  private playPaulingRepairTickSound(): void {
+    if (this.gameStatus !== 'PLAYING') return;
+    // Play a short tick every ~250ms so it feels like continuous activity without overlap
+    this._paulingRepairSoundTimer -= 1; // decremented per frame; reset when <= 0
+    if (this._paulingRepairSoundTimer > 0) return;
+    this._paulingRepairSoundTimer = 15; // ~15 frames between ticks at 60fps ≈ 250ms
+
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = this.sharedAudioContext;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+
+      // Short high-pitched electronic blip — screwdriver/typing feel
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(1200, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(900, ctx.currentTime + 0.06);
+
+      osc.connect(gain);
+      gain.gain.setValueAtTime(0.07, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.07);
+
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.07);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
+  /**
+   * Play sound when a hacked teleporter is fully repaired — upward chime/success sting
+   */
+  private playPaulingRepairCompleteSound(): void {
+    if (this.gameStatus !== 'PLAYING') return;
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = this.sharedAudioContext;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+
+      // Rising two-tone chime — C5 → E5
+      const freqs = [523, 659];
+      freqs.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.12);
+        osc.connect(gain);
+        osc.start(ctx.currentTime + i * 0.12);
+        osc.stop(ctx.currentTime + i * 0.12 + 0.18);
+      });
+
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
   /**
    * Start the scary buzzing/detection sound when enemy is in lit doorway
    */
@@ -8780,6 +9215,7 @@ export class GameScene extends Phaser.Scene {
       this.isCameraBooting = false;
       this.cameraBootTimer = 0;
       this.cameraUI.setVisible(false);
+      this.paulingRepairActive = false; // stop repair if camera closed mid-hold
       if (this.wasWrangledBeforeCamera && this.sentry.exists) {
         this.sentry.isWrangled = true;
       }
@@ -8868,6 +9304,8 @@ export class GameScene extends Phaser.Scene {
         this.cameraDestroyedOverlay.setVisible(false);
       }
     }
+
+    // Pauling: camera view is always unobstructed — repair is done via the teleport button
     
     // Update lure indicator - show if there's a lure at this camera
     if (this.activeLure && this.activeLure.node === selectedCam.node) {
@@ -8958,8 +9396,36 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.cameraWatchWarning.setVisible(false);
     }
-    
-    // Build list of enemies present with their info
+
+    // Pauling hack bar — shown when she's targeting or actively hacking this camera's room
+    if (this.isPaulingEnabled() && this.pauling && this.pauling.isActive() && this.paulingHackBarContainer) {
+      const paulingTarget = this.pauling.getCurrentTarget();
+      const paulingState = this.pauling.getState();
+      if (paulingTarget === selectedCam.node && (paulingState === 'TARGETING' || paulingState === 'HACKING')) {
+        this.paulingHackBarContainer.setVisible(true);
+        const hackProgress = paulingState === 'HACKING' ? this.pauling.getHackProgress() : 0;
+        this.paulingHackBarFill.setScale(hackProgress, 1);
+        // Colour: grey (0x555555) when targeting/empty, gradient → pink (0xff0088) as bar fills
+        if (hackProgress <= 0) {
+          this.paulingHackBarFill.setFillStyle(0x444444, 0.7);
+          this.paulingHackBarBorder?.setStrokeStyle(2, 0x555555);
+          this.paulingHackBarCross?.setVisible(true);
+        } else {
+          // Lerp grey (0x44,0x44,0x44) → pink (0xff,0x00,0x88) by progress
+          const r = Math.round(0x44 + (0xff - 0x44) * hackProgress);
+          const g = Math.round(0x44 + (0x00 - 0x44) * hackProgress);
+          const b = Math.round(0x44 + (0x88 - 0x44) * hackProgress);
+          const col = (r << 16) | (g << 8) | b;
+          this.paulingHackBarFill.setFillStyle(col, 0.85 + hackProgress * 0.1);
+          this.paulingHackBarBorder?.setStrokeStyle(2, col);
+          this.paulingHackBarCross?.setVisible(false);
+        }
+      } else {
+        this.paulingHackBarContainer.setVisible(false);
+      }
+    } else if (this.paulingHackBarContainer) {
+      this.paulingHackBarContainer.setVisible(false);
+    }
     type EnemyDisplay = { type: string; label: string; color: string };
     const enemies: EnemyDisplay[] = [];
     
@@ -11136,7 +11602,96 @@ export class GameScene extends Phaser.Scene {
     if (this.isHeavyEnabled() || this.isSniperEnabled() || this.isSpyEnabled() || this.isPyroEnabled()) {
       this.updateHeavyAndSniper(delta, timerScaleFactor, pyroTeleportReduction);
     }
-    
+
+    // Update Medic (Custom Night only) - outside updateHeavyAndSniper so it runs even when no other enemies are active
+    if (this.isMedicEnabled() && this.medic && !this.medic.isForceDespawned()) {
+      this.medic.update(delta);
+    }
+
+    // Update Pauling (Custom Night only) - outside updateHeavyAndSniper so it runs even alone
+    if (this.isPaulingEnabled() && this.pauling && this.pauling.isActive()) {
+      // Tick Mode 2 no-teleport timer (only when player is in Intel, not teleported)
+      if (!this.isTeleported && !this.isTeleportAnimating) {
+        this.paulingNoTeleportTimer += delta;
+        if (
+          this.paulingNoTeleportTimer >= GAME_CONSTANTS.PAULING_NO_TELEPORT_THRESHOLD &&
+          this.pauling.getState() === 'WAITING'
+        ) {
+          // Trigger Mode 2 fallback hack — exclude already-hacked and camera-destroyed rooms
+          this.paulingNoTeleportTimer = 0;
+          const excludedNodes = Array.from(this.hackedRooms.entries())
+            .filter(([node, s]) => s.hacked || this.isNodeCameraDestroyed(node))
+            .map(([node]) => node);
+          this.pauling.triggerFallbackHack(excludedNodes);
+          // Only play sound if a target was actually selected (not all rooms exhausted)
+          if (this.pauling.getState() === 'TARGETING') {
+            this.playPaulingTargetingSound();
+          }
+          console.log('📋 Pauling Mode 2 fallback triggered (no teleport for 30s)');
+        }
+      }
+
+      const paulingResult = this.pauling.update(delta);
+      if (paulingResult.hackComplete && paulingResult.targetNode) {
+        const hackedState = this.hackedRooms.get(paulingResult.targetNode);
+        if (hackedState && !hackedState.hacked) {
+          // Only apply if not already hacked by Mode 1 mid-way through
+          hackedState.hacked = true;
+          hackedState.repairProgress = 0;
+          this.showAlert(`⚠ PAULING: ${paulingResult.targetNode.replace('_', ' ')} TELEPORTER HACKED`, 0xff4444);
+          this.updateHackedRoomMapIndicators();
+          this.playPaulingHackSound();
+          if (this.isCameraMode) this.updateTeleportButtonAppearance();
+        }
+      }
+
+      // Drive hold-to-repair via teleport button
+      if (this.isCameraMode && this.paulingRepairActive) {
+        const cam = CAMERAS[this.selectedCamera];
+        const hackedState = cam ? this.hackedRooms.get(cam.node) : null;
+        if (hackedState && hackedState.hacked) {
+          hackedState.repairProgress += delta / GAME_CONSTANTS.PAULING_REPAIR_DURATION;
+          // Repair tick sound while holding
+          this.playPaulingRepairTickSound();
+          // Update bar fill
+          if (this.teleportRepairBarFill) {
+            this.teleportRepairBarFill.setScale(Math.min(hackedState.repairProgress, 1), 1);
+          }
+          if (hackedState.repairProgress >= 1) {
+            hackedState.hacked = false;
+            hackedState.repairProgress = 0;
+            this.paulingRepairActive = false;
+            if (this.teleportRepairBarFill) this.teleportRepairBarFill.setScale(0, 1);
+            this.showAlert('Teleporter restored!', 0x00ff88);
+            this.playPaulingRepairCompleteSound();
+            this.updateHackedRoomMapIndicators();
+            this.updateTeleportButtonAppearance();
+          }
+        } else {
+          // Room no longer hacked (race condition guard)
+          this.paulingRepairActive = false;
+        }
+      } else if (!this.paulingRepairActive) {
+        // Decay repair progress on ALL hacked rooms whenever not actively repairing
+        this.hackedRooms.forEach((hackedState) => {
+          if (hackedState.hacked && hackedState.repairProgress > 0) {
+            hackedState.repairProgress = Math.max(0, hackedState.repairProgress - delta / (GAME_CONSTANTS.PAULING_REPAIR_DURATION * 2));
+          }
+        });
+        // Sync the repair bar visual for the currently viewed camera
+        if (this.isCameraMode) {
+          const cam = CAMERAS[this.selectedCamera];
+          const hackedState = cam ? this.hackedRooms.get(cam.node) : null;
+          if (hackedState && this.teleportRepairBarFill) {
+            this.teleportRepairBarFill.setScale(Math.min(hackedState.repairProgress, 1), 1);
+          }
+        }
+      }
+
+      // Keep teleport button appearance in sync each frame
+      if (this.isCameraMode) this.updateTeleportButtonAppearance();
+    }
+
     // Update teleport danger check (always runs, regardless of which enemies are enabled)
     this.updateTeleportDanger(delta);
   }
@@ -11432,11 +11987,6 @@ export class GameScene extends Phaser.Scene {
         this.showPyroEscapeWarning(false);
         this.stopPyroCracklingAmbient();
       }
-    }
-    
-    // Update Medic (Custom Night only)
-    if (this.isMedicEnabled() && this.medic && !this.medic.isForceDespawned()) {
-      this.medic.update(delta);
     }
     
     // Update Medic ghost apparition (Endless Night 6 only)
