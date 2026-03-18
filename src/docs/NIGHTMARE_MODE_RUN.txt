@@ -1,0 +1,626 @@
+Successful Nightmare Mode Run - All 9 Enemies (Pauling Mode 1 Only)
+====================================================================
+Date: March 17, 2026
+Config: Night 8, isNightmareMode=true, hoursAfter6AM pre-seeded to 2
+Enemies: Scout, Soldier, Demoman, Heavy, Sniper, Spy, Pyro, Medic, Pauling
+Pauling: Mode 1 only (instant hack on return to Intel), Mode 2 disabled
+Result: VICTORY
+
+🌙 Starting Night 8 (Custom) [NIGHTMARE]
+Custom enemies: {
+  "scout": true,
+  "soldier": true,
+  "demoman": true,
+  "heavy": true,
+  "sniper": true,
+  "spy": true,
+  "pyro": true,
+  "medic": true,
+  "pauling": true
+}
+Scout: true, Soldier: true, Demo: true, Heavy: true, Sniper: true, Spy: true, Pyro: true
+Heavy spawning via right path (Sewer)
+🕵️ Spy initialized in SAPPING state, disguised as DEMOMAN_HEAD
+🔥 Pyro teleported to STAIRCASE
+🔥 Pyro initialized in ROOM mode at STAIRCASE
+💉 Medic initialized (inactive until activated)
+💉 Medic chose new target: DEMOMAN
+💉 Medic activated! Available targets: SCOUT, SOLDIER, DEMOMAN
+📋 Ms. Pauling activated — watching the base remotely
+[INPUT] Native DOM key listeners registered for A/D
+🔥 BURNING SOUND at STAIRCASE - Pyro is here (invisible)
+🔥 BURNING SOUND at STAIRCASE - Pyro is here (invisible)
+🎙️ No recording found for: night8.mp3
+🔥 Pyro teleported to COURTYARD
+🕵️ [12:10AM] Spy update running - state=SAPPING, stateTimer=10.0s, teleportTimer=0.0s, at SEWER
+🔥 Pyro teleported to STAIRCASE
+Sniper teleported to LEFT_HALL
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at BRIDGE. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🕵️ [12:15AM] SPY PLACED SAPPER ON SENTRY!
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to BRIDGE
+toggleLure called. isTeleported=true, currentRoom=BRIDGE
+Lure placed at BRIDGE
+toggleLure called. isTeleported=true, currentRoom=BRIDGE
+Lure activated at BRIDGE
+Heavy heard lure at BRIDGE! Moving toward it from GRATE
+Heavy lured toward BRIDGE!
+Sniper lured toward BRIDGE!
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked BRIDGE.
+🕵️ [12:16AM] Sapper removed from sentry!
+🔥 Pyro teleported to SEWER
+Sniper navigating toward lure: LEFT_HALL -> STAIRCASE
+Heavy moving to adjacent lure: GRATE -> BRIDGE
+🕵️ [12:20AM] Spy update running - state=SAPPING, stateTimer=20.0s, teleportTimer=0.0s, at SEWER
+SCOUT reached doorway at LEFT_HALL!
+SCOUT driven away! Will respawn in 8000ms
+🔥 Pyro teleported to RIGHT_HALL
+Heavy reached lure at BRIDGE
+Sniper navigating toward lure: STAIRCASE -> COURTYARD
+SOLDIER reached doorway at RIGHT_HALL!
+Soldier entering siege mode - firing rockets!
+🔥 Pyro driven away by wrangler light!
+🔥 Pyro teleported to BRIDGE (fled from light)
+SOLDIER driven away! Will respawn in 8000ms
+SCOUT respawned at COURTYARD
+🕵️ [12:30AM] Spy update running - state=SAPPING, stateTimer=30.0s, teleportTimer=0.0s, at SEWER
+Heavy reached lure at BRIDGE
+Lure consumed - enemies will return to patrolling
+Heavy crossed paths! New route: BRIDGE -> COURTYARD -> STAIRCASE -> LEFT_HALL -> INTEL
+🔥 Pyro teleported to GRATE
+SOLDIER respawned at GRATE
+🔥 Pyro entering transition (despawned for 10s), will become INTEL mode
+🕵️ [12:40AM] Spy update running - state=SAPPING, stateTimer=40.0s, teleportTimer=0.0s, at SEWER
+Sniper teleported to GRATE
+🔥 Pyro switched to INTEL mode
+SCOUT reached doorway at LEFT_HALL!
+🕵️ [12:50AM] Spy update running - state=SAPPING, stateTimer=50.0s, teleportTimer=0.0s, at SEWER
+SCOUT driven away! Will respawn in 8000ms
+Sniper teleported to SEWER
+🔥 PYRO LIT A MATCH IN INTEL! Player must escape!
+🔥 PYRO MATCH LIT! ESCAPE NOW!
+SCOUT respawned at COURTYARD
+SOLDIER reached doorway at RIGHT_HALL!
+Soldier entering siege mode - firing rockets!
+🕵️ [1:00AM] Spy switched to DISGUISE state as SCOUT at SPIRAL
+👁️ Demoman's RIGHT eye lit up! Charging soon...
+SOLDIER driven away! Will respawn in 8000ms
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+🗡️ Demoman charge started toward RIGHT!
+🗡️ DEMOMAN CHARGE! Heading RIGHT!
+⚡ Demoman at COURTYARD
+Arrived at GRATE. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to GRATE
+💉 Übered Demoman leaving - player teleported away
+🛡️ Demoman deterred! Head teleporting...
+🗡️ Demoman head teleported to SEWER
+💉 Übered DEMOMAN's attack resolved. Waiting for next hour...
+💉 DEMOMAN Über attack resolved - player escaped!
+🔥 Player escaped Pyro! Transitioning to ROOM mode.
+toggleLure called. isTeleported=true, currentRoom=GRATE
+Lure placed at GRATE
+toggleLure called. isTeleported=true, currentRoom=GRATE
+Lure activated at GRATE
+Heavy heard lure at GRATE! Moving toward it from STAIRCASE
+Heavy lured toward GRATE!
+Sniper lured toward GRATE!
+Sniper navigating toward lure: SEWER -> GRATE
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked GRATE.
+Heavy navigating toward lure: STAIRCASE -> COURTYARD
+SOLDIER respawned at GRATE
+🕵️ [1:08AM] Spy teleported to GRATE (disguised as SCOUT)
+🕵️ [1:10AM] Spy update running - state=DISGUISE, stateTimer=10.0s, teleportTimer=2.0s, at GRATE
+Heavy moving to adjacent lure: COURTYARD -> GRATE
+Sniper reached lure at GRATE
+🔥 Pyro teleported to BRIDGE
+🔥 Pyro switched to ROOM mode at BRIDGE
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+Heavy reached lure at GRATE
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🕵️ [1:16AM] Spy teleported to SPIRAL (disguised as SCOUT)
+🔥 Pyro teleported to LEFT_HALL
+🔥 BURNING SOUND at LEFT_HALL - Pyro is here (invisible)
+SCOUT reached doorway at LEFT_HALL!
+🔥 Pyro driven away by wrangler light!
+🔥 Pyro teleported to COURTYARD (fled from light)
+Lure consumed - enemies will return to patrolling
+Heavy rebuilding path from GRATE: GRATE -> SPIRAL -> RIGHT_HALL -> INTEL
+SCOUT driven away! Will respawn in 8000ms
+🕵️ [1:20AM] Spy update running - state=DISGUISE, stateTimer=20.0s, teleportTimer=4.0s, at SPIRAL
+🔥 BURNING SOUND at COURTYARD - Pyro is here (invisible)
+🕵️ [1:24AM] Spy teleported to SEWER (disguised as SCOUT)
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at SEWER. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to SEWER
+🔥 Pyro teleported to BRIDGE
+toggleLure called. isTeleported=true, currentRoom=SEWER
+Lure placed at SEWER
+SCOUT respawned at COURTYARD
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked SEWER.
+🕵️ [1:30AM] Spy update running - state=DISGUISE, stateTimer=30.0s, teleportTimer=6.0s, at SEWER
+🔥 Pyro teleported to STAIRCASE
+🕵️ [1:32AM] Spy teleported to GRATE (disguised as SCOUT)
+Sniper teleported to STAIRCASE
+SOLDIER reached doorway at RIGHT_HALL!
+Soldier entering siege mode - firing rockets!
+SOLDIER driven away! Will respawn in 8000ms
+🔥 Pyro teleported to SEWER
+🔥 BURNING SOUND at SEWER - Pyro is here (invisible)
+Lure activated from camera view at SEWER
+Heavy heard lure at SEWER! Moving toward it from SPIRAL
+Heavy lured toward SEWER!
+Heavy navigating toward lure: SPIRAL -> GRATE
+Sniper lured toward SEWER!
+🔥 BURNING SOUND at SEWER - Pyro is here (invisible)
+Sniper navigating toward lure: STAIRCASE -> COURTYARD
+🔥 BURNING SOUND at SEWER - Pyro is here (invisible)
+🕵️ [1:40AM] Spy update running - state=DISGUISE, stateTimer=40.0s, teleportTimer=8.0s, at GRATE
+🕵️ [1:40AM] Spy teleported to BRIDGE (disguised as SCOUT)
+🔥 BURNING SOUND at SEWER - Pyro is here (invisible)
+🔥 BURNING SOUND at SEWER - Pyro is here (invisible)
+🔥 BURNING SOUND at SEWER - Pyro is here (invisible)
+SOLDIER respawned at GRATE
+Heavy moving to adjacent lure: GRATE -> SEWER
+🔥 Pyro teleported to SPIRAL
+Sniper navigating toward lure: COURTYARD -> GRATE
+👁️ Demoman's LEFT eye lit up! Charging soon...
+SCOUT reached doorway at LEFT_HALL!
+Heavy reached lure at SEWER
+🗡️ Demoman charge started toward LEFT!
+🗡️ DEMOMAN CHARGE! Heading LEFT!
+⚡ Demoman at COURTYARD
+⚡ Demoman at STAIRCASE
+🕵️ [1:48AM] Spy teleported to SPIRAL (disguised as SCOUT)
+⚡ Demoman at LEFT_HALL
+⚔️ Demoman at LEFT door!
+⚔️ DEMOMAN AT LEFT DOOR! Battle cry incoming!
+🔥 Pyro entering transition (despawned for 10s), will become INTEL mode
+SCOUT driven away! Will respawn in 8000ms
+🛡️ Demoman deterred! Head teleporting...
+🗡️ Demoman head teleported to RIGHT_HALL
+🕵️ [1:50AM] Spy update running - state=DISGUISE, stateTimer=50.0s, teleportTimer=1.9s, at SPIRAL
+Sniper navigating toward lure: GRATE -> SEWER
+Lure consumed - enemies will return to patrolling
+Heavy rebuilding path from SEWER: SEWER -> GRATE -> SPIRAL -> RIGHT_HALL -> INTEL
+SCOUT respawned at COURTYARD
+🕵️ [1:56AM] Spy teleported to SEWER (disguised as SCOUT)
+🔥 Pyro switched to INTEL mode
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at BRIDGE. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to BRIDGE
+toggleLure called. isTeleported=true, currentRoom=BRIDGE
+Lure placed at BRIDGE
+🕵️ [2:00AM] Spy switched to SAPPING state
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked BRIDGE.
+💉 Medic chose new target: SOLDIER
+Sniper teleported to RIGHT_HALL
+Lure activated from camera view at BRIDGE
+Heavy heard lure at BRIDGE! Moving toward it from GRATE
+Heavy lured toward BRIDGE!
+Sniper lured toward BRIDGE!
+Heavy moving to adjacent lure: GRATE -> BRIDGE
+SOLDIER reached doorway at RIGHT_HALL!
+Soldier entering siege mode - firing rockets!
+SOLDIER driven away! Will respawn in 8000ms
+👁️ Demoman's RIGHT eye lit up! Charging soon...
+🕵️ [2:10AM] Spy update running - state=SAPPING, stateTimer=10.0s, teleportTimer=0.0s, at SEWER
+Sniper navigating toward lure: RIGHT_HALL -> SPIRAL
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+🔥 PYRO LIT A MATCH IN INTEL! Player must escape!
+🔥 PYRO MATCH LIT! ESCAPE NOW!
+🗡️ Demoman charge started toward RIGHT!
+🗡️ DEMOMAN CHARGE! Heading RIGHT!
+⚡ Demoman at COURTYARD
+⚡ Demoman at STAIRCASE
+Heavy reached lure at BRIDGE
+⚡ Demoman at RIGHT_HALL
+⚔️ Demoman at RIGHT door!
+⚔️ DEMOMAN AT RIGHT DOOR! Battle cry incoming!
+Arrived at SEWER. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🕵️ [2:12AM] SPY PLACED SAPPER ON SENTRY!
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to SEWER
+💉 Übered Demoman leaving - player teleported away
+🛡️ Demoman deterred! Head teleporting...
+🗡️ Demoman head teleported to BRIDGE
+🕵️ [2:12AM] Sapper removed from sentry!
+🕵️ Sapper destroyed with sentry
+💉 Übered DEMOMAN's attack resolved. Waiting for next hour...
+💉 DEMOMAN Über attack resolved - player escaped!
+🔥 Player escaped Pyro! Transitioning to ROOM mode.
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked SEWER.
+SOLDIER respawned at GRATE
+SCOUT reached doorway at LEFT_HALL!
+Sniper navigating toward lure: SPIRAL -> GRATE
+Heavy reached lure at BRIDGE
+SCOUT driven away! Will respawn in 8000ms
+🕵️ [2:20AM] Spy update running - state=SAPPING, stateTimer=20.0s, teleportTimer=0.0s, at SEWER
+🔥 Pyro teleported to RIGHT_HALL
+🔥 Pyro switched to ROOM mode at RIGHT_HALL
+Lure consumed - enemies will return to patrolling
+Heavy crossed paths! New route: BRIDGE -> COURTYARD -> STAIRCASE -> LEFT_HALL -> INTEL
+SCOUT respawned at COURTYARD
+🕵️ [2:30AM] Spy update running - state=SAPPING, stateTimer=30.0s, teleportTimer=0.0s, at SEWER
+🔥 Pyro driven away by wrangler light!
+🔥 Pyro teleported to BRIDGE (fled from light)
+Sniper teleported to STAIRCASE
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 Pyro teleported to STAIRCASE
+🕵️ [2:40AM] Spy update running - state=SAPPING, stateTimer=40.0s, teleportTimer=0.0s, at SEWER
+SOLDIER reached doorway at RIGHT_HALL!
+Soldier entering siege mode - firing rockets!
+SOLDIER driven away! Will respawn in 8000ms
+🔥 Pyro teleported to RIGHT_HALL
+SCOUT reached doorway at LEFT_HALL!
+Sniper teleported to SEWER
+👁️ Demoman's RIGHT eye lit up! Charging soon...
+🔥 Pyro vanished from hallway (Demoman charging)
+🔥 Pyro teleported to SPIRAL (fled from light)
+SCOUT driven away! Will respawn in 8000ms
+🗡️ Demoman charge started toward RIGHT!
+🗡️ DEMOMAN CHARGE! Heading RIGHT!
+⚡ Demoman at COURTYARD
+⚡ Demoman at STAIRCASE
+⚡ Demoman at RIGHT_HALL
+⚔️ Demoman at RIGHT door!
+⚔️ DEMOMAN AT RIGHT DOOR! Battle cry incoming!
+SOLDIER respawned at GRATE
+🛡️ Demoman deterred! Head teleporting...
+🗡️ Demoman head teleported to COURTYARD
+🕵️ [2:50AM] Spy update running - state=SAPPING, stateTimer=50.0s, teleportTimer=0.0s, at SEWER
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at BRIDGE. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🕵️ [2:53AM] SPY PLACED SAPPER ON SENTRY!
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to BRIDGE
+toggleLure called. isTeleported=true, currentRoom=BRIDGE
+Lure placed at BRIDGE
+toggleLure called. isTeleported=true, currentRoom=BRIDGE
+Lure activated at BRIDGE
+Heavy heard lure at BRIDGE! Moving toward it from STAIRCASE
+Heavy lured toward BRIDGE!
+Heavy navigating toward lure: STAIRCASE -> COURTYARD
+Sniper lured toward BRIDGE!
+Sniper navigating toward lure: SEWER -> GRATE
+SCOUT respawned at COURTYARD
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked BRIDGE.
+🕵️ [2:54AM] Sapper removed from sentry!
+🔥 BURNING SOUND at SPIRAL - Pyro is here (invisible)
+🔥 Pyro teleported to BRIDGE
+Heavy moving to adjacent lure: COURTYARD -> BRIDGE
+🔥 Pyro entering transition (despawned for 10s), will become INTEL mode
+Sniper navigating toward lure: GRATE -> BRIDGE
+🕵️ [3:00AM] Spy switched to DISGUISE state as DEMOMAN_HEAD at COURTYARD
+Heavy reached lure at BRIDGE
+Sniper reached lure at BRIDGE
+🔥 Pyro switched to INTEL mode
+🕵️ [3:08AM] Spy teleported to SPIRAL (disguised as DEMOMAN_HEAD)
+Lure consumed - enemies will return to patrolling
+Heavy crossed paths! New route: BRIDGE -> COURTYARD -> STAIRCASE -> LEFT_HALL -> INTEL
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+🕵️ [3:10AM] Spy update running - state=DISGUISE, stateTimer=10.0s, teleportTimer=2.0s, at SPIRAL
+Arrived at SEWER. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to SEWER
+toggleLure called. isTeleported=true, currentRoom=SEWER
+Lure placed at SEWER
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked SEWER.
+💉 Medic chose new target: SOLDIER
+SCOUT reached doorway at LEFT_HALL!
+🕵️ [3:16AM] Spy teleported to GRATE (disguised as DEMOMAN_HEAD)
+SOLDIER reached doorway at RIGHT_HALL!
+Soldier entering siege mode - firing rockets!
+SCOUT driven away! Will respawn in 8000ms
+🔥 PYRO LIT A MATCH IN INTEL! Player must escape!
+🔥 PYRO MATCH LIT! ESCAPE NOW!
+🕵️ [3:20AM] Spy update running - state=DISGUISE, stateTimer=20.0s, teleportTimer=4.0s, at GRATE
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at LEFT_HALL. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to LEFT_HALL
+💉 Übered Soldier leaving - player teleported away
+SOLDIER driven away! Will respawn in 8000ms
+💉 Übered SOLDIER's attack resolved. Waiting for next hour...
+💉 SOLDIER Über attack resolved - player escaped!
+🔥 Player escaped Pyro! Transitioning to ROOM mode.
+Enemy left area, resetting approach detection
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked LEFT_HALL.
+SCOUT respawned at COURTYARD
+🕵️ [3:24AM] Spy teleported to SPIRAL (disguised as DEMOMAN_HEAD)
+Lure activated from camera view at SEWER
+Heavy heard lure at SEWER! Moving toward it from COURTYARD
+Heavy lured toward SEWER!
+Heavy navigating toward lure: COURTYARD -> GRATE
+Sniper lured toward SEWER!
+Sniper navigating toward lure: BRIDGE -> GRATE
+SOLDIER respawned at GRATE
+👁️ Demoman's LEFT eye lit up! Charging soon...
+🔥 Pyro teleported to RIGHT_HALL
+🔥 Pyro switched to ROOM mode at RIGHT_HALL
+🕵️ [3:30AM] Spy update running - state=DISGUISE, stateTimer=30.0s, teleportTimer=6.0s, at SPIRAL
+🗡️ Demoman charge started toward LEFT!
+🗡️ DEMOMAN CHARGE! Heading LEFT!
+⚡ Demoman at COURTYARD
+⚡ Demoman at STAIRCASE
+⚡ Demoman at LEFT_HALL
+⚔️ Demoman at LEFT door!
+⚔️ DEMOMAN AT LEFT DOOR! Battle cry incoming!
+Heavy moving to adjacent lure: GRATE -> SEWER
+🛡️ Demoman deterred! Head teleporting...
+🗡️ Demoman head teleported to GRATE
+🕵️ [3:32AM] Spy teleported to GRATE (disguised as DEMOMAN_HEAD)
+Sniper navigating toward lure: GRATE -> SEWER
+Heavy reached lure at SEWER
+Sniper reached lure at SEWER
+🕵️ [3:40AM] Spy update running - state=DISGUISE, stateTimer=40.0s, teleportTimer=8.0s, at GRATE
+🕵️ [3:40AM] Spy teleported to BRIDGE (disguised as DEMOMAN_HEAD)
+Lure consumed - enemies will return to patrolling
+Heavy rebuilding path from SEWER: SEWER -> GRATE -> SPIRAL -> RIGHT_HALL -> INTEL
+SCOUT reached doorway at LEFT_HALL!
+SCOUT driven away! Will respawn in 8000ms
+🕵️ [3:48AM] Spy teleported to GRATE (disguised as DEMOMAN_HEAD)
+🔥 BURNING SOUND at RIGHT_HALL - Pyro is here (invisible)
+🕵️ [3:50AM] Spy update running - state=DISGUISE, stateTimer=50.0s, teleportTimer=1.9s, at GRATE
+SCOUT respawned at COURTYARD
+🔥 Pyro driven away by wrangler light!
+🔥 Pyro teleported to STAIRCASE (fled from light)
+SOLDIER reached doorway at RIGHT_HALL!
+Soldier entering siege mode - firing rockets!
+SOLDIER driven away! Will respawn in 8000ms
+Sniper teleported to SPIRAL
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at BRIDGE. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to BRIDGE
+toggleLure called. isTeleported=true, currentRoom=BRIDGE
+Lure placed at BRIDGE
+🕵️ [3:56AM] Spy teleported to BRIDGE (disguised as DEMOMAN_HEAD)
+🔥 Pyro teleported to BRIDGE
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked BRIDGE.
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🕵️ [4:00AM] Spy switched to SAPPING state
+SOLDIER respawned at GRATE
+🔥 Pyro teleported to SPIRAL
+👁️ Demoman's LEFT eye lit up! Charging soon...
+Sniper teleported to LEFT_HALL
+🗡️ Demoman charge started toward LEFT!
+🗡️ DEMOMAN CHARGE! Heading LEFT!
+⚡ Demoman at COURTYARD
+🔥 Pyro entering transition (despawned for 10s), will become INTEL mode
+⚡ Demoman at STAIRCASE
+⚡ Demoman at LEFT_HALL
+⚔️ Demoman at LEFT door!
+⚔️ DEMOMAN AT LEFT DOOR! Battle cry incoming!
+🛡️ Demoman deterred! Head teleporting...
+🗡️ Demoman head teleported to SEWER
+Sniper hit! 1 shot(s) remaining
+Sniper staggers but holds position! Shoot again!
+Lure activated from camera view at BRIDGE
+Heavy heard lure at BRIDGE! Moving toward it from SPIRAL
+Heavy lured toward BRIDGE!
+Sniper lured toward BRIDGE!
+🕵️ [4:10AM] Spy update running - state=SAPPING, stateTimer=10.0s, teleportTimer=0.0s, at BRIDGE
+Heavy navigating toward lure: SPIRAL -> GRATE
+SCOUT reached doorway at LEFT_HALL!
+Sniper navigating toward lure: LEFT_HALL -> STAIRCASE
+SCOUT driven away! Will respawn in 8000ms
+🔥 Pyro switched to INTEL mode
+Heavy moving to adjacent lure: GRATE -> BRIDGE
+Sniper navigating toward lure: STAIRCASE -> COURTYARD
+SCOUT respawned at COURTYARD
+🕵️ [4:20AM] Spy update running - state=SAPPING, stateTimer=20.0s, teleportTimer=0.0s, at BRIDGE
+💉 Medic chose new target: SOLDIER
+Heavy reached lure at BRIDGE
+Lure consumed - enemies will return to patrolling
+Heavy crossed paths! New route: BRIDGE -> COURTYARD -> STAIRCASE -> LEFT_HALL -> INTEL
+SOLDIER reached doorway at RIGHT_HALL!
+Soldier entering siege mode - firing rockets!
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at SEWER. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🕵️ [4:27AM] SPY PLACED SAPPER ON SENTRY!
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to SEWER
+💉 Übered Soldier leaving - player teleported away
+SOLDIER driven away! Will respawn in 8000ms
+🕵️ [4:27AM] Sapper removed from sentry!
+🕵️ Sapper destroyed with sentry
+💉 Übered SOLDIER's attack resolved. Waiting for next hour...
+💉 SOLDIER Über attack resolved - player escaped!
+toggleLure called. isTeleported=true, currentRoom=SEWER
+Lure placed at SEWER
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked SEWER.
+🕵️ [4:30AM] Spy update running - state=SAPPING, stateTimer=30.0s, teleportTimer=0.0s, at BRIDGE
+SOLDIER respawned at GRATE
+Sniper teleported to GRATE
+🕵️ [4:40AM] Spy update running - state=SAPPING, stateTimer=40.0s, teleportTimer=0.0s, at BRIDGE
+SCOUT reached doorway at LEFT_HALL!
+SCOUT driven away! Will respawn in 8000ms
+Lure activated from camera view at SEWER
+Heavy heard lure at SEWER! Moving toward it from COURTYARD
+Heavy lured toward SEWER!
+Heavy navigating toward lure: COURTYARD -> GRATE
+Sniper lured toward SEWER!
+Sniper navigating toward lure: GRATE -> SEWER
+SCOUT respawned at COURTYARD
+🕵️ [4:50AM] Spy update running - state=SAPPING, stateTimer=50.0s, teleportTimer=0.0s, at BRIDGE
+Heavy moving to adjacent lure: GRATE -> SEWER
+Sniper reached lure at SEWER
+🔥 Pyro entering transition (despawned for 10s), will become ROOM mode
+Heavy reached lure at SEWER
+👁️ Demoman's RIGHT eye lit up! Charging soon...
+SOLDIER reached doorway at RIGHT_HALL!
+Soldier entering siege mode - firing rockets!
+🗡️ Demoman charge started toward RIGHT!
+🗡️ DEMOMAN CHARGE! Heading RIGHT!
+🕵️ [5:00AM] Spy switched to DISGUISE state as HEAVY at GRATE
+⚡ Demoman at COURTYARD
+⚡ Demoman at STAIRCASE
+⚡ Demoman at RIGHT_HALL
+⚔️ Demoman at RIGHT door!
+⚔️ DEMOMAN AT RIGHT DOOR! Battle cry incoming!
+Lure consumed - enemies will return to patrolling
+Heavy rebuilding path from SEWER: SEWER -> GRATE -> SPIRAL -> RIGHT_HALL -> INTEL
+SOLDIER driven away! Will respawn in 8000ms
+🛡️ Demoman deterred! Head teleporting...
+🗡️ Demoman head teleported to RIGHT_HALL
+🔥 Pyro teleported to BRIDGE
+🔥 Pyro switched to ROOM mode at BRIDGE
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 Pyro teleported to STAIRCASE
+SOLDIER respawned at GRATE
+🕵️ [5:08AM] Spy teleported to BRIDGE (disguised as HEAVY)
+SCOUT reached doorway at LEFT_HALL!
+🕵️ [5:10AM] Spy update running - state=DISGUISE, stateTimer=10.0s, teleportTimer=2.0s, at BRIDGE
+SCOUT driven away! Will respawn in 8000ms
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Teleport cancelled!
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+🔥 Pyro teleported to SPIRAL
+Sniper teleported to LEFT_HALL
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at SEWER. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to SEWER
+toggleLure called. isTeleported=true, currentRoom=SEWER
+Lure placed at SEWER
+toggleLure called. isTeleported=true, currentRoom=SEWER
+Lure activated at SEWER
+Heavy heard lure at SEWER! Moving toward it from GRATE
+Heavy lured toward SEWER!
+Sniper lured toward SEWER!
+Heavy moving to adjacent lure: GRATE -> SEWER
+🕵️ [5:16AM] Spy teleported to STAIRCASE (disguised as HEAVY)
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked SEWER.
+SCOUT respawned at COURTYARD
+🔥 Pyro teleported to RIGHT_HALL
+🔥 BURNING SOUND at RIGHT_HALL - Pyro is here (invisible)
+Sniper navigating toward lure: LEFT_HALL -> STAIRCASE
+🕵️ [5:20AM] Spy update running - state=DISGUISE, stateTimer=20.0s, teleportTimer=4.0s, at STAIRCASE
+Heavy reached lure at SEWER
+🔥 Pyro driven away by wrangler light!
+🔥 Pyro teleported to SEWER (fled from light)
+🕵️ [5:24AM] Spy teleported to GRATE (disguised as HEAVY)
+Sniper navigating toward lure: STAIRCASE -> COURTYARD
+Heavy reached lure at SEWER
+🔥 Pyro teleported to BRIDGE
+💉 Medic chose new target: SOLDIER
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🕵️ [5:30AM] Spy update running - state=DISGUISE, stateTimer=30.0s, teleportTimer=6.0s, at GRATE
+Lure consumed - enemies will return to patrolling
+Heavy rebuilding path from SEWER: SEWER -> GRATE -> SPIRAL -> RIGHT_HALL -> INTEL
+🕵️ [5:32AM] Spy teleported to BRIDGE (disguised as HEAVY)
+🔥 BURNING SOUND at BRIDGE - Pyro is here (invisible)
+🔥 Pyro teleported to RIGHT_HALL
+🔥 BURNING SOUND at RIGHT_HALL - Pyro is here (invisible)
+🔥 BURNING SOUND at RIGHT_HALL - Pyro is here (invisible)
+SOLDIER reached doorway at RIGHT_HALL!
+Soldier entering siege mode - firing rockets!
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at LEFT_HALL. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to LEFT_HALL
+💉 Übered Soldier leaving - player teleported away
+SOLDIER driven away! Will respawn in 8000ms
+💉 Übered SOLDIER's attack resolved. Waiting for next hour...
+💉 SOLDIER Über attack resolved - player escaped!
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked LEFT_HALL.
+SCOUT reached doorway at LEFT_HALL!
+🔥 Pyro entering transition (despawned for 10s), will become INTEL mode
+🕵️ [5:40AM] Spy update running - state=DISGUISE, stateTimer=40.0s, teleportTimer=8.0s, at BRIDGE
+🕵️ [5:40AM] Spy teleported to STAIRCASE (disguised as HEAVY)
+👁️ Demoman's RIGHT eye lit up! Charging soon...
+🔥 Pyro vanished from hallway (Demoman charging)
+🔥 Pyro teleported to SEWER (fled from light)
+SCOUT driven away! Will respawn in 8000ms
+🗡️ Demoman charge started toward RIGHT!
+🗡️ DEMOMAN CHARGE! Heading RIGHT!
+⚡ Demoman at COURTYARD
+⚡ Demoman at STAIRCASE
+⚡ Demoman at RIGHT_HALL
+⚔️ Demoman at RIGHT door!
+⚔️ DEMOMAN AT RIGHT DOOR! Battle cry incoming!
+SOLDIER respawned at GRATE
+Sniper teleported to SPIRAL
+🛡️ Demoman deterred! Head teleporting...
+🗡️ Demoman head teleported to GRATE
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at BRIDGE. Enemies: Scout=false, Soldier=false, DemoBody=false, Heavy=false, Sniper=false, Pyro=false
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to BRIDGE
+🔥 Pyro switched to INTEL mode
+toggleLure called. isTeleported=true, currentRoom=BRIDGE
+Lure placed at BRIDGE
+🕵️ [5:48AM] Spy teleported to SEWER (disguised as HEAVY)
+Engineer returned to Intel room
+📋 Pauling (Mode 1) instantly hacked BRIDGE.
+SCOUT respawned at COURTYARD
+Lure activated from camera view at BRIDGE
+Heavy heard lure at BRIDGE! Moving toward it from GRATE
+Heavy lured toward BRIDGE!
+Heavy moving to adjacent lure: GRATE -> BRIDGE
+Sniper lured toward BRIDGE!
+Sniper navigating toward lure: SPIRAL -> GRATE
+🕵️ [5:50AM] Spy update running - state=DISGUISE, stateTimer=50.0s, teleportTimer=1.9s, at SEWER
+🕵️ Spy fake watch bar filled - nothing happens!
+Heavy reached lure at BRIDGE
+🕵️ Spy fake watch bar filled - nothing happens!
+Sniper navigating toward lure: GRATE -> BRIDGE
+🕵️ [5:56AM] Spy teleported to GRATE (disguised as HEAVY)
+Heavy reached lure at BRIDGE
+🎙️ Recording stopped
+VICTORY!

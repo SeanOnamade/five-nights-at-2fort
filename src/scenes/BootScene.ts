@@ -260,7 +260,7 @@ export class BootScene extends Phaser.Scene {
               spy: true,
               pyro: true,
               medic: true,
-              pauling: false,
+              pauling: true,
             }
           });
         } else if (isBadEndingNight6) {

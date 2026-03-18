@@ -708,8 +708,17 @@ export class GameScene extends Phaser.Scene {
         // If empty, Spy will be in sapping-only mode (no camera appearances)
       }
       this.spy = new SpyEnemy(spyDisguises);
-      // Set up Spy sapper callback
       this.spy.setSapDamageCallback((damage) => this.onSpySapDamage(damage));
+      this.spy.setDisguiseTargetLocator((disguise) => {
+        switch (disguise) {
+          case 'SCOUT': return this.scout.currentNode;
+          case 'SOLDIER': return this.soldier.currentNode;
+          case 'HEAVY': return this.isHeavyEnabled() ? this.heavy.currentNode : null;
+          case 'SNIPER': return this.isSniperEnabled() ? this.sniper.currentNode : null;
+          case 'DEMOMAN_HEAD': return this.isDemomanEnabled() ? this.demoman.currentNode : null;
+          default: return null;
+        }
+      });
     }
     
     // Set up Heavy callbacks for Night 3+ or custom night
@@ -11611,19 +11620,18 @@ export class GameScene extends Phaser.Scene {
     // Update Pauling (Custom Night only) - outside updateHeavyAndSniper so it runs even alone
     if (this.isPaulingEnabled() && this.pauling && this.pauling.isActive()) {
       // Tick Mode 2 no-teleport timer (only when player is in Intel, not teleported)
-      if (!this.isTeleported && !this.isTeleportAnimating) {
+      // Nightmare Mode: Mode 1 only — skip the fallback hack bar entirely
+      if (!this.isNightmareMode && !this.isTeleported && !this.isTeleportAnimating) {
         this.paulingNoTeleportTimer += delta;
         if (
           this.paulingNoTeleportTimer >= GAME_CONSTANTS.PAULING_NO_TELEPORT_THRESHOLD &&
           this.pauling.getState() === 'WAITING'
         ) {
-          // Trigger Mode 2 fallback hack — exclude already-hacked and camera-destroyed rooms
           this.paulingNoTeleportTimer = 0;
           const excludedNodes = Array.from(this.hackedRooms.entries())
             .filter(([node, s]) => s.hacked || this.isNodeCameraDestroyed(node))
             .map(([node]) => node);
           this.pauling.triggerFallbackHack(excludedNodes);
-          // Only play sound if a target was actually selected (not all rooms exhausted)
           if (this.pauling.getState() === 'TARGETING') {
             this.playPaulingTargetingSound();
           }

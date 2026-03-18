@@ -26,6 +26,9 @@ export class SpyEnemy {
   private _isSapping: boolean = false;
   private sapDamageCallback: ((damage: number) => void) | null = null;
   
+  // Callback to get the current node of a given disguise target
+  private getDisguiseTargetNode: ((disguise: SpyDisguise) => NodeId | null) | null = null;
+  
   // Valid rooms for Spy to appear (excludes Intel and hallways)
   private static VALID_ROOMS: NodeId[] = ['BRIDGE', 'COURTYARD', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL'];
   
@@ -63,6 +66,14 @@ export class SpyEnemy {
    */
   public setSapDamageCallback(callback: (damage: number) => void): void {
     this.sapDamageCallback = callback;
+  }
+  
+  /**
+   * Set callback that returns the current node of the enemy Spy is disguised as.
+   * Used to ensure Spy never shares a camera with his disguise target.
+   */
+  public setDisguiseTargetLocator(locator: (disguise: SpyDisguise) => NodeId | null): void {
+    this.getDisguiseTargetNode = locator;
   }
   
   // Track game time for logging
@@ -110,6 +121,15 @@ export class SpyEnemy {
         this.teleportTimer = 0;
         this.teleportToRandomRoom();
         console.log(`🕵️ [${this.getTimeString()}] Spy teleported to ${this.currentNode} (disguised as ${this.currentDisguise})`);
+      }
+      
+      // Evict Spy if the disguise target wandered into his room
+      if (this.getDisguiseTargetNode) {
+        const targetNode = this.getDisguiseTargetNode(this.currentDisguise);
+        if (targetNode && targetNode === this.currentNode) {
+          this.teleportToRandomRoom();
+          console.log(`🕵️ [${this.getTimeString()}] Spy evicted from ${targetNode} - disguise target moved in! Now at ${this.currentNode}`);
+        }
       }
       
       // Update fake watch timer if being watched and disguised as Heavy/Sniper
@@ -182,10 +202,17 @@ export class SpyEnemy {
   }
   
   /**
-   * Teleport to a random room
+   * Teleport to a random room, avoiding the disguise target's current location
    */
   private teleportToRandomRoom(): void {
-    const rooms = SpyEnemy.VALID_ROOMS.filter(r => r !== this.currentNode);
+    const targetNode = this.getDisguiseTargetNode ? this.getDisguiseTargetNode(this.currentDisguise) : null;
+    let rooms = SpyEnemy.VALID_ROOMS.filter(r => r !== this.currentNode);
+    if (targetNode) {
+      const filtered = rooms.filter(r => r !== targetNode);
+      if (filtered.length > 0) {
+        rooms = filtered;
+      }
+    }
     this.currentNode = rooms[Math.floor(Math.random() * rooms.length)];
   }
   
