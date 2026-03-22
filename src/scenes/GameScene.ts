@@ -495,13 +495,12 @@ export class GameScene extends Phaser.Scene {
   
   /**
    * Get Demoman speed multiplier for endless mode
-   * Starts at 1.0, increases by 0.2 per hour after 6 AM (1.2x, 1.4x, 1.6x, etc.)
+   * Starts at 1.0, increases by 0.1 per hour after 6 AM (1.1x, 1.2x, 1.3x, etc.)
    */
   private getDemomanSpeedMultiplier(): number {
     if ((!this.isBadEndingNight6 && !this.isNightmareMode) || !this.hasReached6AM) return 1.0;
-    // Nightmare Mode caps Demoman at 2 hours (1.4x) — one level below other enemies
     const hours = this.isNightmareMode ? Math.min(this.hoursAfter6AM, 2) : this.hoursAfter6AM;
-    return 1.0 + (hours * 0.2);
+    return 1.0 + (hours * 0.1);
   }
   
   /**
@@ -2952,10 +2951,7 @@ export class GameScene extends Phaser.Scene {
       // NOTE: Pyro stays frozen until AFTER this check completes
       const scoutThere = this.scout.isAtNode(node);
       const soldierThere = this.soldier.isAtNode(node);
-      // Demoman: only check if his BODY is there (when charging), not just his head
-      const demomanBodyThere = this.isDemomanEnabled() && 
-                                this.demoman.isCharging() && 
-                                this.demoman.currentNode === node;
+      // Demoman body doesn't kill on teleport - his threat is at the doors only
       const heavyThere = this.isHeavyEnabled() && this.heavy.isAtNode(node);
       const sniperThere = this.isSniperEnabled() && this.sniper.isAtNode(node);
       // Pyro: in Room mode, teleporting to his room = death (he's invisible but deadly)
@@ -2963,7 +2959,7 @@ export class GameScene extends Phaser.Scene {
                         !this.pyro.isForceDespawned() && 
                         this.pyro.isAtNode(node);
       
-      console.log(`Arrived at ${node}. Enemies: Scout=${scoutThere}, Soldier=${soldierThere}, DemoBody=${demomanBodyThere}, Heavy=${heavyThere}, Sniper=${sniperThere}, Pyro=${pyroThere}`);
+      console.log(`Arrived at ${node}. Enemies: Scout=${scoutThere}, Soldier=${soldierThere}, Heavy=${heavyThere}, Sniper=${sniperThere}, Pyro=${pyroThere}`);
       
       // Helper to unfreeze enemies before returning
       const unfreezeAndReturn = () => {
@@ -2990,11 +2986,6 @@ export class GameScene extends Phaser.Scene {
       if (soldierThere) {
         unfreezeAndReturn();
         this.gameOver('Soldier got you!');
-        return;
-      }
-      if (demomanBodyThere) {
-        unfreezeAndReturn();
-        this.gameOver('Demoman charged you!');
         return;
       }
       if (heavyThere) {

@@ -309,7 +309,7 @@ export const GAME_CONSTANTS = {
         PAULING_WARN_DURATION_MIN: 5000,        // ms warning (X shown, no fill) before Mode 2 hack starts (5 sec)
         PAULING_WARN_DURATION_MAX: 10000,       // ms warning (X shown, no fill) before Mode 2 hack starts (10 sec)
         PAULING_HACK_DURATION: 8000,            // ms to complete a hack bar fill (8 sec)
-        PAULING_REPAIR_DURATION: 6000,          // ms to repair via teleport button (6 sec)
+        PAULING_REPAIR_DURATION: 5000,          // ms to repair via teleport button (5 sec)
         PAULING_SCARE_COOLDOWN: 5000,           // ms before new Mode 2 target after teleport scare (5 sec)
         PAULING_NO_TELEPORT_THRESHOLD: 30000,   // ms without teleporting before Mode 2 fallback triggers
 } as const;
