@@ -500,7 +500,7 @@ export class GameScene extends Phaser.Scene {
   private getDemomanSpeedMultiplier(): number {
     if ((!this.isBadEndingNight6 && !this.isNightmareMode) || !this.hasReached6AM) return 1.0;
     const hours = this.isNightmareMode ? Math.min(this.hoursAfter6AM, 2) : this.hoursAfter6AM;
-    return 1.0 + (hours * 0.15);
+    return 1.0 + (hours * 0.1);
   }
   
   /**
