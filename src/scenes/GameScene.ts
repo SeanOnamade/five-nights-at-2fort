@@ -500,7 +500,7 @@ export class GameScene extends Phaser.Scene {
   private getDemomanSpeedMultiplier(): number {
     if ((!this.isBadEndingNight6 && !this.isNightmareMode) || !this.hasReached6AM) return 1.0;
     const hours = this.isNightmareMode ? Math.min(this.hoursAfter6AM, 2) : this.hoursAfter6AM;
-    return 1.0 + (hours * 0.1);
+    return 1.0 + (hours * 0.15);
   }
   
   /**
@@ -3604,7 +3604,7 @@ export class GameScene extends Phaser.Scene {
       } else {
         // Lure is placed elsewhere - show info (can't place another)
         const lureRoom = this.activeLure.node.replace('_', ' ');
-        btnText.setText(`📍 LURE @ ${lureRoom}`);
+        btnText.setText(`LURE @ ${lureRoom}`);
         btnBg.setFillStyle(0x222222);
         btnBg.setStrokeStyle(2, 0x555555);
         btnText.setColor('#888888');
@@ -12380,8 +12380,9 @@ export class GameScene extends Phaser.Scene {
     
     // Ghost is active in:
     // 1. Endless Night 6 (bad ending) - always when not Übering
-    // 2. Custom Night - only when Medic has NO valid Über targets (ghost-only mode)
-    const ghostModeActive = this.isBadEndingNight6 || (this.isCustomNightMode && !hasUberTargets);
+    // 2. Nightmare Mode - always when not Übering
+    // 3. Custom Night - only when Medic has NO valid Über targets (ghost-only mode)
+    const ghostModeActive = this.isBadEndingNight6 || this.isNightmareMode || (this.isCustomNightMode && !hasUberTargets);
     
     if (!ghostModeActive) {
       this.medicGhostVisual?.setVisible(false);
