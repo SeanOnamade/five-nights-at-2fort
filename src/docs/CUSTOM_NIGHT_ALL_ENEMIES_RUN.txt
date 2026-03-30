@@ -1,0 +1,301 @@
+Custom Night Run - All 10 Enemies (Victory on 3rd Attempt)
+============================================================
+Date: March 2026
+Config: Night 7, Custom Night
+Enemies: Scout, Soldier, Demoman, Heavy, Sniper, Spy, Pyro, Medic, Administrator, Pauling
+Result: 2 Game Overs (Demoman), then VICTORY
+
+=== ATTEMPT 1 (Game Over at 3:40 AM — Demoman LEFT charge) ===
+
+Pauling blocks: 2 (both RIGHT, both retreated to ENTRY)
+Administrator: Mode 1 hacked BRIDGE, SEWER, BRIDGE. Mode 2 targeted SPIRAL (began hacking, succeeded).
+Medic Über targets: SOLDIER (escaped), SCOUT (escaped)
+Notable: Heavy consistently lured to BRIDGE/SEWER rotation.
+Spy switched DISGUISE→SAPPING→DISGUISE cycle normally.
+Death: Demoman LEFT charge at 3:40 AM — player failed to shoot left door in time.
+
+Key log excerpt:
+📋 Pauling blocked at VENT_RIGHT_OPENING! Retreating to ENTRY...
+📋 Pauling blocked at VENT_RIGHT_OPENING! Retreating to ENTRY...
+📋 Administrator (Mode 2) targeting SPIRAL — hack begins in 7.0s
+📋 Administrator began hacking SPIRAL!
+📋 Administrator hacked SPIRAL! Teleporter offline.
+GAME OVER: Demoman charged from LEFT!
+
+=== ATTEMPT 2 (Game Over at 2:16 AM — Demoman LEFT charge) ===
+
+Pauling blocks: 1 (LEFT, retreated to ENTRY)
+Administrator: Mode 1 hacked SEWER, RIGHT_HALL, BRIDGE. Mode 2 not triggered.
+Medic Über targets: SCOUT (escaped twice)
+Spy disguised as HEAVY, then SCOUT, then DEMOMAN_HEAD.
+Death: Demoman LEFT charge at 2:16 AM — player failed to shoot left door.
+Notable: Spy was evicted from BRIDGE when Demoman's body charged through.
+
+Key log excerpt:
+📋 Pauling blocked at VENT_LEFT_OPENING! Retreating to ENTRY...
+👁️ Demoman's LEFT eye lit up! Charging soon...
+GAME OVER: Demoman charged from LEFT!
+
+=== ATTEMPT 3 (VICTORY at 6:00 AM) ===
+
+Pauling blocks: 7 total
+  - RIGHT (12:40 AM)
+  - LEFT (12:42 AM)  
+  - RIGHT (1:31 AM)
+  - LEFT (1:32 AM)
+  - RIGHT (2:20 AM)
+  - RIGHT (3:50 AM)
+  - LEFT (5:24 AM)
+  All blocks triggered thud SFX. All retreated to ENTRY.
+
+Administrator activity:
+  Mode 1 hacks: SEWER, RIGHT_HALL, BRIDGE, SEWER, BRIDGE, LEFT_HALL, STAIRCASE, BRIDGE, SEWER, STAIRCASE, BRIDGE, SEWER, RIGHT_HALL, BRIDGE (14 total)
+  Mode 2 attempts: GRATE (interrupted), SPIRAL (interrupted), STAIRCASE (interrupted), COURTYARD (succeeded!)
+  
+Medic Über targets: SCOUT (×4), DEMOMAN (×3)
+  All escaped via teleport. Sentry destroyed each time.
+
+Spy behavior: SAPPING→DISGUISE→SAPPING cycle. Disguised as HEAVY, SCOUT, DEMOMAN_HEAD, SOLDIER.
+  Multiple evictions when real enemy entered same room.
+  Sapper placed 8+ times, removed each time (sentry destroyed on several).
+
+Pyro: ROOM→INTEL cycles. Match lit 4 times, all escaped via teleport.
+  Driven away by wrangler light 6+ times.
+  
+Demoman: Charged LEFT 5 times, RIGHT 4 times. All deterred by wrangler shot.
+
+Heavy: Lured to BRIDGE and SEWER alternately. Never reached Intel.
+
+Sniper: Lured alongside Heavy. No headshots.
+
+=== FULL LOG (Attempt 3 — Victory) ===
+
+Heavy spawning via left path
+🕵️ Spy initialized in SAPPING state, disguised as DEMOMAN_HEAD
+🔥 Pyro teleported to SEWER
+🔥 Pyro initialized in ROOM mode at SEWER
+💉 Medic chose new target: SCOUT
+💉 Medic activated! Available targets: SCOUT, SOLDIER, DEMOMAN
+📋 Administrator activated — watching the base remotely
+📋 Pauling activated — entering the vents silently
+🔥 BURNING SOUND at SEWER - Pyro is here (invisible)
+🔥 Pyro teleported to GRATE
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at SEWER. Enemies: Scout=false, Soldier=false, Heavy=false, Sniper=false, Pyro=false
+🕵️ [12:09AM] SPY PLACED SAPPER ON SENTRY!
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to SEWER
+toggleLure called. isTeleported=true, currentRoom=SEWER
+Lure placed at SEWER
+🕵️ [12:10AM] Spy update running - state=SAPPING
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked SEWER.
+🕵️ [12:10AM] Sapper removed from sentry!
+🔥 Pyro teleported to SPIRAL
+Sniper teleported to SPIRAL
+🕵️ [12:20AM] Spy update running - state=SAPPING
+🔥 Pyro teleported to STAIRCASE
+SCOUT reached doorway at LEFT_HALL!
+🔥 Pyro teleport frozen (player teleporting)
+🎯 Sniper teleport frozen (player teleporting)
+Arrived at RIGHT_HALL. Enemies: Scout=false, Soldier=false, Heavy=false, Sniper=false, Pyro=false
+🕵️ [12:27AM] SPY PLACED SAPPER ON SENTRY!
+🔥 Pyro teleport unfrozen
+🎯 Sniper teleport unfrozen
+Engineer teleported to RIGHT_HALL
+💉 Übered Scout leaving - player teleported away
+SCOUT driven away! Will respawn in 8000ms
+🕵️ [12:27AM] Sapper removed from sentry!
+🕵️ Sapper destroyed with sentry
+💉 Übered SCOUT's attack resolved. Waiting for next hour...
+💉 SCOUT Über attack resolved - player escaped!
+🔥 Pyro teleported to SPIRAL
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked RIGHT_HALL.
+Sniper teleported to STAIRCASE
+SOLDIER reached doorway at RIGHT_HALL!
+Soldier entering siege mode - firing rockets!
+SOLDIER driven away! Will respawn in 8000ms
+🔥 Pyro driven away by wrangler light!
+🔥 Pyro teleported to SPIRAL (fled from light)
+SCOUT respawned at COURTYARD
+SOLDIER respawned at GRATE
+🔥 Pyro teleported to STAIRCASE
+📋 Pauling blocked at VENT_RIGHT_OPENING! Retreating to ENTRY...
+📋 [SFX] Vent thud sound triggered
+👁️ Demoman's LEFT eye lit up! Charging soon...
+🔥 Pyro entering transition (despawned for 10s), will become INTEL mode
+Sniper teleported to RIGHT_HALL
+📋 Pauling retreated to ENTRY, restarting approach
+Lure activated from camera view at SEWER
+Heavy heard lure at SEWER! Moving toward it from STAIRCASE
+Heavy lured toward SEWER!
+Sniper lured toward SEWER!
+🗡️ Demoman charge started toward LEFT!
+🗡️ DEMOMAN CHARGE! Heading LEFT!
+⚡ Demoman at COURTYARD
+⚡ Demoman at STAIRCASE
+⚡ Demoman at LEFT_HALL
+⚔️ Demoman at LEFT door!
+🛡️ Demoman deterred! Head teleporting...
+🔥 Pyro switched to INTEL mode
+🕵️ [1:00AM] Spy switched to DISGUISE state as SCOUT
+📋 Administrator (Mode 2) targeting GRATE — hack begins in 8.5s
+📋 Administrator Mode 2 fallback triggered (no teleport for 30s)
+SCOUT reached doorway at LEFT_HALL!
+Heavy moving to adjacent lure: GRATE -> SEWER
+🕵️ SPY PLACED SAPPER ON SENTRY!
+Arrived at BRIDGE.
+Engineer teleported to BRIDGE
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked BRIDGE.
+🕵️ Sapper removed from sentry!
+SCOUT driven away!
+📋 Administrator began hacking GRATE!
+📋 Administrator's hack on GRATE was interrupted!
+SOLDIER reached doorway at RIGHT_HALL!
+SOLDIER driven away!
+Arrived at SEWER.
+🕵️ SPY PLACED SAPPER ON SENTRY!
+Engineer teleported to SEWER
+toggleLure called. Lure placed + activated at SEWER
+Heavy heard lure at SEWER!
+Sniper lured toward SEWER!
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked SEWER.
+🕵️ Sapper removed from sentry!
+👁️ Demoman's RIGHT eye lit up! Charging soon...
+🔥 PYRO LIT A MATCH IN INTEL! Player must escape!
+💉 Medic chose new target: SCOUT
+🗡️ DEMOMAN CHARGE! Heading RIGHT!
+🛡️ Demoman deterred!
+Arrived at RIGHT_HALL.
+🕵️ SPY PLACED SAPPER ON SENTRY!
+Engineer teleported to RIGHT_HALL
+🔥 Player escaped Pyro! Transitioning to ROOM mode.
+📋 Pauling blocked at VENT_RIGHT_OPENING! Retreating to ENTRY...
+📋 [SFX] Vent thud sound triggered
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked RIGHT_HALL.
+🕵️ Sapper removed from sentry!
+📋 Pauling retreated to ENTRY, restarting approach
+SCOUT reached doorway at LEFT_HALL!
+Arrived at STAIRCASE.
+🕵️ SPY PLACED SAPPER ON SENTRY!
+💉 Übered Scout leaving - player teleported away
+SCOUT driven away!
+🕵️ Sapper destroyed with sentry
+💉 SCOUT Über attack resolved - player escaped!
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked STAIRCASE.
+🔥 Pyro switched to ROOM mode at BRIDGE
+Arrived at BRIDGE.
+🕵️ SPY PLACED SAPPER ON SENTRY!
+toggleLure called. Lure placed + activated at BRIDGE
+Heavy heard lure at BRIDGE!
+Sniper lured toward BRIDGE!
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked BRIDGE.
+🕵️ Sapper removed from sentry!
+SOLDIER driven away!
+🕵️ [2:00AM] Spy switched to DISGUISE state as DEMOMAN_HEAD
+📋 Pauling blocked at VENT_LEFT_OPENING! Retreating to ENTRY...
+📋 [SFX] Vent thud sound triggered
+📋 Pauling retreated to ENTRY, restarting approach
+📋 Administrator (Mode 2) targeting SPIRAL — hack begins in 8.2s
+Arrived at SEWER.
+toggleLure called. Lure placed at SEWER
+💉 Übered Demoman leaving - player teleported away
+🛡️ Demoman deterred!
+💉 DEMOMAN Über attack resolved - player escaped!
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked SEWER.
+📋 Administrator began hacking SPIRAL!
+📋 Administrator's hack on SPIRAL was interrupted!
+📋 Administrator (Mode 2) targeting STAIRCASE — hack begins in 6.5s
+📋 Pauling blocked at VENT_RIGHT_OPENING! Retreating to ENTRY...
+📋 [SFX] Vent thud sound triggered
+📋 Administrator began hacking STAIRCASE!
+📋 Pauling retreated to ENTRY, restarting approach
+📋 Administrator's hack on STAIRCASE was interrupted!
+🗡️ DEMOMAN CHARGE! Heading RIGHT!
+🛡️ Demoman deterred!
+SOLDIER driven away!
+Arrived at SEWER.
+🕵️ SPY PLACED SAPPER ON SENTRY!
+toggleLure called. Lure placed at SEWER
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked SEWER.
+🕵️ Sapper removed from sentry!
+🔥 PYRO LIT A MATCH IN INTEL! Player must escape!
+Arrived at BRIDGE.
+🕵️ SPY PLACED SAPPER ON SENTRY!
+🔥 Player escaped Pyro! Transitioning to ROOM mode.
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked BRIDGE.
+🕵️ Sapper removed from sentry!
+HEAVY reached doorway at RIGHT_HALL!
+Lure activated from camera view at SEWER
+Heavy lured toward SEWER!
+Sniper lured toward SEWER!
+📋 Pauling blocked at VENT_RIGHT_OPENING! Retreating to ENTRY...
+📋 [SFX] Vent thud sound triggered
+📋 Pauling retreated to ENTRY, restarting approach
+Arrived at LEFT_HALL.
+💉 Übered Demoman leaving - player teleported away
+🛡️ Demoman deterred!
+💉 DEMOMAN Über attack resolved - player escaped!
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked LEFT_HALL.
+📋 Administrator (Mode 2) targeting COURTYARD — hack begins in 8.5s
+📋 Pauling blocked at VENT_RIGHT_OPENING! Retreating to ENTRY...
+📋 [SFX] Vent thud sound triggered
+📋 Pauling retreated to ENTRY, restarting approach
+📋 Administrator hacked COURTYARD! Teleporter offline.
+🗡️ DEMOMAN CHARGE! Heading LEFT!
+🛡️ Demoman deterred!
+🔥 PYRO LIT A MATCH IN INTEL! Player must escape!
+💉 Medic chose new target: SCOUT
+Arrived at SEWER.
+🕵️ SPY PLACED SAPPER ON SENTRY!
+🔥 Player escaped Pyro!
+toggleLure called. Lure placed at SEWER
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked SEWER.
+🕵️ Sapper removed from sentry!
+Arrived at STAIRCASE.
+🕵️ SPY PLACED SAPPER ON SENTRY!
+💉 Übered Scout leaving - player teleported away
+🕵️ Sapper destroyed with sentry
+💉 SCOUT Über attack resolved - player escaped!
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked STAIRCASE.
+📋 Pauling blocked at VENT_RIGHT_OPENING! Retreating to ENTRY...
+📋 [SFX] Vent thud sound triggered
+📋 Pauling retreated to ENTRY, restarting approach
+Arrived at BRIDGE.
+🕵️ SPY PLACED SAPPER ON SENTRY!
+toggleLure called. Lure placed + activated at BRIDGE
+Heavy heard lure at BRIDGE!
+Sniper lured toward BRIDGE!
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked BRIDGE.
+🕵️ Sapper removed from sentry!
+📋 Pauling blocked at VENT_LEFT_OPENING! Retreating to ENTRY...
+📋 [SFX] Vent thud sound triggered
+📋 Pauling retreated to ENTRY, restarting approach
+🔥 PYRO LIT A MATCH IN INTEL!
+Arrived at RIGHT_HALL.
+💉 Übered Scout leaving - player teleported away
+🔥 Player escaped Pyro!
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked RIGHT_HALL.
+Arrived at BRIDGE.
+toggleLure called. Lure placed + activated at BRIDGE
+Heavy heard lure at BRIDGE!
+Sniper lured toward BRIDGE!
+Engineer returned to Intel room
+📋 Administrator (Mode 1) instantly hacked BRIDGE.
+VICTORY!

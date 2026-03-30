@@ -291,7 +291,7 @@ Support enemy that makes others invincible via Übercharge. **CUSTOM NIGHT ONLY*
 
 ## Custom Night Enemy
 
-### 📋 MS. PAULING
+### 📋 THE ADMINISTRATOR
 Remote saboteur. Hacks teleporter nodes to cut off Engineer's escape routes. **CUSTOM NIGHT ONLY**
 
 | Parameter | Value |
@@ -303,9 +303,9 @@ Remote saboteur. Hacks teleporter nodes to cut off Engineer's escape routes. **C
 | Scare Cooldown | 5 sec (after teleport scare) |
 
 **LORE:**
-- Pauling was the last person to see Sniper before he turned
-- She's working remotely to cut off Engineer's escape routes before moving in
-- She never enters 2Fort — she won't go anywhere near the infected mercs
+- The Administrator may have orchestrated the infection itself
+- She's working remotely to cut off Engineer's escape routes before he uncovers the truth
+- She never enters 2Fort — she controls everything from behind the scenes
 
 **States:**
 - **IDLE:** Between targets, waiting before picking the next room
@@ -338,7 +338,7 @@ Remote saboteur. Hacks teleporter nodes to cut off Engineer's escape routes. **C
 | Heavy | Hacking BRIDGE or SEWER blocks lure placement near his spawn |
 | Sniper | Hacking STAIRCASE or SPIRAL removes rooms to lure Sniper away from hallways |
 | Pyro | Fewer available rooms = fewer escape destinations during Intel attacks |
-| Medic | Übered enemy approaching + Pauling mid-hack = impossible to handle both at once |
+| Medic | Übered enemy approaching + Administrator mid-hack = impossible to handle both at once |
 
 ---
 
@@ -388,4 +388,4 @@ Remote saboteur. Hacks teleporter nodes to cut off Engineer's escape routes. **C
 
 ---
 
-*Last updated: Ms. Pauling added (Custom Night teleporter hacking)*
+*Last updated: Administrator added (Custom Night teleporter hacking)*

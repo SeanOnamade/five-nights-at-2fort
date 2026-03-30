@@ -69,7 +69,34 @@ export const ROOM_ADJACENCY: Record<NodeId, NodeId[]> = {
 /**
  * Enemy types available in the game
  */
-export type EnemyType = 'SCOUT' | 'SOLDIER' | 'DEMOMAN' | 'HEAVY' | 'SNIPER' | 'SPY' | 'PYRO' | 'MEDIC' | 'PAULING';
+export type EnemyType = 'SCOUT' | 'SOLDIER' | 'DEMOMAN' | 'HEAVY' | 'SNIPER' | 'SPY' | 'PYRO' | 'MEDIC' | 'ADMINISTRATOR' | 'PAULING';
+
+/**
+ * Vent system nodes for Pauling (Custom Night)
+ * U-shaped layout: entry -> mid -> junction -> left/right branches -> openings
+ */
+export type VentNodeId =
+  | 'VENT_ENTRY'
+  | 'VENT_MID'
+  | 'VENT_JUNCTION'
+  | 'VENT_LEFT_UPPER'
+  | 'VENT_LEFT_LOWER'
+  | 'VENT_LEFT_OPENING'
+  | 'VENT_RIGHT_UPPER'
+  | 'VENT_RIGHT_LOWER'
+  | 'VENT_RIGHT_OPENING';
+
+export const VENT_ADJACENCY: Record<VentNodeId, VentNodeId[]> = {
+  'VENT_ENTRY': ['VENT_MID'],
+  'VENT_MID': ['VENT_ENTRY', 'VENT_JUNCTION'],
+  'VENT_JUNCTION': ['VENT_MID', 'VENT_LEFT_UPPER', 'VENT_RIGHT_UPPER'],
+  'VENT_LEFT_UPPER': ['VENT_JUNCTION', 'VENT_LEFT_LOWER'],
+  'VENT_LEFT_LOWER': ['VENT_LEFT_UPPER', 'VENT_LEFT_OPENING'],
+  'VENT_LEFT_OPENING': ['VENT_LEFT_LOWER'],
+  'VENT_RIGHT_UPPER': ['VENT_JUNCTION', 'VENT_RIGHT_LOWER'],
+  'VENT_RIGHT_LOWER': ['VENT_RIGHT_UPPER', 'VENT_RIGHT_OPENING'],
+  'VENT_RIGHT_OPENING': ['VENT_RIGHT_LOWER'],
+};
 
 /**
  * Spy-specific state (Night 5)
@@ -195,7 +222,7 @@ export interface CameraState {
 }
 
 /**
- * Hacked teleporter room state (for Ms. Pauling - Custom Night)
+ * Hacked teleporter room state (for Administrator - Custom Night)
  */
 export interface HackedRoomState {
   hacked: boolean;
@@ -305,12 +332,25 @@ export const GAME_CONSTANTS = {
   // Medic settings - CUSTOM NIGHT ONLY
   MEDIC_HOUR_INTERVAL: 60000,         // Time between Über target selections (60 sec = 1 in-game hour)
 
-        // Pauling settings - CUSTOM NIGHT ONLY
-        PAULING_WARN_DURATION_MIN: 5000,        // ms warning (X shown, no fill) before Mode 2 hack starts (5 sec)
-        PAULING_WARN_DURATION_MAX: 10000,       // ms warning (X shown, no fill) before Mode 2 hack starts (10 sec)
-        PAULING_HACK_DURATION: 8000,            // ms to complete a hack bar fill (8 sec)
-        PAULING_REPAIR_DURATION: 6000,          // ms to repair via teleport button (6 sec)
-        PAULING_SCARE_COOLDOWN: 5000,           // ms before new Mode 2 target after teleport scare (5 sec)
-        PAULING_NO_TELEPORT_THRESHOLD: 30000,   // ms without teleporting before Mode 2 fallback triggers
+  // Administrator settings - CUSTOM NIGHT ONLY
+  ADMINISTRATOR_WARN_DURATION_MIN: 5000,        // ms warning (X shown, no fill) before Mode 2 hack starts (5 sec)
+  ADMINISTRATOR_WARN_DURATION_MAX: 10000,       // ms warning (X shown, no fill) before Mode 2 hack starts (10 sec)
+  ADMINISTRATOR_HACK_DURATION: 8000,            // ms to complete a hack bar fill (8 sec)
+  ADMINISTRATOR_REPAIR_DURATION: 6000,          // ms to repair via teleport button (6 sec)
+  ADMINISTRATOR_SCARE_COOLDOWN: 5000,           // ms before new Mode 2 target after teleport scare (5 sec)
+  ADMINISTRATOR_NO_TELEPORT_THRESHOLD: 30000,   // ms without teleporting before Mode 2 fallback triggers
+
+  // Pauling vent settings - CUSTOM NIGHT ONLY
+  PAULING_MOVE_INTERVAL_MIN: 3000,              // Min wait at a node before moving (3 sec)
+  PAULING_MOVE_INTERVAL_MAX: 8000,              // Max wait at a node before moving (8 sec)
+  PAULING_PRY_TIME: 1500,                       // Time to pry open vent grate before dropping in (1.5 sec)
+  PAULING_REROUTE_SPEED: 800,                   // Time per node when rerouting back to junction (0.8 sec)
+
+  // Thermostat settings (tied to Pauling vent seals)
+  THERMOSTAT_FILL_RATE: 0.0055,                  // Heat per ms while a seal is closed (~5.5/sec, max 100 in ~18.2 sec)
+  THERMOSTAT_DRAIN_RATE: 0.004,                 // Heat drain per ms while both seals open (~4/sec)
+  THERMOSTAT_MAX: 100,                          // Internal max (display shows 50°-110°)
+  THERMOSTAT_DISPLAY_MIN: 50,                   // Display minimum temperature
+  THERMOSTAT_DISPLAY_MAX: 110,                  // Display maximum temperature (Pyro trigger)
 } as const;
 

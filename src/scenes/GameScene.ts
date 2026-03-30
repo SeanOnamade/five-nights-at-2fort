@@ -25,7 +25,8 @@ import { SniperEnemy } from '../entities/SniperEnemy';
 import { SpyEnemy } from '../entities/SpyEnemy';
 import { PyroEnemy } from '../entities/PyroEnemy';
 import { MedicEnemy, UberTarget } from '../entities/MedicEnemy';
-import { PaulingEnemy } from '../entities/PaulingEnemy';
+import { AdministratorEnemy } from '../entities/AdministratorEnemy';
+import { PaulingEnemy, VentSide } from '../entities/PaulingEnemy';
 
 /**
  * GameScene - Main gameplay scene for Night 1
@@ -130,14 +131,47 @@ export class GameScene extends Phaser.Scene {
   private spy!: SpyEnemy;
   private pyro!: PyroEnemy;
   private medic!: MedicEnemy;
+  private administrator!: AdministratorEnemy;
   private pauling!: PaulingEnemy;
 
-  // Hacked teleporter rooms (Ms. Pauling - Custom Night)
+  // Pauling vent system (Custom Night)
+  private ventSealLeft: boolean = false;
+  private ventSealRight: boolean = false;
+  private thermostat: number = 0;
+  private isVentCameraMode: boolean = false;
+
+  // Camera map panel content (nodes/paths/grid hidden when viewing vents; frame stays)
+  private cameraMapContent!: Phaser.GameObjects.Container;
+
+  // Vent camera UI elements
+  private ventUI!: Phaser.GameObjects.Container;
+  private ventNodeGraphics: Map<string, Phaser.GameObjects.Container> = new Map();
+  private ventPaulingIcon!: Phaser.GameObjects.Container;
+  private ventSealLeftBtn!: Phaser.GameObjects.Container;
+  private ventSealRightBtn!: Phaser.GameObjects.Container;
+  private ventSealLeftIndicator!: Phaser.GameObjects.Rectangle;
+  private ventSealRightIndicator!: Phaser.GameObjects.Rectangle;
+  private ventCamsToggleBtn!: Phaser.GameObjects.Container;
+  private ventCamsToggleText!: Phaser.GameObjects.Text;
+  private mapTitleText!: Phaser.GameObjects.Text;
+
+  // Vent-side controls (in right panel when vent view is active)
+  private ventPanelControls!: Phaser.GameObjects.Container;
+  private ventPanelThermoFill!: Phaser.GameObjects.Rectangle;
+  private ventPanelThermoText!: Phaser.GameObjects.Text;
+
+  // Thermostat HUD
+  private thermostatBeepTimer: number = 0;
+  private thermostatContainer!: Phaser.GameObjects.Container;
+  private thermostatFill!: Phaser.GameObjects.Rectangle;
+  private thermostatText!: Phaser.GameObjects.Text;
+
+  // Hacked teleporter rooms (Administrator - Custom Night)
   private hackedRooms: Map<NodeId, HackedRoomState> = new Map();
 
-  // Pauling dual-mode tracking fields
+  // Administrator dual-mode tracking fields
   private lastTeleportedRoom: NodeId | null = null;   // last room player arrived at via teleport
-  private paulingNoTeleportTimer: number = 0;         // counts up; triggers Mode 2 at PAULING_NO_TELEPORT_THRESHOLD
+  private administratorNoTeleportTimer: number = 0;         // counts up; triggers Mode 2 at ADMINISTRATOR_NO_TELEPORT_THRESHOLD
   
   // Night number (determines which enemies are active)
   private nightNumber: number = 1;
@@ -174,6 +208,7 @@ export class GameScene extends Phaser.Scene {
     spy: boolean;
     pyro: boolean;
     medic: boolean;
+    administrator: boolean;
     pauling: boolean;
   } | null = null;
   
@@ -297,21 +332,21 @@ export class GameScene extends Phaser.Scene {
   private cameraWatchWarning!: Phaser.GameObjects.Container;
   private cameraWatchBar!: Phaser.GameObjects.Rectangle;
 
-  // Pauling hack bar (teleporter hacking indicator on camera feed)
-  private paulingHackBarContainer!: Phaser.GameObjects.Container;
-  private paulingHackBarFill!: Phaser.GameObjects.Rectangle;
-  private paulingHackBarBorder!: Phaser.GameObjects.Rectangle;
-  private paulingHackBarCross!: Phaser.GameObjects.Graphics; // diagonal cross shown when bar is empty
+  // Administrator hack bar (teleporter hacking indicator on camera feed)
+  private administratorHackBarContainer!: Phaser.GameObjects.Container;
+  private administratorHackBarFill!: Phaser.GameObjects.Rectangle;
+  private administratorHackBarBorder!: Phaser.GameObjects.Rectangle;
+  private administratorHackBarCross!: Phaser.GameObjects.Graphics; // diagonal cross shown when bar is empty
   // Repair overlay for hacked teleporter rooms
-  private paulingRepairOverlay!: Phaser.GameObjects.Container;
-  private paulingRepairBarFill!: Phaser.GameObjects.Rectangle;
-  private paulingRepairActive: boolean = false;
+  private administratorRepairOverlay!: Phaser.GameObjects.Container;
+  private administratorRepairBarFill!: Phaser.GameObjects.Rectangle;
+  private administratorRepairActive: boolean = false;
   
   // Teleporter UI (Night 3+)
   private teleportButton!: Phaser.GameObjects.Container;
   private teleportButtonBg!: Phaser.GameObjects.Rectangle;
   private teleportButtonText!: Phaser.GameObjects.Text;
-  // Pauling repair bar embedded in teleport button
+  // Administrator repair bar embedded in teleport button
   private teleportRepairBarBg!: Phaser.GameObjects.Rectangle;
   private teleportRepairBarFill!: Phaser.GameObjects.Rectangle;
   private cameraLureButton!: Phaser.GameObjects.Container;  // Play lure from camera view
@@ -421,14 +456,19 @@ export class GameScene extends Phaser.Scene {
     return this.customEnemies ? this.customEnemies.medic : false;
   }
 
+  private isAdministratorEnabled(): boolean {
+    // Administrator is CUSTOM NIGHT ONLY - never appears in regular nights
+    return this.customEnemies ? this.customEnemies.administrator ?? false : false;
+  }
+
   private isPaulingEnabled(): boolean {
-    // Pauling is CUSTOM NIGHT ONLY - never appears in regular nights
+    // Pauling is CUSTOM NIGHT ONLY - vent infiltrator
     return this.customEnemies ? this.customEnemies.pauling ?? false : false;
   }
 
   /** Returns true if the currently selected camera's room has a hacked teleporter */
   private isSelectedCameraHacked(): boolean {
-    if (!this.isPaulingEnabled()) return false;
+    if (!this.isAdministratorEnabled()) return false;
     const cam = CAMERAS[this.selectedCamera];
     if (!cam) return false;
     const state = this.hackedRooms.get(cam.node);
@@ -494,8 +534,9 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
-   * Get Demoman speed multiplier for endless mode
+   * Get Demoman speed multiplier for endless/nightmare mode
    * Starts at 1.0, increases by 0.1 per hour after 6 AM (1.1x, 1.2x, 1.3x, etc.)
+   * Nightmare Mode pre-seeds 2 hours = 1.2x, matching other enemies
    */
   private getDemomanSpeedMultiplier(): number {
     if ((!this.isBadEndingNight6 && !this.isNightmareMode) || !this.hasReached6AM) return 1.0;
@@ -662,7 +703,7 @@ export class GameScene extends Phaser.Scene {
     const displayNightNumber = this.nightNumber === 7 ? 'Custom' : this.nightNumber === 8 ? 'Nightmare' : this.nightNumber;
     const customEnemies = {
       scout: true, soldier: true, demoman: true, 
-      heavy: true, sniper: true, spy: true, pyro: false, medic: false, pauling: false,
+      heavy: true, sniper: true, spy: true, pyro: false, medic: false, administrator: false, pauling: false,
       ...data?.customEnemies,  // Override with passed values (backward compatible)
     };
     
@@ -795,18 +836,31 @@ export class GameScene extends Phaser.Scene {
       this.medic.forceDespawn();
     }
 
-    // Only create Pauling on custom night with pauling enabled
-    this.pauling = new PaulingEnemy();
+    // Only create Administrator on custom night with administrator enabled
+    this.administrator = new AdministratorEnemy();
     // Reset dual-mode tracking fields on each game start
     this.lastTeleportedRoom = null;
-    this.paulingNoTeleportTimer = 0;
-    this.paulingRepairActive = false;
+    this.administratorNoTeleportTimer = 0;
+    this.administratorRepairActive = false;
+    if (isCustomNight && customEnemies.administrator) {
+      this.administrator.activate();
+    } else {
+      this.administrator.forceDespawn();
+    }
+    
+    // Only create Pauling on custom night with pauling enabled
+    this.pauling = new PaulingEnemy();
+    this.ventSealLeft = false;
+    this.ventSealRight = false;
+    this.thermostat = 0;
+    this.thermostatBeepTimer = 0;
+    this.isVentCameraMode = false;
     if (isCustomNight && customEnemies.pauling) {
       this.pauling.activate();
     } else {
       this.pauling.forceDespawn();
     }
-    
+
     // Spy callbacks are now set up when Spy is created above
     
     // Initialize camera states for Night 3+
@@ -815,7 +869,7 @@ export class GameScene extends Phaser.Scene {
       this.cameraStates.set(cam.id, { destroyed: false, destroyedUntil: 0, destroyedBy: null });
     });
 
-    // Initialize hacked room states (Ms. Pauling)
+    // Initialize hacked room states (Administrator)
     this.hackedRooms.clear();
     (['BRIDGE', 'COURTYARD', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 'LEFT_HALL', 'RIGHT_HALL'] as NodeId[]).forEach((node) => {
       this.hackedRooms.set(node, { hacked: false, repairProgress: 0 });
@@ -849,6 +903,8 @@ export class GameScene extends Phaser.Scene {
     this.createDispenser();
     this.createHUD();
     this.createCameraUI();
+    this.createVentUI();
+    this.createThermostatUI();
     this.createEndScreen();
     this.createRecordingUI();
     this.createPauseMenu(); // Uses this.isMobile for layout
@@ -958,7 +1014,7 @@ export class GameScene extends Phaser.Scene {
     this.uberGlowRight.setVisible(false);
     this.uberGlowRight.setDepth(9);
     
-    // Medic ghost apparition (Endless Night 6 only - psychological horror)
+    // Medic ghost apparition (Endless Night 6 and Nightmare Mode - psychological horror)
     // Appears randomly in doorways when Medic isn't ubering, totally harmless
     this.medicGhostVisual = this.add.container(120, height / 2 - 30);
     const medicGhostGraphics = this.add.graphics();
@@ -1938,6 +1994,8 @@ export class GameScene extends Phaser.Scene {
     });
     
     // ========== MAP PANEL (RIGHT SIDE) ==========
+    // Outer frame stays visible even in vent mode; inner content hides
+
     // Metal frame with industrial look - EXPANDED
     const mapOuterFrame = this.add.rectangle(1000, 340, 370, 430, 0x1a1a20);
     mapOuterFrame.setStrokeStyle(3, 0x3a3a44);
@@ -1971,13 +2029,17 @@ export class GameScene extends Phaser.Scene {
     mapTitleBar.setStrokeStyle(1, 0x1a3a55);
     this.cameraUI.add(mapTitleBar);
     
-    const mapTitle = this.add.text(1000, 155, '◈ FACILITY OVERVIEW ◈', {
+    this.mapTitleText = this.add.text(1000, 155, '◈ FACILITY OVERVIEW ◈', {
       fontFamily: 'Courier New, monospace',
       fontSize: '12px',
       color: '#5588cc',
       fontStyle: 'bold',
     }).setOrigin(0.5);
-    this.cameraUI.add(mapTitle);
+    this.cameraUI.add(this.mapTitleText);
+
+    // Inner content container (hidden when viewing vents)
+    this.cameraMapContent = this.add.container(0, 0);
+    this.cameraUI.add(this.cameraMapContent);
     
     // Blueprint grid effect - WIDER
     const gridGraphics = this.add.graphics();
@@ -1988,7 +2050,7 @@ export class GameScene extends Phaser.Scene {
     for (let y = 170; y <= 530; y += 15) {
       gridGraphics.lineBetween(830, y, 1170, y);
     }
-    this.cameraUI.add(gridGraphics);
+    this.cameraMapContent.add(gridGraphics);
     
     // Draw the map layout with paths - ALIGNED LAYOUT
     const mapGraphics = this.add.graphics();
@@ -2052,7 +2114,7 @@ export class GameScene extends Phaser.Scene {
     mapGraphics.lineStyle(2, 0x226644, 0.5); // Greenish for sewer
     mapGraphics.lineBetween(grateX, grateY, sewerX, sewerY);
     
-    this.cameraUI.add(mapGraphics);
+    this.cameraMapContent.add(mapGraphics);
     
     // Create clickable camera nodes on the map - cleaner design
     CAMERAS.forEach((cam, index) => {
@@ -2098,10 +2160,10 @@ export class GameScene extends Phaser.Scene {
       
       const nodeContainer = this.add.container(0, 0, [nodeGlow, nodeBg, camNum, nodeLabel]);
       this.cameraMapNodes.set(cam.node, nodeContainer);
-      this.cameraUI.add(nodeContainer);
+      this.cameraMapContent.add(nodeContainer);
     });
 
-    // Create hacked room X indicators on the map (hidden by default, shown when Pauling hacks a room)
+    // Create hacked room X indicators on the map (hidden by default, shown when Administrator hacks a room)
     CAMERAS.forEach((cam) => {
       const nodeX = mapOffsetX + cam.mapX * mapScale;
       const nodeY = mapOffsetY + cam.mapY * mapScale;
@@ -2112,7 +2174,7 @@ export class GameScene extends Phaser.Scene {
         fontStyle: 'bold',
       }).setOrigin(0.5).setVisible(false).setDepth(106);
       this.hackedRoomMapIndicators.set(cam.node, hackIndicator);
-      this.cameraUI.add(hackIndicator);
+      this.cameraMapContent.add(hackIndicator);
     });
     
     // Intel Room marker (your position) - directly below Left Hall
@@ -2121,19 +2183,19 @@ export class GameScene extends Phaser.Scene {
     
     // Pulsing outer ring
     const intelGlow = this.add.circle(intelMarkerX, intelMarkerY, 26, 0xff6600, 0.15);
-    this.cameraUI.add(intelGlow);
+    this.cameraMapContent.add(intelGlow);
     
     // Main intel icon
     this.intelRoomIcon = this.add.circle(intelMarkerX, intelMarkerY, 20, 0x331500);
     this.intelRoomIcon.setStrokeStyle(3, 0xff6600);
-    this.cameraUI.add(this.intelRoomIcon);
+    this.cameraMapContent.add(this.intelRoomIcon);
     
     // Intel briefcase icon
     const intelIcon = this.add.text(intelMarkerX, intelMarkerY - 2, '◆', {
       fontSize: '16px',
       color: '#ff8800',
     }).setOrigin(0.5);
-    this.cameraUI.add(intelIcon);
+    this.cameraMapContent.add(intelIcon);
     
     const intelLabel = this.add.text(intelMarkerX, intelMarkerY + 32, 'INTEL', {
       fontFamily: 'Courier New, monospace',
@@ -2141,20 +2203,20 @@ export class GameScene extends Phaser.Scene {
       color: '#ff9944',
       fontStyle: 'bold',
     }).setOrigin(0.5);
-    this.cameraUI.add(intelLabel);
+    this.cameraMapContent.add(intelLabel);
     
     // Legend at bottom
     const legendY = 505;
     const legendBg = this.add.rectangle(1000, legendY, 250, 30, 0x0a1520, 0.8);
     legendBg.setStrokeStyle(1, 0x1a3050);
-    this.cameraUI.add(legendBg);
+    this.cameraMapContent.add(legendBg);
     
     const legendText = this.add.text(1000, legendY, 'CLICK NODE TO VIEW CAMERA', {
       fontFamily: 'Courier New, monospace',
       fontSize: '10px',
       color: '#4488aa',
     }).setOrigin(0.5);
-    this.cameraUI.add(legendText);
+    this.cameraMapContent.add(legendText);
     
     // Pulsing effect on YOUR position
     this.tweens.add({
@@ -2171,7 +2233,7 @@ export class GameScene extends Phaser.Scene {
       fontSize: '10px',
       color: '#2a6a3a',
     }).setOrigin(0.5);
-    this.cameraUI.add(statusText);
+    this.cameraMapContent.add(statusText);
     
     // Map icons are NOT added - player must check cameras to find enemies
     // Store references but keep them invisible (for internal use only)
@@ -2191,8 +2253,8 @@ export class GameScene extends Phaser.Scene {
     // Create camera destroyed overlay (Night 3+)
     this.createCameraDestroyedOverlay();
 
-    // Create Pauling hack bar overlay (Custom Night)
-    this.createPaulingHackUI();
+    // Create Administrator hack bar overlay (Custom Night)
+    this.createAdministratorHackUI();
     
     // Static burst overlay for camera switching (all nights)
     // Added last in createCameraUI so it renders on top of everything
@@ -2401,36 +2463,36 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Create Pauling hack bar and teleporter repair overlay (Custom Night)
+   * Create Administrator hack bar and teleporter repair overlay (Custom Night)
    */
-  private createPaulingHackUI(): void {
-    // ---- Hack bar: shown at bottom of camera feed when Pauling is targeting/hacking ----
+  private createAdministratorHackUI(): void {
+    // ---- Hack bar: shown at bottom of camera feed when Administrator is targeting/hacking ----
     // Camera panel is centered at 420,350 and is 510×410 — bottom edge is at y≈555.
     // Place bar near the bottom inside the panel: y=510 (45px from bottom edge).
-    this.paulingHackBarContainer = this.add.container(420, 510);
-    this.paulingHackBarContainer.setVisible(false);
-    this.paulingHackBarContainer.setDepth(104);
+    this.administratorHackBarContainer = this.add.container(420, 510);
+    this.administratorHackBarContainer.setVisible(false);
+    this.administratorHackBarContainer.setDepth(104);
 
     // Semi-transparent backing strip — fully transparent so it doesn't obscure camera feed
     const hackBarBacking = this.add.rectangle(0, 0, 510, 44, 0x000000, 0);
-    this.paulingHackBarContainer.add(hackBarBacking);
+    this.administratorHackBarContainer.add(hackBarBacking);
 
     // Bar background
-    this.paulingHackBarBorder = this.add.rectangle(0, 6, 360, 16, 0x111111);
-    this.paulingHackBarBorder.setStrokeStyle(2, 0x555555);
-    this.paulingHackBarContainer.add(this.paulingHackBarBorder);
+    this.administratorHackBarBorder = this.add.rectangle(0, 6, 360, 16, 0x111111);
+    this.administratorHackBarBorder.setStrokeStyle(2, 0x555555);
+    this.administratorHackBarContainer.add(this.administratorHackBarBorder);
 
     // Bar fill (scales 0→1 left-to-right)
-    this.paulingHackBarFill = this.add.rectangle(-178, 6, 356, 10, 0x444444, 0.7);
-    this.paulingHackBarFill.setOrigin(0, 0.5);
-    this.paulingHackBarContainer.add(this.paulingHackBarFill);
+    this.administratorHackBarFill = this.add.rectangle(-178, 6, 356, 10, 0x444444, 0.7);
+    this.administratorHackBarFill.setOrigin(0, 0.5);
+    this.administratorHackBarContainer.add(this.administratorHackBarFill);
 
     // Diagonal cross — drawn over the bar track when empty (TARGETING phase warning)
-    this.paulingHackBarCross = this.add.graphics();
-    this.paulingHackBarCross.lineStyle(2, 0x885566, 0.8);
-    this.paulingHackBarCross.lineBetween(-178, -2, 178, 14);  // top-left → bottom-right
-    this.paulingHackBarCross.lineBetween(-178, 14, 178, -2);  // bottom-left → top-right
-    this.paulingHackBarContainer.add(this.paulingHackBarCross);
+    this.administratorHackBarCross = this.add.graphics();
+    this.administratorHackBarCross.lineStyle(2, 0x885566, 0.8);
+    this.administratorHackBarCross.lineBetween(-178, -2, 178, 14);  // top-left → bottom-right
+    this.administratorHackBarCross.lineBetween(-178, 14, 178, -2);  // bottom-left → top-right
+    this.administratorHackBarContainer.add(this.administratorHackBarCross);
 
     // Label text (left of bar)
     const hackLabel = this.add.text(-178, -10, 'TELEPORTER HACK', {
@@ -2439,7 +2501,7 @@ export class GameScene extends Phaser.Scene {
       color: '#ff44aa',
       fontStyle: 'bold',
     }).setOrigin(0, 0.5);
-    this.paulingHackBarContainer.add(hackLabel);
+    this.administratorHackBarContainer.add(hackLabel);
 
     // Hint text (right of bar)
     const hackHint = this.add.text(178, -10, 'CLICK TO INTERRUPT', {
@@ -2447,27 +2509,27 @@ export class GameScene extends Phaser.Scene {
       fontSize: '10px',
       color: '#aa4488',
     }).setOrigin(1, 0.5);
-    this.paulingHackBarContainer.add(hackHint);
+    this.administratorHackBarContainer.add(hackHint);
 
     // Clickable hit area over the whole strip
     const hackHitArea = this.add.rectangle(0, 0, 510, 44, 0x000000, 0);
     hackHitArea.setInteractive({ useHandCursor: true });
     hackHitArea.on('pointerdown', () => {
-      if (this.isPaulingEnabled() && this.pauling && this.pauling.getState() === 'HACKING') {
-        this.pauling.interruptHack();
+      if (this.isAdministratorEnabled() && this.administrator && this.administrator.getState() === 'HACKING') {
+        this.administrator.interruptHack();
         this.showAlert('Hack interrupted!', 0x00ff88);
       }
     });
-    this.paulingHackBarContainer.add(hackHitArea);
+    this.administratorHackBarContainer.add(hackHitArea);
 
-    this.cameraUI.add(this.paulingHackBarContainer);
+    this.cameraUI.add(this.administratorHackBarContainer);
 
     // ---- Repair bar: embedded in the teleport button (see createTeleporterUI / updateTeleportButtonAppearance) ----
     // The repair overlay is no longer a camera overlay — repair is done via the TELEPORT HERE button.
-    // paulingRepairOverlay is kept as a stub so existing references don't crash.
-    this.paulingRepairOverlay = this.add.container(0, 0);
-    this.paulingRepairOverlay.setVisible(false);
-    this.paulingRepairBarFill = this.add.rectangle(0, 0, 0, 0, 0x000000, 0); // invisible stub
+    // administratorRepairOverlay is kept as a stub so existing references don't crash.
+    this.administratorRepairOverlay = this.add.container(0, 0);
+    this.administratorRepairOverlay.setVisible(false);
+    this.administratorRepairBarFill = this.add.rectangle(0, 0, 0, 0, 0x000000, 0); // invisible stub
   }
 
   /**
@@ -2517,7 +2579,7 @@ export class GameScene extends Phaser.Scene {
       }
     });
     this.teleportButtonBg.on('pointerout', () => {
-      this.paulingRepairActive = false;
+      this.administratorRepairActive = false;
       if (this.isTeleportAnimating) {
         this.teleportButtonBg.setFillStyle(0x553311);
       } else if (this.isSelectedCameraHacked()) {
@@ -2534,15 +2596,15 @@ export class GameScene extends Phaser.Scene {
       }
       // If room is hacked, start hold-to-repair
       if (this.isSelectedCameraHacked()) {
-        this.paulingRepairActive = true;
-        this._paulingRepairSoundTimer = 0; // fire first tick immediately
+        this.administratorRepairActive = true;
+        this._administratorRepairSoundTimer = 0; // fire first tick immediately
         return;
       }
       const cam = CAMERAS[this.selectedCamera];
       this.teleportToRoom(cam.node);
     });
     this.teleportButtonBg.on('pointerup', () => {
-      this.paulingRepairActive = false;
+      this.administratorRepairActive = false;
     });
     
     // Camera lure button (play or remove lure from camera view)
@@ -2897,8 +2959,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // Block teleport if Pauling has hacked this room's teleporter
-    if (this.isPaulingEnabled() && this.hackedRooms.get(node)?.hacked) {
+    // Block teleport if Administrator has hacked this room's teleporter
+    if (this.isAdministratorEnabled() && this.hackedRooms.get(node)?.hacked) {
       this.showAlert('TELEPORTER OFFLINE', 0xff4444);
       return;
     }
@@ -3011,14 +3073,14 @@ export class GameScene extends Phaser.Scene {
       this.enemyApproachingRoom = false;
       this.approachingEnemyType = 'an enemy';
 
-      // Track last teleported room for Pauling Mode 1; reset no-teleport timer for Mode 2
+      // Track last teleported room for Administrator Mode 1; reset no-teleport timer for Mode 2
       this.lastTeleportedRoom = node;
-      this.paulingNoTeleportTimer = 0;
+      this.administratorNoTeleportTimer = 0;
 
-      // Scare Pauling if she was targeting this room during TARGETING phase
-      if (this.isPaulingEnabled() && this.pauling && this.pauling.isActive()) {
-        if (this.pauling.getCurrentTarget() === node && this.pauling.getState() === 'TARGETING') {
-          this.pauling.scarePauling();
+      // Scare Administrator if she was targeting this room during TARGETING phase
+      if (this.isAdministratorEnabled() && this.administrator && this.administrator.isActive()) {
+        if (this.administrator.getCurrentTarget() === node && this.administrator.getState() === 'TARGETING') {
+          this.administrator.scareAdministrator();
         }
       }
       
@@ -3150,21 +3212,21 @@ export class GameScene extends Phaser.Scene {
         return;
       }
 
-      // Pauling Mode 1: auto-hack last teleported room on return to Intel
-      this.handlePaulingMode1();
+      // Administrator Mode 1: auto-hack last teleported room on return to Intel
+      this.handleAdministratorMode1();
     });
   }
 
   /**
-   * Pauling Mode 1 — instant auto-hack triggered when player returns to Intel.
+   * Administrator Mode 1 — instant auto-hack triggered when player returns to Intel.
    * Hacks the last room the player teleported to (if not already hacked).
    * Every return trip triggers this — no cooldown cap.
    */
-  private handlePaulingMode1(): void {
-    if (!this.isPaulingEnabled() || !this.pauling?.isActive()) return;
+  private handleAdministratorMode1(): void {
+    if (!this.isAdministratorEnabled() || !this.administrator?.isActive()) return;
     if (!this.lastTeleportedRoom) return; // no teleport yet this night
 
-    const validRooms = PaulingEnemy.VALID_ROOMS;
+    const validRooms = AdministratorEnemy.VALID_ROOMS;
 
     // Target is always the last teleported room (if valid and not already hacked)
     let target: NodeId | null = null;
@@ -3185,13 +3247,13 @@ export class GameScene extends Phaser.Scene {
     roomState.repairProgress = 0;
 
     // Reset the no-teleport timer so Mode 2 doesn't fire right after a Mode 1 hack
-    this.paulingNoTeleportTimer = 0;
+    this.administratorNoTeleportTimer = 0;
 
-    this.showAlert(`⚠ PAULING: ${target.replace('_', ' ')} TELEPORTER HACKED`, 0xff0088);
+    this.showAlert(`⚠ ADMINISTRATOR: ${target.replace('_', ' ')} TELEPORTER HACKED`, 0xff0088);
     this.updateHackedRoomMapIndicators();
     this.updateTeleportButtonAppearance();
-    this.playPaulingHackSound();
-    console.log(`📋 Pauling (Mode 1) instantly hacked ${target}.`);
+    this.playAdministratorHackSound();
+    console.log(`📋 Administrator (Mode 1) instantly hacked ${target}.`);
   }
   
   /**
@@ -3691,7 +3753,7 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * Update the hacked room X indicators on the camera map
-   * Called when a room is hacked or repaired by Pauling
+   * Called when a room is hacked or repaired by Administrator
    */
   private updateHackedRoomMapIndicators(): void {
     this.hackedRoomMapIndicators.forEach((indicator, node) => {
@@ -3711,7 +3773,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Stop repair if switching cameras mid-hold
-    this.paulingRepairActive = false;
+    this.administratorRepairActive = false;
     this.updateTeleportButtonAppearance();
     
     // Don't do anything else if clicking the camera we're already on
@@ -6920,6 +6982,616 @@ export class GameScene extends Phaser.Scene {
     }
   }
   
+  // ============================================
+  // VENT CAMERA SYSTEM (Pauling - Custom Night)
+  // ============================================
+
+  private createVentUI(): void {
+    // Vent map overlay (shown over the camera feed area when in vent mode)
+    this.ventUI = this.add.container(0, 0);
+    this.ventUI.setVisible(false);
+    this.ventUI.setDepth(105);
+
+    const ventBg = this.add.rectangle(420, 340, 580, 500, 0x0a0a10);
+    ventBg.setStrokeStyle(4, 0x151520);
+    this.ventUI.add(ventBg);
+
+    const ventTitle = this.add.text(420, 120, 'VENT SYSTEM', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '18px',
+      color: '#cc88ff',
+    }).setOrigin(0.5);
+    this.ventUI.add(ventTitle);
+
+    const nodePositions: Record<string, { x: number; y: number }> = {
+      'VENT_ENTRY': { x: 420, y: 180 },
+      'VENT_MID': { x: 420, y: 245 },
+      'VENT_JUNCTION': { x: 420, y: 310 },
+      'VENT_LEFT_UPPER': { x: 270, y: 370 },
+      'VENT_RIGHT_UPPER': { x: 570, y: 370 },
+      'VENT_LEFT_LOWER': { x: 270, y: 430 },
+      'VENT_RIGHT_LOWER': { x: 570, y: 430 },
+      'VENT_LEFT_OPENING': { x: 270, y: 490 },
+      'VENT_RIGHT_OPENING': { x: 570, y: 490 },
+    };
+
+    const lineGraphics = this.add.graphics();
+    lineGraphics.lineStyle(2, 0x553388, 0.6);
+    lineGraphics.lineBetween(420, 180, 420, 245);
+    lineGraphics.lineBetween(420, 245, 420, 310);
+    lineGraphics.lineBetween(420, 310, 270, 370);
+    lineGraphics.lineBetween(420, 310, 570, 370);
+    lineGraphics.lineBetween(270, 370, 270, 430);
+    lineGraphics.lineBetween(570, 370, 570, 430);
+    lineGraphics.lineBetween(270, 430, 270, 490);
+    lineGraphics.lineBetween(570, 430, 570, 490);
+    this.ventUI.add(lineGraphics);
+
+    const nodeNames: Record<string, string> = {
+      'VENT_ENTRY': 'ENTRY',
+      'VENT_MID': 'MID',
+      'VENT_JUNCTION': 'JUNCTION',
+      'VENT_LEFT_UPPER': 'L.UPPER',
+      'VENT_RIGHT_UPPER': 'R.UPPER',
+      'VENT_LEFT_LOWER': 'L.LOWER',
+      'VENT_RIGHT_LOWER': 'R.LOWER',
+      'VENT_LEFT_OPENING': 'L.VENT',
+      'VENT_RIGHT_OPENING': 'R.VENT',
+    };
+
+    for (const [nodeId, pos] of Object.entries(nodePositions)) {
+      const container = this.add.container(pos.x, pos.y);
+      const bg = this.add.rectangle(0, 0, 80, 24, 0x221133);
+      bg.setStrokeStyle(1, 0x553388);
+      container.add(bg);
+      const label = this.add.text(0, 0, nodeNames[nodeId] || nodeId, {
+        fontFamily: 'Courier New, monospace',
+        fontSize: '10px',
+        color: '#aa88cc',
+      }).setOrigin(0.5);
+      container.add(label);
+      this.ventUI.add(container);
+      this.ventNodeGraphics.set(nodeId, container);
+    }
+
+    // Pauling icon — silhouette with dark hair and purple outfit
+    this.ventPaulingIcon = this.add.container(420, 170);
+    const paulingGfx = this.add.graphics();
+    // Hair (dark, shoulder-length)
+    paulingGfx.fillStyle(0x1a1a2a, 1);
+    paulingGfx.fillCircle(0, -20, 8);
+    paulingGfx.fillRoundedRect(-7, -20, 14, 10, 2);
+    // Face
+    paulingGfx.fillStyle(0xddbb99, 1);
+    paulingGfx.fillCircle(0, -22, 5);
+    // Glasses (small rectangles)
+    paulingGfx.fillStyle(0x888888, 0.9);
+    paulingGfx.fillRect(-5, -24, 4, 2);
+    paulingGfx.fillRect(1, -24, 4, 2);
+    // Body (purple dress/suit)
+    paulingGfx.fillStyle(0x7733aa, 1);
+    paulingGfx.fillRoundedRect(-6, -12, 12, 14, 3);
+    // Arms
+    paulingGfx.fillRect(-9, -10, 4, 10);
+    paulingGfx.fillRect(5, -10, 4, 10);
+    this.ventPaulingIcon.add(paulingGfx);
+    const paulingLabel = this.add.text(0, 6, 'PAULING', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '7px',
+      color: '#cc88ff',
+    }).setOrigin(0.5);
+    this.ventPaulingIcon.add(paulingLabel);
+    this.ventUI.add(this.ventPaulingIcon);
+
+    // Seal indicators on the vent map (visual only)
+    this.ventSealLeftIndicator = this.add.rectangle(270, 510, 80, 8, 0x333333, 0);
+    this.ventUI.add(this.ventSealLeftIndicator);
+    this.ventSealRightIndicator = this.add.rectangle(570, 510, 80, 8, 0x333333, 0);
+    this.ventUI.add(this.ventSealRightIndicator);
+
+    // Seal buttons and thermostat go in the right panel (ventPanelControls)
+    this.ventPanelControls = this.add.container(0, 0);
+    this.ventPanelControls.setDepth(102);
+    this.ventPanelControls.setVisible(false);
+    this.cameraUI.add(this.ventPanelControls);
+
+    // Left seal button (in right panel)
+    this.ventSealLeftBtn = this.add.container(920, 280);
+    const leftBtnBg = this.add.rectangle(0, 0, 140, 40, 0x332244);
+    leftBtnBg.setStrokeStyle(2, 0x664488);
+    leftBtnBg.setInteractive({ useHandCursor: true });
+    const leftBtnText = this.add.text(0, 0, 'SEAL LEFT', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '13px',
+      color: '#cc88ff',
+    }).setOrigin(0.5);
+    leftBtnBg.on('pointerdown', () => this.toggleVentSeal('LEFT'));
+    leftBtnBg.on('pointerover', () => leftBtnBg.setFillStyle(0x443355));
+    leftBtnBg.on('pointerout', () => leftBtnBg.setFillStyle(0x332244));
+    this.ventSealLeftBtn.add([leftBtnBg, leftBtnText]);
+    this.ventPanelControls.add(this.ventSealLeftBtn);
+
+    // Right seal button (in right panel)
+    this.ventSealRightBtn = this.add.container(1080, 280);
+    const rightBtnBg = this.add.rectangle(0, 0, 140, 40, 0x332244);
+    rightBtnBg.setStrokeStyle(2, 0x664488);
+    rightBtnBg.setInteractive({ useHandCursor: true });
+    const rightBtnText = this.add.text(0, 0, 'SEAL RIGHT', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '13px',
+      color: '#cc88ff',
+    }).setOrigin(0.5);
+    rightBtnBg.on('pointerdown', () => this.toggleVentSeal('RIGHT'));
+    rightBtnBg.on('pointerover', () => rightBtnBg.setFillStyle(0x443355));
+    rightBtnBg.on('pointerout', () => rightBtnBg.setFillStyle(0x332244));
+    this.ventSealRightBtn.add([rightBtnBg, rightBtnText]);
+    this.ventPanelControls.add(this.ventSealRightBtn);
+
+    // Vent panel thermostat (vertical, in right panel)
+    const ventThermoContainer = this.add.container(1000, 420);
+
+    const vtHousing = this.add.rectangle(0, 0, 36, 90, 0x1a1a22);
+    vtHousing.setStrokeStyle(1, 0x333344);
+    ventThermoContainer.add(vtHousing);
+
+    const vtLabel = this.add.text(0, -55, 'TEMPERATURE', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '10px',
+      color: '#888888',
+    }).setOrigin(0.5);
+    ventThermoContainer.add(vtLabel);
+
+    const vtBarBg = this.add.rectangle(0, 0, 14, 66, 0x0a0a0a);
+    vtBarBg.setStrokeStyle(1, 0x444444);
+    ventThermoContainer.add(vtBarBg);
+
+    this.ventPanelThermoFill = this.add.rectangle(0, 33, 10, 0, 0x44cc44);
+    this.ventPanelThermoFill.setOrigin(0.5, 1);
+    ventThermoContainer.add(this.ventPanelThermoFill);
+
+    this.ventPanelThermoText = this.add.text(0, 55, '0°', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '11px',
+      color: '#666666',
+    }).setOrigin(0.5);
+    ventThermoContainer.add(this.ventPanelThermoText);
+
+    this.ventPanelControls.add(ventThermoContainer);
+
+    // ROOMS / VENTS folder tabs above the facility overview map panel
+    const tabY = 127;
+    const tabW = 110;
+    const tabH = 30;
+    const tabGap = 8;
+
+    this.ventCamsToggleBtn = this.add.container(0, 0);
+    this.ventCamsToggleBtn.setDepth(106);
+
+    // "ROOMS" tab
+    const roomsTabBg = this.add.rectangle(1000 - tabW/2 - tabGap/2, tabY, tabW, tabH, 0x0a1525);
+    roomsTabBg.setStrokeStyle(2, 0x3388cc);
+    roomsTabBg.setInteractive({ useHandCursor: true });
+    const roomsTabText = this.add.text(1000 - tabW/2 - tabGap/2, tabY, 'ROOMS', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '13px',
+      color: '#5588cc',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    roomsTabBg.on('pointerdown', () => {
+      if (this.isVentCameraMode) this.toggleVentCameraMode();
+    });
+    roomsTabBg.on('pointerover', () => roomsTabBg.setFillStyle(0x112233));
+    roomsTabBg.on('pointerout', () => roomsTabBg.setFillStyle(0x0a1525));
+
+    // "VENTS" tab
+    const ventsTabBg = this.add.rectangle(1000 + tabW/2 + tabGap/2, tabY, tabW, tabH, 0x15081a);
+    ventsTabBg.setStrokeStyle(2, 0x553388);
+    ventsTabBg.setInteractive({ useHandCursor: true });
+    this.ventCamsToggleText = this.add.text(1000 + tabW/2 + tabGap/2, tabY, 'VENTS', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '13px',
+      color: '#9944cc',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    ventsTabBg.on('pointerdown', () => {
+      if (!this.isVentCameraMode) this.toggleVentCameraMode();
+    });
+    ventsTabBg.on('pointerover', () => ventsTabBg.setFillStyle(0x221133));
+    ventsTabBg.on('pointerout', () => ventsTabBg.setFillStyle(0x15081a));
+
+    this.ventCamsToggleBtn.add([roomsTabBg, roomsTabText, ventsTabBg, this.ventCamsToggleText]);
+    this.ventCamsToggleBtn.setVisible(false);
+    this.cameraUI.add(this.ventCamsToggleBtn);
+  }
+
+  private createThermostatUI(): void {
+    // Thermostat on the wall to the left of the right door
+    // Right door is at x=1160; place thermostat at x=1060, vertical on the wall
+    this.thermostatContainer = this.add.container(1060, 260);
+    this.thermostatContainer.setDepth(5);
+    this.thermostatContainer.setVisible(false);
+
+    // Thermostat housing (small wall-mounted box)
+    const housing = this.add.rectangle(0, 0, 28, 70, 0x1a1a22);
+    housing.setStrokeStyle(1, 0x333344);
+    this.thermostatContainer.add(housing);
+
+    // Label above
+    const label = this.add.text(0, -42, 'TEMP', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '8px',
+      color: '#666666',
+    }).setOrigin(0.5);
+    this.thermostatContainer.add(label);
+
+    // Vertical bar background (mercury-style)
+    const barBg = this.add.rectangle(0, 0, 10, 50, 0x0a0a0a);
+    barBg.setStrokeStyle(1, 0x444444);
+    this.thermostatContainer.add(barBg);
+
+    // Fill bar (grows upward from bottom)
+    this.thermostatFill = this.add.rectangle(0, 25, 6, 0, 0x44cc44);
+    this.thermostatFill.setOrigin(0.5, 1);
+    this.thermostatContainer.add(this.thermostatFill);
+
+    // Percentage text below
+    this.thermostatText = this.add.text(0, 42, '', {
+      fontFamily: 'Courier New, monospace',
+      fontSize: '8px',
+      color: '#666666',
+    }).setOrigin(0.5);
+    this.thermostatContainer.add(this.thermostatText);
+  }
+
+  private toggleVentCameraMode(): void {
+    if (!this.isPaulingEnabled()) return;
+
+    this.isVentCameraMode = !this.isVentCameraMode;
+    this.playVentTabClickSound();
+
+    if (this.isVentCameraMode) {
+      this.ventUI.setVisible(true);
+      this.ventPanelControls.setVisible(true);
+      this.cameraMapContent.setVisible(false);
+      this.teleportButton?.setVisible(false);
+      this.cameraLureButton?.setVisible(false);
+      this.mapTitleText?.setText('◈ VENT MAP ◈');
+      this.mapTitleText?.setColor('#9944cc');
+    } else {
+      this.ventUI.setVisible(false);
+      this.ventPanelControls.setVisible(false);
+      this.cameraMapContent.setVisible(true);
+      this.teleportButton?.setVisible(true);
+      this.cameraLureButton?.setVisible(true);
+      this.mapTitleText?.setText('◈ FACILITY OVERVIEW ◈');
+      this.mapTitleText?.setColor('#5588cc');
+    }
+  }
+
+  private playVentTabClickSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = this.sharedAudioContext;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(500, now + 0.06);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } catch (e) { /* audio not available */ }
+  }
+
+  private playVentSealSound(): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = this.sharedAudioContext;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+
+      // Metallic clank — sealing a vent
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(200, now);
+      osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc.start(now);
+      osc.stop(now + 0.15);
+
+      // Secondary higher clank
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.type = 'square';
+      osc2.frequency.setValueAtTime(600, now + 0.02);
+      osc2.frequency.exponentialRampToValueAtTime(300, now + 0.08);
+      gain2.gain.setValueAtTime(0.06, now + 0.02);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      osc2.start(now + 0.02);
+      osc2.stop(now + 0.1);
+    } catch (e) { /* audio not available */ }
+  }
+
+  private playVentThudSound(): void {
+    console.log('📋 [SFX] Vent thud sound triggered');
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = this.sharedAudioContext;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+
+      // Layer 1: Deep bass impact
+      const bass = ctx.createOscillator();
+      const bassGain = ctx.createGain();
+      bass.connect(bassGain);
+      bassGain.connect(ctx.destination);
+      bass.type = 'sine';
+      bass.frequency.setValueAtTime(100, now);
+      bass.frequency.exponentialRampToValueAtTime(30, now + 0.3);
+      bassGain.gain.setValueAtTime(1.5, now);
+      bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      bass.start(now);
+      bass.stop(now + 0.5);
+
+      // Layer 2: Metallic clang (mid frequency)
+      const clang = ctx.createOscillator();
+      const clangGain = ctx.createGain();
+      clang.connect(clangGain);
+      clangGain.connect(ctx.destination);
+      clang.type = 'triangle';
+      clang.frequency.setValueAtTime(300, now);
+      clang.frequency.exponentialRampToValueAtTime(120, now + 0.2);
+      clangGain.gain.setValueAtTime(1.0, now);
+      clangGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      clang.start(now);
+      clang.stop(now + 0.25);
+
+      // Layer 3: High metallic rattle
+      const rattle = ctx.createOscillator();
+      const rattleGain = ctx.createGain();
+      const rattleFilter = ctx.createBiquadFilter();
+      rattle.connect(rattleFilter);
+      rattleFilter.connect(rattleGain);
+      rattleGain.connect(ctx.destination);
+      rattleFilter.type = 'bandpass';
+      rattleFilter.frequency.setValueAtTime(1200, now);
+      rattleFilter.Q.setValueAtTime(3, now);
+      rattle.type = 'sawtooth';
+      rattle.frequency.setValueAtTime(400, now);
+      rattle.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+      rattleGain.gain.setValueAtTime(0.7, now);
+      rattleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      rattle.start(now);
+      rattle.stop(now + 0.2);
+
+      // Layer 4: Noise burst for impact texture
+      const bufferSize = ctx.sampleRate * 0.1;
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * 0.5;
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const noiseGain = ctx.createGain();
+      const noiseFilter = ctx.createBiquadFilter();
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noiseFilter.type = 'lowpass';
+      noiseFilter.frequency.setValueAtTime(600, now);
+      noiseGain.gain.setValueAtTime(0.8, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      noise.start(now);
+    } catch (e) { console.log('📋 [SFX] Vent thud error:', e); }
+  }
+
+  private playThermostatBeep(pct: number): void {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = this.sharedAudioContext;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+
+      // Pitch rises with heat (800Hz at 50% → 1600Hz at 100%)
+      const freq = 800 + (pct - 0.5) * 1600;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0.1 + pct * 0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      osc.start(now);
+      osc.stop(now + 0.06);
+    } catch (e) { /* audio not available */ }
+  }
+
+  private toggleVentSeal(side: VentSide): void {
+    if (!this.isPaulingEnabled() || !this.isVentCameraMode) return;
+
+    this.playVentSealSound();
+
+    if (side === 'LEFT') {
+      if (this.ventSealLeft) {
+        this.ventSealLeft = false;
+      } else {
+        this.ventSealRight = false;
+        this.ventSealLeft = true;
+        if (this.pauling.getState() === 'PRYING' && this.pauling.getOpeningSide() === 'LEFT') {
+          this.pauling.blockAndReroute();
+          this.playVentThudSound();
+        }
+      }
+    } else {
+      if (this.ventSealRight) {
+        this.ventSealRight = false;
+      } else {
+        this.ventSealLeft = false;
+        this.ventSealRight = true;
+        if (this.pauling.getState() === 'PRYING' && this.pauling.getOpeningSide() === 'RIGHT') {
+          this.pauling.blockAndReroute();
+          this.playVentThudSound();
+        }
+      }
+    }
+  }
+
+  private updateVentUI(): void {
+    if (!this.isPaulingEnabled()) return;
+
+    // Show toggle button when cameras are open
+    this.ventCamsToggleBtn.setVisible(this.isCameraMode);
+
+    // Show thermostat when in Intel room
+    this.thermostatContainer.setVisible(!this.isTeleported);
+
+    // Update Pauling icon position on vent map
+    if (this.ventUI.visible && this.pauling.isActive()) {
+      const nodePositions: Record<string, { x: number; y: number }> = {
+        'VENT_ENTRY': { x: 420, y: 180 },
+        'VENT_MID': { x: 420, y: 245 },
+        'VENT_JUNCTION': { x: 420, y: 310 },
+        'VENT_LEFT_UPPER': { x: 270, y: 370 },
+        'VENT_RIGHT_UPPER': { x: 570, y: 370 },
+        'VENT_LEFT_LOWER': { x: 270, y: 430 },
+        'VENT_RIGHT_LOWER': { x: 570, y: 430 },
+        'VENT_LEFT_OPENING': { x: 270, y: 490 },
+        'VENT_RIGHT_OPENING': { x: 570, y: 490 },
+      };
+      const pos = nodePositions[this.pauling.getCurrentNode()];
+      if (pos) {
+        this.ventPaulingIcon.setPosition(pos.x, pos.y);
+      }
+
+      // Highlight current node
+      this.ventNodeGraphics.forEach((container, nodeId) => {
+        const bg = container.getAt(0) as Phaser.GameObjects.Rectangle;
+        if (nodeId === this.pauling.getCurrentNode()) {
+          bg.setFillStyle(0x662288);
+          bg.setStrokeStyle(2, 0xcc44ff);
+        } else {
+          bg.setFillStyle(0x221133);
+          bg.setStrokeStyle(1, 0x553388);
+        }
+      });
+    }
+
+    // Update seal indicators
+    this.ventSealLeftIndicator?.setFillStyle(this.ventSealLeft ? 0xff4444 : 0x333333, this.ventSealLeft ? 0.8 : 0);
+    this.ventSealRightIndicator?.setFillStyle(this.ventSealRight ? 0xff4444 : 0x333333, this.ventSealRight ? 0.8 : 0);
+
+    // Update seal button colors
+    const leftBg = this.ventSealLeftBtn.getAt(0) as Phaser.GameObjects.Rectangle;
+    const rightBg = this.ventSealRightBtn.getAt(0) as Phaser.GameObjects.Rectangle;
+    if (this.ventSealLeft) {
+      leftBg.setStrokeStyle(2, 0xff4444);
+      (this.ventSealLeftBtn.getAt(1) as Phaser.GameObjects.Text).setText('UNSEAL L');
+    } else {
+      leftBg.setStrokeStyle(2, 0x664488);
+      (this.ventSealLeftBtn.getAt(1) as Phaser.GameObjects.Text).setText('SEAL LEFT');
+    }
+    if (this.ventSealRight) {
+      rightBg.setStrokeStyle(2, 0xff4444);
+      (this.ventSealRightBtn.getAt(1) as Phaser.GameObjects.Text).setText('UNSEAL R');
+    } else {
+      rightBg.setStrokeStyle(2, 0x664488);
+      (this.ventSealRightBtn.getAt(1) as Phaser.GameObjects.Text).setText('SEAL RIGHT');
+    }
+
+    // Update thermostat display (vertical mercury bar) — both Intel room and vent panel
+    // Display range: 50° (cold) to 110° (Pyro trigger)
+    const pct = Math.min(this.thermostat / GAME_CONSTANTS.THERMOSTAT_MAX, 1);
+    const displayTemp = Math.floor(GAME_CONSTANTS.THERMOSTAT_DISPLAY_MIN + pct * (GAME_CONSTANTS.THERMOSTAT_DISPLAY_MAX - GAME_CONSTANTS.THERMOSTAT_DISPLAY_MIN));
+    const thermoColor = pct < 0.4 ? 0x44cc44 : pct < 0.7 ? 0xcccc44 : pct < 0.9 ? 0xff8800 : 0xff2222;
+    const tempStr = `${displayTemp}°`;
+
+    this.thermostatFill.setSize(6, 50 * pct);
+    this.thermostatFill.setFillStyle(thermoColor);
+    this.thermostatText.setText(tempStr);
+
+    // Vent panel thermostat mirror
+    if (this.ventPanelThermoFill) {
+      this.ventPanelThermoFill.setSize(10, 66 * pct);
+      this.ventPanelThermoFill.setFillStyle(thermoColor);
+    }
+    if (this.ventPanelThermoText) {
+      this.ventPanelThermoText.setText(tempStr);
+    }
+  }
+
+  private updatePaulingAndThermostat(delta: number): void {
+    if (!this.isPaulingEnabled() || !this.pauling.isActive()) return;
+
+    // Update thermostat
+    if (this.ventSealLeft || this.ventSealRight) {
+      this.thermostat = Math.min(this.thermostat + GAME_CONSTANTS.THERMOSTAT_FILL_RATE * delta, GAME_CONSTANTS.THERMOSTAT_MAX);
+    } else {
+      this.thermostat = Math.max(this.thermostat - GAME_CONSTANTS.THERMOSTAT_DRAIN_RATE * delta, 0);
+    }
+
+    // Escalating beep only while thermostat is actively rising (seal closed + above 50%)
+    const pct = this.thermostat / GAME_CONSTANTS.THERMOSTAT_MAX;
+    const isRising = this.ventSealLeft || this.ventSealRight;
+    if (pct >= 0.5 && isRising) {
+      this.thermostatBeepTimer += delta;
+      // Beep interval: 800ms at 50% → 100ms at 100%
+      const beepInterval = 800 - (pct - 0.5) * 1400;
+      if (this.thermostatBeepTimer >= Math.max(beepInterval, 100)) {
+        this.thermostatBeepTimer = 0;
+        this.playThermostatBeep(pct);
+      }
+    } else {
+      this.thermostatBeepTimer = 0;
+    }
+
+    // Thermostat maxed out — Pyro appears
+    if (this.thermostat >= GAME_CONSTANTS.THERMOSTAT_MAX) {
+      this.gameOver('The vents overheated! Pyro appeared!');
+      return;
+    }
+
+    // Update Pauling movement
+    const result = this.pauling.update(delta);
+
+    // She arrived at an opening
+    if (result.arrivedAtOpening) {
+      const sealed = result.arrivedAtOpening === 'LEFT' ? this.ventSealLeft : this.ventSealRight;
+      if (sealed) {
+        this.pauling.blockAndReroute();
+        this.playVentThudSound();
+      } else {
+        this.pauling.startPrying();
+      }
+    }
+
+    // She dropped in
+    if (result.entered) {
+      this.gameOver('Pauling dropped in from the vents!');
+    }
+  }
+
   private createEndScreen(): void {
     this.endScreen = this.add.container(0, 0);
     this.endScreen.setVisible(false);
@@ -8332,10 +9004,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Play sound when Pauling selects a Mode 2 target — tense, urgent radio-static ping
+   * Play sound when Administrator selects a Mode 2 target — tense, urgent radio-static ping
    * Signals the player to check cameras and be ready to interrupt
    */
-  private playPaulingTargetingSound(): void {
+  private playAdministratorTargetingSound(): void {
     if (this.gameStatus !== 'PLAYING') return;
     try {
       if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
@@ -8378,9 +9050,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Play sound when Pauling hacks a teleporter room — ominous digital glitch/power-down
+   * Play sound when Administrator hacks a teleporter room — ominous digital glitch/power-down
    */
-  private playPaulingHackSound(): void {
+  private playAdministratorHackSound(): void {
     if (this.gameStatus !== 'PLAYING') return;
     try {
       if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
@@ -8426,15 +9098,15 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * Play looping repair buzz while player holds the repair bar
-   * Called each frame while paulingRepairActive; manages its own throttle via _paulingRepairSoundTimer
+   * Called each frame while administratorRepairActive; manages its own throttle via _administratorRepairSoundTimer
    */
-  private _paulingRepairSoundTimer: number = 0;
-  private playPaulingRepairTickSound(): void {
+  private _administratorRepairSoundTimer: number = 0;
+  private playAdministratorRepairTickSound(): void {
     if (this.gameStatus !== 'PLAYING') return;
     // Play a short tick every ~250ms so it feels like continuous activity without overlap
-    this._paulingRepairSoundTimer -= 1; // decremented per frame; reset when <= 0
-    if (this._paulingRepairSoundTimer > 0) return;
-    this._paulingRepairSoundTimer = 15; // ~15 frames between ticks at 60fps ≈ 250ms
+    this._administratorRepairSoundTimer -= 1; // decremented per frame; reset when <= 0
+    if (this._administratorRepairSoundTimer > 0) return;
+    this._administratorRepairSoundTimer = 15; // ~15 frames between ticks at 60fps ≈ 250ms
 
     try {
       if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
@@ -8466,7 +9138,7 @@ export class GameScene extends Phaser.Scene {
   /**
    * Play sound when a hacked teleporter is fully repaired — upward chime/success sting
    */
-  private playPaulingRepairCompleteSound(): void {
+  private playAdministratorRepairCompleteSound(): void {
     if (this.gameStatus !== 'PLAYING') return;
     try {
       if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
@@ -9215,7 +9887,12 @@ export class GameScene extends Phaser.Scene {
       this.isCameraBooting = false;
       this.cameraBootTimer = 0;
       this.cameraUI.setVisible(false);
-      this.paulingRepairActive = false; // stop repair if camera closed mid-hold
+      this.administratorRepairActive = false; // stop repair if camera closed mid-hold
+      // Hide vent UI but remember which tab was active
+      if (this.isVentCameraMode) {
+        this.ventUI?.setVisible(false);
+        this.ventPanelControls?.setVisible(false);
+      }
       if (this.wasWrangledBeforeCamera && this.sentry.exists) {
         this.sentry.isWrangled = true;
       }
@@ -9226,6 +9903,17 @@ export class GameScene extends Phaser.Scene {
       this.cameraUI.setVisible(true);
       this.sentry.isWrangled = false;
       this.stopDetectionSound(); // Stop scary sound when viewing cameras
+
+      // Restore ROOMS/VENTS tab state from last time
+      if (this.isVentCameraMode && this.isPaulingEnabled()) {
+        this.ventUI?.setVisible(true);
+        this.ventPanelControls?.setVisible(true);
+        this.cameraMapContent?.setVisible(false);
+        this.teleportButton?.setVisible(false);
+        this.cameraLureButton?.setVisible(false);
+        this.mapTitleText?.setText('◈ VENT MAP ◈');
+        this.mapTitleText?.setColor('#9944cc');
+      }
       
       // Initialize shared audio context on user gesture (camera button click)
       // This ensures camera switch static works on Night 1+ (browser autoplay policy)
@@ -9305,7 +9993,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Pauling: camera view is always unobstructed — repair is done via the teleport button
+    // Administrator: camera view is always unobstructed — repair is done via the teleport button
     
     // Update lure indicator - show if there's a lure at this camera
     if (this.activeLure && this.activeLure.node === selectedCam.node) {
@@ -9397,34 +10085,34 @@ export class GameScene extends Phaser.Scene {
       this.cameraWatchWarning.setVisible(false);
     }
 
-    // Pauling hack bar — shown when she's targeting or actively hacking this camera's room
-    if (this.isPaulingEnabled() && this.pauling && this.pauling.isActive() && this.paulingHackBarContainer) {
-      const paulingTarget = this.pauling.getCurrentTarget();
-      const paulingState = this.pauling.getState();
-      if (paulingTarget === selectedCam.node && (paulingState === 'TARGETING' || paulingState === 'HACKING')) {
-        this.paulingHackBarContainer.setVisible(true);
-        const hackProgress = paulingState === 'HACKING' ? this.pauling.getHackProgress() : 0;
-        this.paulingHackBarFill.setScale(hackProgress, 1);
+    // Administrator hack bar — shown when she's targeting or actively hacking this camera's room
+    if (this.isAdministratorEnabled() && this.administrator && this.administrator.isActive() && this.administratorHackBarContainer) {
+      const administratorTarget = this.administrator.getCurrentTarget();
+      const administratorState = this.administrator.getState();
+      if (administratorTarget === selectedCam.node && (administratorState === 'TARGETING' || administratorState === 'HACKING')) {
+        this.administratorHackBarContainer.setVisible(true);
+        const hackProgress = administratorState === 'HACKING' ? this.administrator.getHackProgress() : 0;
+        this.administratorHackBarFill.setScale(hackProgress, 1);
         // Colour: grey (0x555555) when targeting/empty, gradient → pink (0xff0088) as bar fills
         if (hackProgress <= 0) {
-          this.paulingHackBarFill.setFillStyle(0x444444, 0.7);
-          this.paulingHackBarBorder?.setStrokeStyle(2, 0x555555);
-          this.paulingHackBarCross?.setVisible(true);
+          this.administratorHackBarFill.setFillStyle(0x444444, 0.7);
+          this.administratorHackBarBorder?.setStrokeStyle(2, 0x555555);
+          this.administratorHackBarCross?.setVisible(true);
         } else {
           // Lerp grey (0x44,0x44,0x44) → pink (0xff,0x00,0x88) by progress
           const r = Math.round(0x44 + (0xff - 0x44) * hackProgress);
           const g = Math.round(0x44 + (0x00 - 0x44) * hackProgress);
           const b = Math.round(0x44 + (0x88 - 0x44) * hackProgress);
           const col = (r << 16) | (g << 8) | b;
-          this.paulingHackBarFill.setFillStyle(col, 0.85 + hackProgress * 0.1);
-          this.paulingHackBarBorder?.setStrokeStyle(2, col);
-          this.paulingHackBarCross?.setVisible(false);
+          this.administratorHackBarFill.setFillStyle(col, 0.85 + hackProgress * 0.1);
+          this.administratorHackBarBorder?.setStrokeStyle(2, col);
+          this.administratorHackBarCross?.setVisible(false);
         }
       } else {
-        this.paulingHackBarContainer.setVisible(false);
+        this.administratorHackBarContainer.setVisible(false);
       }
-    } else if (this.paulingHackBarContainer) {
-      this.paulingHackBarContainer.setVisible(false);
+    } else if (this.administratorHackBarContainer) {
+      this.administratorHackBarContainer.setVisible(false);
     }
     type EnemyDisplay = { type: string; label: string; color: string };
     const enemies: EnemyDisplay[] = [];
@@ -9900,6 +10588,282 @@ export class GameScene extends Phaser.Scene {
     graphics.strokePath();
   }
   
+  /**
+   * Draw Pauling for jumpscare — TF2 Ms. Pauling: dark hair pulled back,
+   * cat-eye glasses, purple dress shirt, intense close-up stare
+   */
+  private drawPaulingJumpscare(graphics: Phaser.GameObjects.Graphics): void {
+    // Outer purple aura (menacing glow)
+    graphics.fillStyle(0x440066, 0.12);
+    graphics.fillCircle(0, 0, 140);
+    graphics.fillStyle(0x6622aa, 0.18);
+    graphics.fillCircle(0, 0, 110);
+    graphics.fillStyle(0x7733aa, 0.25);
+    graphics.fillCircle(0, -10, 85);
+
+    // Hair back volume (dark, swept back into a bun/ponytail)
+    graphics.fillStyle(0x0e0e18, 1);
+    graphics.fillEllipse(0, -30, 130, 110);
+
+    // Hair side strands framing face
+    graphics.fillStyle(0x0e0e18, 1);
+    graphics.beginPath();
+    graphics.moveTo(-52, -65);
+    graphics.lineTo(-58, 10);
+    graphics.lineTo(-42, 15);
+    graphics.lineTo(-38, -55);
+    graphics.closePath();
+    graphics.fillPath();
+    graphics.beginPath();
+    graphics.moveTo(52, -65);
+    graphics.lineTo(58, 10);
+    graphics.lineTo(42, 15);
+    graphics.lineTo(38, -55);
+    graphics.closePath();
+    graphics.fillPath();
+
+    // Hair bun (back of head, visible at top)
+    graphics.fillStyle(0x121220, 1);
+    graphics.fillCircle(0, -75, 22);
+    graphics.fillStyle(0x0e0e18, 1);
+    graphics.fillCircle(0, -72, 18);
+
+    // Face shape (slightly angular jaw — Pauling's sharp features)
+    graphics.fillStyle(0xe8c8a0, 1);
+    graphics.beginPath();
+    graphics.moveTo(-38, -55);
+    graphics.lineTo(-44, -20);
+    graphics.lineTo(-36, 10);
+    graphics.lineTo(-18, 22);
+    graphics.lineTo(0, 26);
+    graphics.lineTo(18, 22);
+    graphics.lineTo(36, 10);
+    graphics.lineTo(44, -20);
+    graphics.lineTo(38, -55);
+    graphics.lineTo(-20, -65);
+    graphics.lineTo(0, -68);
+    graphics.lineTo(20, -65);
+    graphics.closePath();
+    graphics.fillPath();
+
+    // Forehead highlight
+    graphics.fillStyle(0xf0d0aa, 0.4);
+    graphics.fillEllipse(0, -48, 40, 16);
+
+    // Cat-eye glasses frames (angular, swept-up outer corners)
+    graphics.lineStyle(3.5, 0x333340, 1);
+    // Left lens frame
+    graphics.beginPath();
+    graphics.moveTo(-6, -28);
+    graphics.lineTo(-10, -36);
+    graphics.lineTo(-20, -38);
+    graphics.lineTo(-32, -36);
+    graphics.lineTo(-36, -30);
+    graphics.lineTo(-34, -22);
+    graphics.lineTo(-22, -18);
+    graphics.lineTo(-10, -20);
+    graphics.lineTo(-6, -28);
+    graphics.strokePath();
+    // Right lens frame
+    graphics.beginPath();
+    graphics.moveTo(6, -28);
+    graphics.lineTo(10, -36);
+    graphics.lineTo(20, -38);
+    graphics.lineTo(32, -36);
+    graphics.lineTo(36, -30);
+    graphics.lineTo(34, -22);
+    graphics.lineTo(22, -18);
+    graphics.lineTo(10, -20);
+    graphics.lineTo(6, -28);
+    graphics.strokePath();
+    // Nose bridge
+    graphics.lineStyle(2.5, 0x333340, 1);
+    graphics.lineBetween(-6, -28, 6, -28);
+    // Temple arms (going to ears)
+    graphics.lineStyle(2.5, 0x333340, 0.8);
+    graphics.lineBetween(-36, -32, -54, -38);
+    graphics.lineBetween(36, -32, 54, -38);
+
+    // Lens fill (slight purple tint — her signature)
+    graphics.fillStyle(0xccbbdd, 0.15);
+    graphics.fillEllipse(-21, -28, 26, 18);
+    graphics.fillEllipse(21, -28, 26, 18);
+
+    // Lens glare
+    graphics.fillStyle(0xffffff, 0.2);
+    graphics.fillCircle(-26, -32, 4);
+    graphics.fillCircle(16, -32, 4);
+
+    // Eyes — sharp, focused, slightly narrowed
+    graphics.fillStyle(0xfafafa, 1);
+    graphics.fillEllipse(-21, -28, 16, 11);
+    graphics.fillEllipse(21, -28, 16, 11);
+
+    // Iris (green-hazel, Pauling's eye color)
+    graphics.fillStyle(0x446633, 1);
+    graphics.fillCircle(-20, -28, 6);
+    graphics.fillCircle(20, -28, 6);
+
+    // Pupil
+    graphics.fillStyle(0x111111, 1);
+    graphics.fillCircle(-20, -28, 3);
+    graphics.fillCircle(20, -28, 3);
+
+    // Eye highlight
+    graphics.fillStyle(0xffffff, 0.9);
+    graphics.fillCircle(-18, -30, 1.5);
+    graphics.fillCircle(22, -30, 1.5);
+
+    // Eyelids (upper) — gives a determined/intense look
+    graphics.lineStyle(2, 0x0e0e18, 0.6);
+    graphics.beginPath();
+    graphics.moveTo(-30, -32);
+    graphics.lineTo(-21, -35);
+    graphics.lineTo(-12, -32);
+    graphics.strokePath();
+    graphics.beginPath();
+    graphics.moveTo(12, -32);
+    graphics.lineTo(21, -35);
+    graphics.lineTo(30, -32);
+    graphics.strokePath();
+
+    // Eyebrows (strong, angular — she means business)
+    graphics.lineStyle(3, 0x0e0e18, 1);
+    graphics.beginPath();
+    graphics.moveTo(-34, -42);
+    graphics.lineTo(-21, -47);
+    graphics.lineTo(-10, -42);
+    graphics.strokePath();
+    graphics.beginPath();
+    graphics.moveTo(10, -42);
+    graphics.lineTo(21, -47);
+    graphics.lineTo(34, -42);
+    graphics.strokePath();
+
+    // Nose (subtle, angled)
+    graphics.lineStyle(1.5, 0xd4a880, 0.6);
+    graphics.beginPath();
+    graphics.moveTo(0, -18);
+    graphics.lineTo(-4, -6);
+    graphics.lineTo(0, -4);
+    graphics.strokePath();
+
+    // Mouth — thin, pressed together, no-nonsense expression
+    graphics.lineStyle(2, 0xbb8877, 1);
+    graphics.beginPath();
+    graphics.moveTo(-14, 6);
+    graphics.lineTo(-4, 4);
+    graphics.lineTo(4, 4);
+    graphics.lineTo(14, 6);
+    graphics.strokePath();
+    // Slight frown line
+    graphics.lineStyle(1, 0xcc9988, 0.5);
+    graphics.lineBetween(-10, 8, 10, 8);
+
+    // Chin definition
+    graphics.lineStyle(1, 0xd4a880, 0.3);
+    graphics.beginPath();
+    graphics.moveTo(-12, 18);
+    graphics.lineTo(0, 22);
+    graphics.lineTo(12, 18);
+    graphics.strokePath();
+
+    // Neck
+    graphics.fillStyle(0xe0c098, 1);
+    graphics.fillRect(-14, 24, 28, 22);
+
+    // Purple dress shirt — her signature outfit
+    graphics.fillStyle(0x5a1e8a, 1);
+    graphics.beginPath();
+    graphics.moveTo(-50, 42);
+    graphics.lineTo(-55, 95);
+    graphics.lineTo(55, 95);
+    graphics.lineTo(50, 42);
+    graphics.lineTo(30, 39);
+    graphics.lineTo(14, 42);
+    graphics.lineTo(0, 50);
+    graphics.lineTo(-14, 42);
+    graphics.lineTo(-30, 39);
+    graphics.lineTo(-50, 42);
+    graphics.closePath();
+    graphics.fillPath();
+
+    // Shirt collar / V-neckline
+    graphics.fillStyle(0x6b28a8, 1);
+    graphics.beginPath();
+    graphics.moveTo(-14, 42);
+    graphics.lineTo(0, 56);
+    graphics.lineTo(14, 42);
+    graphics.lineTo(10, 38);
+    graphics.lineTo(0, 48);
+    graphics.lineTo(-10, 38);
+    graphics.closePath();
+    graphics.fillPath();
+
+    // Collar points
+    graphics.fillStyle(0xe0c098, 1);
+    graphics.beginPath();
+    graphics.moveTo(-14, 42);
+    graphics.lineTo(0, 50);
+    graphics.lineTo(14, 42);
+    graphics.lineTo(8, 36);
+    graphics.lineTo(0, 42);
+    graphics.lineTo(-8, 36);
+    graphics.closePath();
+    graphics.fillPath();
+
+    // Shoulders
+    graphics.fillStyle(0x5a1e8a, 1);
+    graphics.fillRoundedRect(-65, 44, 22, 45, 6);
+    graphics.fillRoundedRect(43, 44, 22, 45, 6);
+
+    // Shirt wrinkle details
+    graphics.lineStyle(1, 0x4a1878, 0.4);
+    graphics.lineBetween(-20, 55, -8, 70);
+    graphics.lineBetween(20, 55, 8, 70);
+    graphics.lineBetween(-5, 60, 5, 75);
+
+    // Derringer pistol in hand
+    // Barrel
+    graphics.fillStyle(0x333333, 1);
+    graphics.fillRect(42, 58, 28, 6);
+    graphics.fillRect(42, 56, 28, 2);
+    // Barrel tip
+    graphics.fillStyle(0x222222, 1);
+    graphics.fillRect(68, 56, 4, 10);
+    // Receiver body
+    graphics.fillStyle(0x3a3a3a, 1);
+    graphics.fillRoundedRect(34, 56, 14, 14, 2);
+    // Grip (dark wood)
+    graphics.fillStyle(0x442200, 1);
+    graphics.beginPath();
+    graphics.moveTo(36, 68);
+    graphics.lineTo(32, 88);
+    graphics.lineTo(42, 90);
+    graphics.lineTo(46, 70);
+    graphics.closePath();
+    graphics.fillPath();
+    // Grip texture lines
+    graphics.lineStyle(1, 0x331a00, 0.6);
+    graphics.lineBetween(35, 74, 43, 75);
+    graphics.lineBetween(34, 80, 42, 81);
+    graphics.lineBetween(33, 86, 41, 87);
+    // Trigger guard
+    graphics.lineStyle(1.5, 0x444444, 1);
+    graphics.beginPath();
+    graphics.moveTo(40, 68);
+    graphics.lineTo(38, 76);
+    graphics.lineTo(44, 76);
+    graphics.lineTo(46, 68);
+    graphics.strokePath();
+    // Trigger
+    graphics.lineStyle(1, 0x555555, 1);
+    graphics.lineBetween(42, 70, 41, 74);
+    // Barrel highlight
+    graphics.lineStyle(0.5, 0x555555, 0.4);
+    graphics.lineBetween(44, 58, 68, 58);
+  }
+
   // ============================================
   // ENEMY EVENT HANDLERS
   // ============================================
@@ -10354,7 +11318,8 @@ export class GameScene extends Phaser.Scene {
     const isHeavy = reasonLower.includes('heavy');
     const isSoldier = reasonLower.includes('soldier') || reasonLower.includes('breached');
     const isSniper = reasonLower.includes('snipe') || reasonLower.includes('sniper');
-    const isPyro = reasonLower.includes('pyro') || reasonLower.includes('burned');
+    const isPyro = reasonLower.includes('pyro') || reasonLower.includes('burned') || reasonLower.includes('overheated');
+    const isPauling = reasonLower.includes('pauling') || reasonLower.includes('vent');
     
     // Create jumpscare container
     this.endScreen.removeAll(true);
@@ -10370,7 +11335,11 @@ export class GameScene extends Phaser.Scene {
     
     // Draw proper character model for jumpscare
     const enemyGraphics = this.add.graphics();
-    this.drawJumpscareSilhouette(enemyGraphics, isScout, isSoldier, isDemoman, isHeavy, isSniper, isPyro);
+    if (isPauling) {
+      this.drawPaulingJumpscare(enemyGraphics);
+    } else {
+      this.drawJumpscareSilhouette(enemyGraphics, isScout, isSoldier, isDemoman, isHeavy, isSniper, isPyro);
+    }
     jumpscareContainer.add(enemyGraphics);
     
     // Start small and zoom in fast
@@ -11493,9 +12462,10 @@ export class GameScene extends Phaser.Scene {
       // Check if player is watching Demoman's head
       // Can watch on cameras OR if head is in Intel room (cameras down = watching it)
       // BUT destroyed cameras don't count as watching!
+      // Viewing vents does NOT count as watching cameras
       let isWatchingHead = false;
       
-      if (this.isCameraMode) {
+      if (this.isCameraMode && !this.isVentCameraMode) {
         // Watching on camera - but only if camera is NOT destroyed
         const selectedCam = CAMERAS[this.selectedCamera];
         const camState = this.cameraStates.get(selectedCam.id);
@@ -11505,7 +12475,7 @@ export class GameScene extends Phaser.Scene {
           isWatchingHead = this.demoman.isHeadAtCamera(selectedCam.node);
         }
         // If camera is destroyed, we can't see Demoman's head even if it's there
-      } else {
+      } else if (!this.isCameraMode) {
         // Cameras down - if head is in Intel room, player is "watching" it
         isWatchingHead = this.demoman.isHeadInIntelRoom();
       }
@@ -11608,50 +12578,50 @@ export class GameScene extends Phaser.Scene {
       this.medic.update(delta);
     }
 
-    // Update Pauling (Custom Night only) - outside updateHeavyAndSniper so it runs even alone
-    if (this.isPaulingEnabled() && this.pauling && this.pauling.isActive()) {
+    // Update Administrator (Custom Night only) - outside updateHeavyAndSniper so it runs even alone
+    if (this.isAdministratorEnabled() && this.administrator && this.administrator.isActive()) {
       // Tick Mode 2 no-teleport timer (only when player is in Intel, not teleported)
       // Nightmare Mode: Mode 1 only — skip the fallback hack bar entirely
       if (!this.isNightmareMode && !this.isTeleported && !this.isTeleportAnimating) {
-        this.paulingNoTeleportTimer += delta;
+        this.administratorNoTeleportTimer += delta;
         if (
-          this.paulingNoTeleportTimer >= GAME_CONSTANTS.PAULING_NO_TELEPORT_THRESHOLD &&
-          this.pauling.getState() === 'WAITING'
+          this.administratorNoTeleportTimer >= GAME_CONSTANTS.ADMINISTRATOR_NO_TELEPORT_THRESHOLD &&
+          this.administrator.getState() === 'WAITING'
         ) {
-          this.paulingNoTeleportTimer = 0;
+          this.administratorNoTeleportTimer = 0;
           const excludedNodes = Array.from(this.hackedRooms.entries())
             .filter(([node, s]) => s.hacked || this.isNodeCameraDestroyed(node))
             .map(([node]) => node);
-          this.pauling.triggerFallbackHack(excludedNodes);
-          if (this.pauling.getState() === 'TARGETING') {
-            this.playPaulingTargetingSound();
+          this.administrator.triggerFallbackHack(excludedNodes);
+          if (this.administrator.getState() === 'TARGETING') {
+            this.playAdministratorTargetingSound();
           }
-          console.log('📋 Pauling Mode 2 fallback triggered (no teleport for 30s)');
+          console.log('📋 Administrator Mode 2 fallback triggered (no teleport for 30s)');
         }
       }
 
-      const paulingResult = this.pauling.update(delta);
-      if (paulingResult.hackComplete && paulingResult.targetNode) {
-        const hackedState = this.hackedRooms.get(paulingResult.targetNode);
+      const administratorResult = this.administrator.update(delta);
+      if (administratorResult.hackComplete && administratorResult.targetNode) {
+        const hackedState = this.hackedRooms.get(administratorResult.targetNode);
         if (hackedState && !hackedState.hacked) {
           // Only apply if not already hacked by Mode 1 mid-way through
           hackedState.hacked = true;
           hackedState.repairProgress = 0;
-          this.showAlert(`⚠ PAULING: ${paulingResult.targetNode.replace('_', ' ')} TELEPORTER HACKED`, 0xff4444);
+          this.showAlert(`⚠ ADMINISTRATOR: ${administratorResult.targetNode.replace('_', ' ')} TELEPORTER HACKED`, 0xff4444);
           this.updateHackedRoomMapIndicators();
-          this.playPaulingHackSound();
+          this.playAdministratorHackSound();
           if (this.isCameraMode) this.updateTeleportButtonAppearance();
         }
       }
 
       // Drive hold-to-repair via teleport button
-      if (this.isCameraMode && this.paulingRepairActive) {
+      if (this.isCameraMode && this.administratorRepairActive) {
         const cam = CAMERAS[this.selectedCamera];
         const hackedState = cam ? this.hackedRooms.get(cam.node) : null;
         if (hackedState && hackedState.hacked) {
-          hackedState.repairProgress += delta / GAME_CONSTANTS.PAULING_REPAIR_DURATION;
+          hackedState.repairProgress += delta / GAME_CONSTANTS.ADMINISTRATOR_REPAIR_DURATION;
           // Repair tick sound while holding
-          this.playPaulingRepairTickSound();
+          this.playAdministratorRepairTickSound();
           // Update bar fill
           if (this.teleportRepairBarFill) {
             this.teleportRepairBarFill.setScale(Math.min(hackedState.repairProgress, 1), 1);
@@ -11659,22 +12629,22 @@ export class GameScene extends Phaser.Scene {
           if (hackedState.repairProgress >= 1) {
             hackedState.hacked = false;
             hackedState.repairProgress = 0;
-            this.paulingRepairActive = false;
+            this.administratorRepairActive = false;
             if (this.teleportRepairBarFill) this.teleportRepairBarFill.setScale(0, 1);
             this.showAlert('Teleporter restored!', 0x00ff88);
-            this.playPaulingRepairCompleteSound();
+            this.playAdministratorRepairCompleteSound();
             this.updateHackedRoomMapIndicators();
             this.updateTeleportButtonAppearance();
           }
         } else {
           // Room no longer hacked (race condition guard)
-          this.paulingRepairActive = false;
+          this.administratorRepairActive = false;
         }
-      } else if (!this.paulingRepairActive) {
+      } else if (!this.administratorRepairActive) {
         // Decay repair progress on ALL hacked rooms whenever not actively repairing
         this.hackedRooms.forEach((hackedState) => {
           if (hackedState.hacked && hackedState.repairProgress > 0) {
-            hackedState.repairProgress = Math.max(0, hackedState.repairProgress - delta / (GAME_CONSTANTS.PAULING_REPAIR_DURATION * 2));
+            hackedState.repairProgress = Math.max(0, hackedState.repairProgress - delta / (GAME_CONSTANTS.ADMINISTRATOR_REPAIR_DURATION * 2));
           }
         });
         // Sync the repair bar visual for the currently viewed camera
@@ -11691,6 +12661,10 @@ export class GameScene extends Phaser.Scene {
       if (this.isCameraMode) this.updateTeleportButtonAppearance();
     }
 
+    // Update Pauling vent system and thermostat (Custom Night only)
+    this.updatePaulingAndThermostat(delta);
+    this.updateVentUI();
+
     // Update teleport danger check (always runs, regardless of which enemies are enabled)
     this.updateTeleportDanger(delta);
   }
@@ -11704,7 +12678,8 @@ export class GameScene extends Phaser.Scene {
     const heavyEnabled = this.isHeavyEnabled();
     const sniperEnabled = this.isSniperEnabled();
     // Track if player is watching Heavy/Sniper on camera
-    if (this.isCameraMode) {
+    // Viewing vents does NOT count as watching cameras
+    if (this.isCameraMode && !this.isVentCameraMode) {
       const selectedCam = CAMERAS[this.selectedCamera];
       const camState = this.cameraStates.get(selectedCam.id);
       

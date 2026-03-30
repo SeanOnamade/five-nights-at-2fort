@@ -211,11 +211,16 @@ export class BootScene extends Phaser.Scene {
       spy: false,
       pyro: false,
       medic: false,
+      administrator: false,
       pauling: false,
     };
     // Ensure medic key exists for older saved settings
     if (customNightEnemies.medic === undefined) {
       customNightEnemies.medic = false;
+    }
+    // Ensure administrator key exists for older saved settings
+    if (customNightEnemies.administrator === undefined) {
+      customNightEnemies.administrator = false;
     }
     // Ensure pauling key exists for older saved settings
     if (customNightEnemies.pauling === undefined) {
@@ -260,6 +265,7 @@ export class BootScene extends Phaser.Scene {
               spy: true,
               pyro: true,
               medic: true,
+              administrator: true,
               pauling: true,
             }
           });
@@ -277,6 +283,7 @@ export class BootScene extends Phaser.Scene {
               spy: true,
               pyro: true,
               medic: true,
+              administrator: false,
               pauling: false,
             }
           });
@@ -871,7 +878,7 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5);
     customNightUI.add(customTitle);
     
-    const enemyTypes = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy', 'pyro', 'medic', 'pauling'] as const;
+    const enemyTypes = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy', 'pyro', 'medic', 'administrator', 'pauling'] as const;
     const enemyColors: Record<string, number> = {
       scout: 0x7755aa,
       soldier: 0x6688aa,
@@ -881,15 +888,16 @@ export class BootScene extends Phaser.Scene {
       spy: 0x666677,
       pyro: 0xdd6622,
       medic: 0xff4444,
-      pauling: 0xff0088,
+      administrator: 0xff0088,
+      pauling: 0x9944cc,
     };
     const enemyLabels: Record<string, string> = {
       scout: 'SCT', soldier: 'SOL', demoman: 'DEM', heavy: 'HVY',
-      sniper: 'SNP', spy: 'SPY', pyro: 'PYR', medic: 'MED', pauling: 'PAU',
+      sniper: 'SNP', spy: 'SPY', pyro: 'PYR', medic: 'MED', administrator: 'ADM', pauling: 'PAU',
     };
     
     enemyTypes.forEach((enemy, i) => {
-      const ex = -240 + i * 60;
+      const ex = -270 + i * 60;
       const ey = 10;
       
       const toggleBg = this.add.rectangle(ex, ey, 55, 28, enemyColors[enemy], 0.5);

@@ -1,163 +1,168 @@
 /**
- * PaulingEnemy - Custom Night Enemy
+ * PaulingEnemy - Custom Night Vent Infiltrator
  *
- * Ms. Pauling is the Administrator's cleaner. She never enters the base directly —
- * she's not going anywhere near the infected mercs. Instead she works remotely,
- * hacking teleporter nodes to cut off Engineer's escape routes and mobility.
+ * Ms. Pauling crawls silently through a horseshoe-shaped vent system toward Intel.
+ * She makes absolutely no sound — the only way to track her is via the vent cameras.
+ * The player must seal the correct vent opening before she drops in.
  *
- * LORE: Pauling was the last person to see Sniper before he turned. Engineer is
- * getting close to the truth, and she needs to silence him before he puts it together.
+ * VENT LAYOUT (9 traversable nodes, big horseshoe):
+ *   VENT_ENTRY -> VENT_MID -> VENT_JUNCTION
+ *     -> VENT_LEFT_UPPER -> VENT_LEFT_LOWER -> VENT_LEFT_OPENING
+ *     -> VENT_RIGHT_UPPER -> VENT_RIGHT_LOWER -> VENT_RIGHT_OPENING
  *
- * MECHANICS — two modes:
- *
- * MODE 1 (triggered by GameScene on return to Intel):
- *   - Instantly hacks the last room the player teleported to — no warning, no counterplay
- *   - GameScene enforces a 1-per-hour cap and picks a fallback room if needed
- *
- * MODE 2 (fallback — triggered by GameScene after 60s without a player teleport):
- *   - Uses the TARGETING/HACKING bar system on a random camera
- *   - TARGETING: empty grey bar visible; player can scare her off by teleporting there
- *   - HACKING: bar fills pink over 8s; click bar once to interrupt
- *   - Does NOT count toward the Mode 1 hour cap
+ * When blocked, she always retreats all the way back to VENT_ENTRY and starts over.
  */
 
-import { NodeId, GAME_CONSTANTS } from '../types';
+import { VentNodeId, GAME_CONSTANTS } from '../types';
 
-export type PaulingState = 'WAITING' | 'TARGETING' | 'HACKING' | 'SCARED' | 'INACTIVE';
+export type PaulingVentState = 'INACTIVE' | 'WAITING' | 'MOVING' | 'PRYING' | 'REROUTING' | 'ENTERED';
+
+export type VentSide = 'LEFT' | 'RIGHT';
+
+const PATH_TO_LEFT: VentNodeId[] = [
+  'VENT_ENTRY', 'VENT_MID', 'VENT_JUNCTION',
+  'VENT_LEFT_UPPER', 'VENT_LEFT_LOWER', 'VENT_LEFT_OPENING',
+];
+const PATH_TO_RIGHT: VentNodeId[] = [
+  'VENT_ENTRY', 'VENT_MID', 'VENT_JUNCTION',
+  'VENT_RIGHT_UPPER', 'VENT_RIGHT_LOWER', 'VENT_RIGHT_OPENING',
+];
+
+const REROUTE_FROM_LEFT: VentNodeId[] = [
+  'VENT_LEFT_OPENING', 'VENT_LEFT_LOWER', 'VENT_LEFT_UPPER',
+  'VENT_JUNCTION', 'VENT_MID', 'VENT_ENTRY',
+];
+const REROUTE_FROM_RIGHT: VentNodeId[] = [
+  'VENT_RIGHT_OPENING', 'VENT_RIGHT_LOWER', 'VENT_RIGHT_UPPER',
+  'VENT_JUNCTION', 'VENT_MID', 'VENT_ENTRY',
+];
 
 export class PaulingEnemy {
-  private state: PaulingState = 'INACTIVE';
+  private state: PaulingVentState = 'INACTIVE';
+  private currentNode: VentNodeId = 'VENT_ENTRY';
 
-  // The node she is currently targeting for a hack (Mode 2 only)
-  private targetNode: NodeId | null = null;
+  private currentPath: VentNodeId[] = [];
+  private pathIndex: number = 0;
 
-  // TARGETING: warning window before the hack actually starts (Mode 2)
-  private warnTimer: number = 0;
-  private warnDuration: number = 0;
+  private waitTimer: number = 0;
+  private waitDuration: number = 0;
+  private moveTimer: number = 0;
+  private pryTimer: number = 0;
 
-  // HACKING: fill progress (Mode 2)
-  private hackTimer: number = 0;
+  private targetSide: VentSide | null = null;
 
-  // SCARED: cooldown after teleport scare (Mode 2)
-  private scaredTimer: number = 0;
+  constructor() {}
 
-  // Valid rooms she can target — outer rooms only, never hallways or Intel
-  public static readonly VALID_ROOMS: NodeId[] = [
-    'BRIDGE', 'COURTYARD', 'GRATE', 'SEWER', 'STAIRCASE', 'SPIRAL', 'LEFT_HALL', 'RIGHT_HALL',
-  ];
-
-  constructor() {
-    // Stays INACTIVE until activate() is called
-  }
-
-  /**
-   * Activate Pauling (called when Custom Night starts with her enabled)
-   */
   public activate(): void {
     this.state = 'WAITING';
-    console.log('📋 Ms. Pauling activated — watching the base remotely');
+    this.currentNode = 'VENT_ENTRY';
+    this.targetSide = null;
+    this.currentPath = [...PATH_TO_LEFT];
+    this.pathIndex = 0;
+    this.pickWaitDuration();
+    console.log('📋 Pauling activated — entering the vents silently');
   }
 
-  /**
-   * Main update loop — called every frame from GameScene.
-   * Only advances TARGETING / HACKING / SCARED states.
-   * Mode 1 hacks are applied directly by GameScene (instant, no update needed).
-   */
-  public update(delta: number): { hackComplete: boolean; targetNode: NodeId | null } {
-    const result = { hackComplete: false, targetNode: null as NodeId | null };
+  public update(delta: number): { arrivedAtOpening: VentSide | null; entered: boolean } {
+    const result = { arrivedAtOpening: null as VentSide | null, entered: false };
 
     switch (this.state) {
-      case 'WAITING':
-        // Idle — waiting for GameScene to trigger Mode 1 or Mode 2
-        break;
-
-      case 'TARGETING':
-        // Mode 2: grey bar visible; player can scare her off by teleporting here
-        this.warnTimer += delta;
-        if (this.warnTimer >= this.warnDuration) {
-          this.state = 'HACKING';
-          this.hackTimer = 0;
-          console.log(`📋 Pauling began hacking ${this.targetNode}!`);
+      case 'WAITING': {
+        this.waitTimer += delta;
+        if (this.waitTimer >= this.waitDuration) {
+          this.state = 'MOVING';
+          this.moveTimer = 0;
         }
         break;
+      }
 
-      case 'HACKING':
-        this.hackTimer += delta;
-        if (this.hackTimer >= GAME_CONSTANTS.PAULING_HACK_DURATION) {
-          result.hackComplete = true;
-          result.targetNode = this.targetNode;
-          console.log(`📋 Pauling hacked ${this.targetNode}! Teleporter offline.`);
-          this.targetNode = null;
-          this.state = 'WAITING';
+      case 'MOVING': {
+        this.moveTimer += delta;
+        if (this.moveTimer >= GAME_CONSTANTS.PAULING_MOVE_INTERVAL_MIN) {
+          this.moveTimer = 0;
+          this.advanceOnPath();
+
+          if (this.currentNode === 'VENT_LEFT_OPENING') {
+            result.arrivedAtOpening = 'LEFT';
+            this.targetSide = 'LEFT';
+          } else if (this.currentNode === 'VENT_RIGHT_OPENING') {
+            result.arrivedAtOpening = 'RIGHT';
+            this.targetSide = 'RIGHT';
+          } else if (this.currentNode === 'VENT_JUNCTION' && this.state === 'MOVING') {
+            this.pickSideAtJunction();
+            this.state = 'WAITING';
+            this.pickWaitDuration();
+          } else {
+            this.state = 'WAITING';
+            this.pickWaitDuration();
+          }
         }
         break;
+      }
 
-      case 'SCARED':
-        this.scaredTimer += delta;
-        if (this.scaredTimer >= GAME_CONSTANTS.PAULING_SCARE_COOLDOWN) {
-          this.state = 'WAITING';
-          console.log('📋 Pauling recovered — waiting for next opportunity');
+      case 'PRYING': {
+        this.pryTimer += delta;
+        if (this.pryTimer >= GAME_CONSTANTS.PAULING_PRY_TIME) {
+          this.state = 'ENTERED';
+          result.entered = true;
+          console.log('📋 Pauling dropped into Intel from the vents!');
         }
         break;
+      }
+
+      case 'REROUTING': {
+        this.moveTimer += delta;
+        if (this.moveTimer >= GAME_CONSTANTS.PAULING_REROUTE_SPEED) {
+          this.moveTimer = 0;
+          this.advanceOnPath();
+
+          if (this.currentNode === 'VENT_ENTRY') {
+            this.currentPath = [...PATH_TO_LEFT];
+            this.pathIndex = 0;
+            this.state = 'WAITING';
+            this.pickWaitDuration();
+            this.targetSide = null;
+            console.log('📋 Pauling retreated to ENTRY, restarting approach');
+          }
+        }
+        break;
+      }
 
       case 'INACTIVE':
+      case 'ENTERED':
         break;
     }
 
     return result;
   }
 
-  /**
-   * MODE 2: Start targeting a random room with the visible hack bar.
-   * Called by GameScene when the player hasn't teleported for PAULING_NO_TELEPORT_THRESHOLD ms.
-   * @param alreadyHacked - rooms that are already hacked and should be excluded
-   * @param excludeNode - additional room to exclude (e.g. avoid retargeting same room)
-   */
-  public triggerFallbackHack(alreadyHacked: NodeId[] = [], excludeNode?: NodeId): void {
-    if (this.state !== 'WAITING') return; // already busy with Mode 2
-
-    const candidates = PaulingEnemy.VALID_ROOMS.filter(r => {
-      if (alreadyHacked.includes(r)) return false;
-      if (excludeNode && r === excludeNode) return false;
-      return true;
-    });
-
-    if (candidates.length === 0) return; // all rooms already hacked
-
-    this.targetNode = candidates[Math.floor(Math.random() * candidates.length)];
-    this.state = 'TARGETING';
-    this.warnTimer = 0;
-    this.pickWarnDuration();
-    console.log(`📋 Pauling (Mode 2) targeting ${this.targetNode} — hack begins in ${(this.warnDuration / 1000).toFixed(1)}s`);
+  public startPrying(): void {
+    this.state = 'PRYING';
+    this.pryTimer = 0;
+    console.log(`📋 Pauling prying open ${this.currentNode}...`);
   }
 
   /**
-   * Called when the player teleports to Pauling's target room during TARGETING phase (Mode 2).
+   * When blocked, she always retreats all the way back to VENT_ENTRY.
    */
-  public scarePauling(): void {
-    if (this.state !== 'TARGETING') return;
-    console.log(`📋 Pauling scared off from ${this.targetNode}! She'll try elsewhere.`);
-    this.targetNode = null;
-    this.state = 'SCARED';
-    this.scaredTimer = 0;
+  public blockAndReroute(): void {
+    console.log(`📋 Pauling blocked at ${this.currentNode}! Retreating to ENTRY...`);
+
+    const side = this.getOpeningSide();
+    if (side === 'LEFT') {
+      this.currentPath = [...REROUTE_FROM_LEFT];
+    } else {
+      this.currentPath = [...REROUTE_FROM_RIGHT];
+    }
+    this.pathIndex = 0;
+    this.state = 'REROUTING';
+    this.moveTimer = 0;
   }
 
-  /**
-   * Called when the player clicks the hack bar during HACKING phase (Mode 2).
-   */
-  public interruptHack(): void {
-    if (this.state !== 'HACKING') return;
-    console.log(`📋 Pauling's hack on ${this.targetNode} was interrupted!`);
-    this.targetNode = null;
-    this.state = 'WAITING';
-  }
-
-  /**
-   * Permanently deactivate (for Custom Night with Pauling disabled)
-   */
   public forceDespawn(): void {
     this.state = 'INACTIVE';
-    this.targetNode = null;
+    this.currentNode = 'VENT_ENTRY';
+    this.targetSide = null;
     console.log('📋 Pauling force despawned');
   }
 
@@ -165,46 +170,62 @@ export class PaulingEnemy {
   // Getters
   // ============================================================
 
-  public getState(): PaulingState {
-    return this.state;
+  public getState(): PaulingVentState { return this.state; }
+  public getCurrentNode(): VentNodeId { return this.currentNode; }
+  public getTargetSide(): VentSide | null { return this.targetSide; }
+  public isActive(): boolean { return this.state !== 'INACTIVE'; }
+
+  public isAtOpening(): boolean {
+    return this.currentNode === 'VENT_LEFT_OPENING' || this.currentNode === 'VENT_RIGHT_OPENING';
   }
 
-  public getCurrentTarget(): NodeId | null {
-    return this.targetNode;
+  public getOpeningSide(): VentSide | null {
+    if (this.currentNode === 'VENT_LEFT_OPENING') return 'LEFT';
+    if (this.currentNode === 'VENT_RIGHT_OPENING') return 'RIGHT';
+    return null;
   }
 
-  /**
-   * Returns hack progress 0-1 during HACKING state, 0 otherwise.
-   * Returns 0 during TARGETING (bar is shown empty as a warning).
-   */
-  public getHackProgress(): number {
-    if (this.state !== 'HACKING') return 0;
-    return Math.min(this.hackTimer / GAME_CONSTANTS.PAULING_HACK_DURATION, 1);
+  public getPryProgress(): number {
+    if (this.state !== 'PRYING') return 0;
+    return Math.min(this.pryTimer / GAME_CONSTANTS.PAULING_PRY_TIME, 1);
   }
 
-  public isActive(): boolean {
-    return this.state !== 'INACTIVE';
+  public getDebugInfo(): string {
+    if (this.state === 'INACTIVE') return 'Pauling: INACTIVE';
+    if (this.state === 'ENTERED') return 'Pauling: ENTERED (game over)';
+    const side = this.targetSide ? ` [${this.targetSide}]` : '';
+    if (this.state === 'PRYING') return `Pauling: PRYING ${this.currentNode} (${(this.getPryProgress() * 100).toFixed(0)}%)${side}`;
+    return `Pauling: ${this.state} at ${this.currentNode}${side}`;
   }
 
   // ============================================================
   // Internal helpers
   // ============================================================
 
-  private pickWarnDuration(): void {
-    const min = GAME_CONSTANTS.PAULING_WARN_DURATION_MIN;
-    const max = GAME_CONSTANTS.PAULING_WARN_DURATION_MAX;
-    this.warnDuration = min + Math.random() * (max - min);
+  private pickWaitDuration(): void {
+    const min = GAME_CONSTANTS.PAULING_MOVE_INTERVAL_MIN;
+    const max = GAME_CONSTANTS.PAULING_MOVE_INTERVAL_MAX;
+    this.waitDuration = min + Math.random() * (max - min);
+    this.waitTimer = 0;
   }
 
-  /**
-   * Debug info string
-   */
-  public getDebugInfo(): string {
-    if (this.state === 'INACTIVE') return 'Pauling: INACTIVE';
-    if (this.state === 'WAITING') return 'Pauling: WAITING';
-    if (this.state === 'TARGETING') return `Pauling: TARGETING ${this.targetNode} (${((this.warnDuration - this.warnTimer) / 1000).toFixed(1)}s to hack)`;
-    if (this.state === 'HACKING') return `Pauling: HACKING ${this.targetNode} (${(this.getHackProgress() * 100).toFixed(0)}%)`;
-    if (this.state === 'SCARED') return `Pauling: SCARED (${((GAME_CONSTANTS.PAULING_SCARE_COOLDOWN - this.scaredTimer) / 1000).toFixed(1)}s)`;
-    return 'Pauling: UNKNOWN';
+  private advanceOnPath(): void {
+    if (this.pathIndex < this.currentPath.length - 1) {
+      this.pathIndex++;
+      this.currentNode = this.currentPath[this.pathIndex];
+    }
+  }
+
+  private pickSideAtJunction(): void {
+    const side: VentSide = Math.random() < 0.5 ? 'LEFT' : 'RIGHT';
+    this.targetSide = side;
+
+    if (side === 'LEFT') {
+      this.currentPath = [...PATH_TO_LEFT];
+      this.pathIndex = PATH_TO_LEFT.indexOf('VENT_JUNCTION');
+    } else {
+      this.currentPath = [...PATH_TO_RIGHT];
+      this.pathIndex = PATH_TO_RIGHT.indexOf('VENT_JUNCTION');
+    }
   }
 }
