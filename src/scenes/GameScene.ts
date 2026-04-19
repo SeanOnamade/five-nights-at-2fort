@@ -382,6 +382,9 @@ export class GameScene extends Phaser.Scene {
   private dispenserHumOscillator2: OscillatorNode | null = null;
   private dispenserHumGain: GainNode | null = null;
   
+  // 2Fort Intel room ambience (loops while in Intel; not tied to wrangler aim focus mute)
+  private intelRoomAmbience: HTMLAudioElement | null = null;
+  
   // End screen
   private endScreen!: Phaser.GameObjects.Container;
   
@@ -597,6 +600,7 @@ export class GameScene extends Phaser.Scene {
     this.stopSniperLaserHum();
     this.stopSapperSound();
     this.stopDispenserHum();
+    this.disposeIntelRoomAmbience();
     
     // Reset Engineer recording state
     this.recordingStartTimer = 0;
@@ -630,6 +634,7 @@ export class GameScene extends Phaser.Scene {
    * Cleanup when scene shuts down
    */
   private cleanup(): void {
+    this.disposeIntelRoomAmbience();
     this.stopDetectionSound();
     this.events.off('scoutAtDoor');
     this.events.off('soldierAtDoor');
@@ -922,6 +927,7 @@ export class GameScene extends Phaser.Scene {
     
     // Start ambient dispenser hum in Intel room
     this.startDispenserHum();
+    this.startIntelRoomAmbience();
   }
   
   // ============================================
@@ -3086,6 +3092,7 @@ export class GameScene extends Phaser.Scene {
       
       // Stop dispenser hum when leaving Intel room
       this.stopDispenserHum();
+      this.stopIntelRoomAmbience();
       
       // Reset aim states (important for mobile touch zones)
       this.keyADown = false;
@@ -3191,6 +3198,7 @@ export class GameScene extends Phaser.Scene {
       
       // Resume dispenser hum when back in Intel room
       this.startDispenserHum();
+      this.startIntelRoomAmbience();
       
       console.log('Engineer returned to Intel room');
       
@@ -8490,6 +8498,7 @@ export class GameScene extends Phaser.Scene {
       this.playPauseSound();
       this.stopDetectionSound();
       this.stopDispenserHum();
+      this.stopIntelRoomAmbience();
       this.stopSniperLaserHum();
       this.stopPyroCracklingAmbient();
       this.stopMedicGhostScream();  // Stop ghost scream during pause
@@ -8510,6 +8519,7 @@ export class GameScene extends Phaser.Scene {
       // Resume dispenser hum if in Intel room (plays even with cameras up)
       if (!this.isTeleported) {
         this.startDispenserHum();
+        this.startIntelRoomAmbience();
       }
       // Resume Engineer recording if it was playing
       if (this.recordingAudio && this.isRecordingPlaying) {
@@ -8872,7 +8882,7 @@ export class GameScene extends Phaser.Scene {
       
       // Main gain node
       this.dispenserHumGain = audioContext.createGain();
-      this.dispenserHumGain.gain.setValueAtTime(0.08, audioContext.currentTime);
+      this.dispenserHumGain.gain.setValueAtTime(0.028, audioContext.currentTime);
       this.dispenserHumGain.connect(audioContext.destination);
       
       // Primary low hum (electrical transformer sound)
@@ -8887,7 +8897,7 @@ export class GameScene extends Phaser.Scene {
       this.dispenserHumOscillator2.frequency.setValueAtTime(200, audioContext.currentTime);
       
       const secondaryGain = audioContext.createGain();
-      secondaryGain.gain.setValueAtTime(0.04, audioContext.currentTime);
+      secondaryGain.gain.setValueAtTime(0.014, audioContext.currentTime);
       secondaryGain.connect(audioContext.destination);
       this.dispenserHumOscillator2.connect(secondaryGain);
       
@@ -8934,6 +8944,56 @@ export class GameScene extends Phaser.Scene {
       // Already stopped
     }
     this.isPlayingDispenserHum = false;
+  }
+  
+  /**
+   * Looping 2Fort Intel room ambience (HTMLAudio). Keeps playing while wrangler aim mutes the synthetic hum.
+   */
+  private startIntelRoomAmbience(): void {
+    if (this.isTeleported || this.isPaused || this.gameStatus !== 'PLAYING') return;
+    
+    try {
+      if (!this.intelRoomAmbience) {
+        const audio = new Audio('./audio/intel-room-ambience.mp3');
+        audio.loop = true;
+        audio.volume = 0.38;
+        const tryPlay = (): void => {
+          if (this.intelRoomAmbience !== audio) return;
+          if (this.isTeleported || this.isPaused || this.gameStatus !== 'PLAYING') return;
+          void audio.play().catch(() => {});
+        };
+        audio.addEventListener('canplaythrough', tryPlay, { once: true });
+        audio.addEventListener('error', () => {
+          console.log('[Audio] Intel room ambience failed to load');
+        });
+        this.intelRoomAmbience = audio;
+        audio.load();
+        return;
+      }
+      if (this.intelRoomAmbience.paused) {
+        void this.intelRoomAmbience.play().catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+  }
+  
+  private stopIntelRoomAmbience(): void {
+    if (!this.intelRoomAmbience) return;
+    try {
+      this.intelRoomAmbience.pause();
+    } catch {
+      // ignore
+    }
+  }
+  
+  private disposeIntelRoomAmbience(): void {
+    this.stopIntelRoomAmbience();
+    if (this.intelRoomAmbience) {
+      this.intelRoomAmbience.src = '';
+      this.intelRoomAmbience.load();
+      this.intelRoomAmbience = null;
+    }
   }
   
   /**
@@ -9240,6 +9300,7 @@ export class GameScene extends Phaser.Scene {
     this.stopDemoEyeGlowSound();
     this.stopApproachGrowl();
     this.stopDispenserHum();
+    this.disposeIntelRoomAmbience();
     this.stopPyroCracklingAmbient();
     
     // Force stop any oscillators that might still be running
