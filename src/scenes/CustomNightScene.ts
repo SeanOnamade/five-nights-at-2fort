@@ -29,6 +29,7 @@ const ENEMY_DISPLAY: Record<CustomNightEnemyId, string> = {
   medic: 'MEDIC',
   administrator: 'ADMIN',
   pauling: 'PAULING',
+  merasmus: 'MERASMUS',
 };
 
 /** Merc silhouettes drawn via `drawCharacterSilhouette` (Spy/Medic/Pauling use dedicated art). */
@@ -42,6 +43,7 @@ const SILHOUETTE_NAME: Record<PortraitSilhouetteId, string> = {
   sniper: 'SNIPER',
   pyro: 'PYRO',
   administrator: 'ADMINISTRATOR',
+  merasmus: 'MERASMUS',
 };
 
 const ENEMY_ACCENT: Record<CustomNightEnemyId, number> = {
@@ -55,6 +57,7 @@ const ENEMY_ACCENT: Record<CustomNightEnemyId, number> = {
   medic: 0xff4444,
   administrator: 0xff0088,
   pauling: 0x9944cc,
+  merasmus: 0x8866dd,
 };
 
 /**
@@ -111,14 +114,14 @@ export class CustomNightScene extends Phaser.Scene {
     const gapY = 22;
     const gridW = cols * cardW + (cols - 1) * gapX;
     const originX = (width - gridW) / 2 + cardW / 2;
-    const row1Y = 200;
-    const row2Y = row1Y + cardH + gapY;
+    const row1Y = 168;
+    const rowPitch = cardH + gapY;
 
     CUSTOM_NIGHT_ENEMY_ORDER.forEach((id, index) => {
       const col = index % cols;
-      const row = index < cols ? 0 : 1;
+      const row = Math.floor(index / cols);
       const cx = originX + col * (cardW + gapX);
-      const cy = row === 0 ? row1Y : row2Y;
+      const cy = row1Y + row * rowPitch;
 
       const frame = this.add.rectangle(cx, cy, cardW + 6, cardH + 6, 0x000000, 0.35);
       frame.setStrokeStyle(2, 0x333344);

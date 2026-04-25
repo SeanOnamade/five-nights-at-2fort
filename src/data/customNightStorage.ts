@@ -8,7 +8,8 @@ export type CustomNightEnemyId =
   | 'pyro'
   | 'medic'
   | 'administrator'
-  | 'pauling';
+  | 'pauling'
+  | 'merasmus';
 
 export const CUSTOM_NIGHT_ENEMY_ORDER: CustomNightEnemyId[] = [
   'scout',
@@ -21,6 +22,7 @@ export const CUSTOM_NIGHT_ENEMY_ORDER: CustomNightEnemyId[] = [
   'medic',
   'administrator',
   'pauling',
+  'merasmus',
 ];
 
 export function defaultCustomNightEnemies(): Record<CustomNightEnemyId, boolean> {
@@ -35,6 +37,7 @@ export function defaultCustomNightEnemies(): Record<CustomNightEnemyId, boolean>
     medic: false,
     administrator: false,
     pauling: false,
+    merasmus: false,
   };
 }
 

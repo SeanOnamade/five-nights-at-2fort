@@ -246,6 +246,7 @@ export class BootScene extends Phaser.Scene {
               medic: true,
               administrator: true,
               pauling: true,
+              merasmus: false,
             }
           });
         } else if (isBadEndingNight6) {
@@ -264,6 +265,7 @@ export class BootScene extends Phaser.Scene {
               medic: true,
               administrator: false,
               pauling: false,
+              merasmus: false,
             }
           });
         } else {

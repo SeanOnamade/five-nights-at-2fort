@@ -66,11 +66,14 @@
  * LOSE: Enemy enters Intel Room with no sentry
  */
 
+import { inject } from '@vercel/analytics';
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { CustomNightScene } from './scenes/CustomNightScene';
 import { GameScene } from './scenes/GameScene';
 import { isMobileDevice, isLandscape, onOrientationChange } from './utils/mobile';
+
+inject();
 
 // =============================================
 // MOBILE ORIENTATION HANDLING

@@ -1007,5 +1007,164 @@ export function drawCharacterSilhouette(
         graphics.lineStyle(0, 0x000000, 0);
         break;
       }
+
+      case 'MERASMUS': {
+        // TF2 Merasmus read: ram/goat skull headdress, heavy cowl, floor robes, crooked staff, sickly green magic
+        const magic = 0x44ff66;
+        const magicDim = 0x22aa44;
+        const robe = 0x121018;
+        const robeMid = 0x1c1828;
+        const horn = 0x2a2420;
+        const hornHi = 0x3d3834;
+        const staff = 0x4a3528;
+        const staffHi = 0x6a5040;
+
+        graphics.fillStyle(magic, 0.14);
+        graphics.fillCircle(x, y - 20, 88);
+        graphics.fillStyle(magic, 0.08);
+        graphics.fillEllipse(x, y + 10, 100, 120);
+
+        graphics.fillStyle(0x000000, 0.45);
+        graphics.fillEllipse(x, y + 62, 48, 12);
+
+        // Robes (wide, heavy drape)
+        graphics.fillStyle(robe, 1);
+        graphics.beginPath();
+        graphics.moveTo(x, y - 18);
+        graphics.lineTo(x - 46, y + 58);
+        graphics.lineTo(x + 46, y + 58);
+        graphics.closePath();
+        graphics.fillPath();
+        graphics.fillStyle(robeMid, 0.55);
+        graphics.beginPath();
+        graphics.moveTo(x, y - 12);
+        graphics.lineTo(x - 14, y + 50);
+        graphics.lineTo(x + 14, y + 50);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Cowl / shoulders hump under skull
+        graphics.fillStyle(0x0e0c14, 1);
+        graphics.beginPath();
+        graphics.moveTo(x - 34, y - 8);
+        graphics.lineTo(x - 28, y - 28);
+        graphics.lineTo(x + 28, y - 28);
+        graphics.lineTo(x + 34, y - 8);
+        graphics.lineTo(x + 22, y + 6);
+        graphics.lineTo(x - 22, y + 6);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Crooked wooden staff (left of body)
+        graphics.lineStyle(7, staff, 1);
+        graphics.beginPath();
+        graphics.moveTo(x - 52, y + 48);
+        graphics.lineTo(x - 44, y + 8);
+        graphics.lineTo(x - 40, y - 18);
+        graphics.lineTo(x - 36, y - 48);
+        graphics.strokePath();
+        graphics.lineStyle(2, staffHi, 0.7);
+        graphics.beginPath();
+        graphics.moveTo(x - 49, y + 40);
+        graphics.lineTo(x - 42, y - 5);
+        graphics.lineTo(x - 38, y - 44);
+        graphics.strokePath();
+        graphics.lineStyle(0, 0x000000, 0);
+        graphics.fillStyle(0x553322, 1);
+        graphics.fillCircle(x - 36, y - 52, 5);
+
+        // Skull base (weathered bone mass under horns)
+        graphics.fillStyle(0x353028, 1);
+        graphics.beginPath();
+        graphics.moveTo(x - 20, y - 58);
+        graphics.lineTo(x + 20, y - 58);
+        graphics.lineTo(x + 22, y - 38);
+        graphics.lineTo(x + 14, y - 28);
+        graphics.lineTo(x - 14, y - 28);
+        graphics.lineTo(x - 22, y - 38);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Snout / jaw wedge
+        graphics.fillStyle(0x2a2520, 1);
+        graphics.beginPath();
+        graphics.moveTo(x - 12, y - 32);
+        graphics.lineTo(x + 12, y - 32);
+        graphics.lineTo(x + 8, y - 18);
+        graphics.lineTo(x, y - 14);
+        graphics.lineTo(x - 8, y - 18);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Large backward-curving horns (iconic TF2 read)
+        graphics.fillStyle(horn, 1);
+        graphics.beginPath();
+        graphics.moveTo(x - 14, y - 62);
+        graphics.lineTo(x - 52, y - 88);
+        graphics.lineTo(x - 46, y - 94);
+        graphics.lineTo(x - 10, y - 70);
+        graphics.closePath();
+        graphics.fillPath();
+        graphics.beginPath();
+        graphics.moveTo(x + 14, y - 62);
+        graphics.lineTo(x + 52, y - 88);
+        graphics.lineTo(x + 46, y - 94);
+        graphics.lineTo(x + 10, y - 70);
+        graphics.closePath();
+        graphics.fillPath();
+        graphics.fillStyle(hornHi, 0.35);
+        graphics.beginPath();
+        graphics.moveTo(x - 18, y - 64);
+        graphics.lineTo(x - 44, y - 82);
+        graphics.lineTo(x - 38, y - 86);
+        graphics.lineTo(x - 12, y - 68);
+        graphics.closePath();
+        graphics.fillPath();
+        graphics.beginPath();
+        graphics.moveTo(x + 18, y - 64);
+        graphics.lineTo(x + 44, y - 82);
+        graphics.lineTo(x + 38, y - 86);
+        graphics.lineTo(x + 12, y - 68);
+        graphics.closePath();
+        graphics.fillPath();
+
+        // Horn ridges (segmented look)
+        graphics.lineStyle(2, 0x1a1814, 0.6);
+        graphics.beginPath();
+        graphics.moveTo(x - 32, y - 80);
+        graphics.lineTo(x - 40, y - 86);
+        graphics.strokePath();
+        graphics.beginPath();
+        graphics.moveTo(x + 32, y - 80);
+        graphics.lineTo(x + 40, y - 86);
+        graphics.strokePath();
+        graphics.lineStyle(0, 0x000000, 0);
+
+        // Gaunt eye sockets / magic glow
+        graphics.fillStyle(magicDim, 0.55);
+        graphics.fillEllipse(x - 9, y - 44, 10, 8);
+        graphics.fillEllipse(x + 9, y - 44, 10, 8);
+        graphics.fillStyle(magic, 0.75);
+        graphics.fillEllipse(x - 9, y - 44, 5, 4);
+        graphics.fillEllipse(x + 9, y - 44, 5, 4);
+
+        // Raised hand casting (simple claw + spark)
+        graphics.fillStyle(robeMid, 1);
+        graphics.fillEllipse(x + 28, y - 12, 14, 22);
+        graphics.fillStyle(magic, 0.35);
+        graphics.fillCircle(x + 38, y - 22, 10);
+        graphics.fillStyle(magic, 0.55);
+        graphics.fillCircle(x + 42, y - 26, 4);
+
+        // Bombinomicon hint (small tome at side)
+        graphics.fillStyle(0x1a1018, 1);
+        graphics.fillRoundedRect(x + 24, y + 8, 14, 18, 2);
+        graphics.fillStyle(0xeeddcc, 0.25);
+        graphics.fillEllipse(x + 31, y + 14, 6, 5);
+
+        graphics.fillStyle(_color, 0.1);
+        graphics.fillCircle(x, y - 36, 48);
+        break;
+      }
     }
 }

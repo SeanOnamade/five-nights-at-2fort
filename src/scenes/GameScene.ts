@@ -31,6 +31,7 @@ import {
   drawMedicGhostSilhouette,
   drawPaulingJumpscarePortrait,
 } from '../drawing/medicPaulingPortraits';
+import { drawCharacterSilhouette } from '../drawing/characterSilhouettes';
 
 /**
  * GameScene - Main gameplay scene for Night 1
@@ -214,7 +215,19 @@ export class GameScene extends Phaser.Scene {
     medic: boolean;
     administrator: boolean;
     pauling: boolean;
+    merasmus: boolean;
   } | null = null;
+
+  /**
+   * Merasmus (Custom Night only when `customEnemies.merasmus` is true).
+   * Does not touch enemy logic, Spy, Administrator, etc. — only DOM mirror, optional pointer wrap, A/D remap, and queue.
+   */
+  private merasmusScreenMirrored = false;
+  private merasmusPendingFlip: Array<'on' | 'off'> = [];
+  private merasmusHasQueuedPost2AM = false;
+  private merasmusHasQueuedPost4AM = false;
+  /** Stock Phaser pointer mapper; restored on shutdown so DOM mirror + X invert stay in sync */
+  private merasmusStockTransformPointer: Phaser.Input.InputManager['transformPointer'] | null = null;
   
   // Night 5+ features - Spy sapper
   private sapperIndicator!: Phaser.GameObjects.Container;
@@ -473,6 +486,153 @@ export class GameScene extends Phaser.Scene {
     return this.customEnemies ? this.customEnemies.pauling ?? false : false;
   }
 
+  private isMerasmusEnabled(): boolean {
+    return this.customEnemies ? this.customEnemies.merasmus ?? false : false;
+  }
+
+  private clearMerasmusMirrorDomAndFlags(): void {
+    this.merasmusPendingFlip = [];
+    this.merasmusHasQueuedPost2AM = false;
+    this.merasmusHasQueuedPost4AM = false;
+    this.setMerasmusDomMirror(false);
+  }
+
+  private setMerasmusDomMirror(mirrored: boolean): void {
+    if (mirrored && !this.isMerasmusEnabled()) return;
+    this.merasmusScreenMirrored = mirrored;
+    const canvas = this.game?.canvas;
+    if (!canvas) return;
+    if (mirrored) {
+      canvas.style.transform = 'scaleX(-1)';
+      canvas.style.transformOrigin = '50% 50%';
+    } else {
+      canvas.style.transform = '';
+      canvas.style.transformOrigin = '';
+    }
+  }
+
+  /**
+   * CSS scaleX(-1) on the canvas does not mirror DOM coordinates Phaser receives, so hit tests miss.
+   * Wrap InputManager.transformPointer to invert X in game space whenever the Merasmus mirror is active.
+   */
+  private installMerasmusPointerMirrorFix(): void {
+    if (this.merasmusStockTransformPointer !== null) return;
+    const im = this.input.manager;
+    const scene = this;
+    this.merasmusStockTransformPointer = im.transformPointer.bind(im);
+    im.transformPointer = (pointer, pageX, pageY, wasMove) => {
+      this.merasmusStockTransformPointer!.call(im, pointer, pageX, pageY, wasMove);
+      if (scene.merasmusScreenMirrored && scene.isMerasmusEnabled()) {
+        const w = scene.scale.width;
+        pointer.position.x = w - pointer.position.x;
+      }
+    };
+  }
+
+  private uninstallMerasmusPointerMirrorFix(): void {
+    if (this.merasmusStockTransformPointer === null) return;
+    this.input.manager.transformPointer = this.merasmusStockTransformPointer;
+    this.merasmusStockTransformPointer = null;
+  }
+
+  private maybeArmMerasmusFlipQueue(): void {
+    if (!this.isCustomNightMode || !this.isMerasmusEnabled()) return;
+    if (this.gameMinutes >= 120 && !this.merasmusHasQueuedPost2AM) {
+      this.merasmusHasQueuedPost2AM = true;
+      this.merasmusPendingFlip.push('on');
+    }
+    if (this.gameMinutes >= 240 && !this.merasmusHasQueuedPost4AM) {
+      this.merasmusHasQueuedPost4AM = true;
+      this.merasmusPendingFlip.push('off');
+    }
+  }
+
+  private playMerasmusCackle(): void {
+    try {
+      const a = new Audio('./audio/merasmus-cackle.mp3');
+      a.volume = 0.85;
+      void a.play().catch(() => {});
+    } catch {
+      /* missing or blocked audio */
+    }
+  }
+
+  private showMerasmusVanishFigure(): void {
+    const overlay = this.add.container(640, 360);
+    overlay.setDepth(205);
+
+    const aura = this.add.graphics();
+    aura.fillStyle(0x44ff66, 0.06);
+    aura.fillCircle(0, -20, 140);
+    aura.fillStyle(0x33dd55, 0.1);
+    aura.fillCircle(0, -35, 70);
+    aura.setAlpha(1);
+    overlay.add(aura);
+
+    const g = this.add.graphics();
+    drawCharacterSilhouette(g, 0, 0, 'MERASMUS', 0x8866dd);
+    overlay.add(g);
+
+    overlay.setScale(0.3);
+    overlay.setAlpha(0);
+
+    const destroyOverlay = (): void => {
+      if (overlay.active) overlay.destroy();
+    };
+
+    // Materialize (~0.65s), hold at full read (~1.35s), subtle pulse, then dissolve (~1.1s)
+    this.tweens.add({
+      targets: overlay,
+      alpha: 1,
+      scale: 0.6,
+      duration: 650,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        this.time.delayedCall(600, () => {
+          this.tweens.add({
+            targets: overlay,
+            scale: 0.64,
+            duration: 320,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+          });
+        });
+        this.time.delayedCall(1550, () => {
+          this.tweens.add({
+            targets: overlay,
+            alpha: 0,
+            scale: 0.82,
+            duration: 1100,
+            ease: 'Power2.easeIn',
+            onComplete: destroyOverlay,
+          });
+          this.tweens.add({
+            targets: aura,
+            alpha: 0,
+            duration: 1000,
+            ease: 'Power1',
+          });
+        });
+      },
+    });
+  }
+
+  /** After return-to-Intel teleport completes: consume one pending Merasmus flip if any */
+  private processMerasmusOnReturnToIntel(): void {
+    if (!this.isCustomNightMode || !this.isMerasmusEnabled()) return;
+    const next = this.merasmusPendingFlip.shift();
+    if (!next) return;
+
+    if (next === 'on') {
+      this.setMerasmusDomMirror(true);
+      this.playMerasmusCackle();
+      this.showMerasmusVanishFigure();
+    } else {
+      this.setMerasmusDomMirror(false);
+      this.cameras.main.flash(220, 120, 80, 200, false);
+    }
+  }
+
   /** Returns true if the currently selected camera's room has a hacked teleporter */
   private isSelectedCameraHacked(): boolean {
     if (!this.isAdministratorEnabled()) return false;
@@ -632,12 +792,16 @@ export class GameScene extends Phaser.Scene {
     this.medicGhostSide = null;
     this.medicGhostTimer = 0;
     this.medicGhostCooldown = 0;
+
+    this.clearMerasmusMirrorDomAndFlags();
   }
   
   /**
    * Cleanup when scene shuts down
    */
   private cleanup(): void {
+    this.uninstallMerasmusPointerMirrorFix();
+    this.clearMerasmusMirrorDomAndFlags();
     this.disposeIntelRoomAmbience();
     this.stopDetectionSound();
     this.events.off('scoutAtDoor');
@@ -668,6 +832,9 @@ export class GameScene extends Phaser.Scene {
         spy: boolean;
         pyro: boolean;
         medic?: boolean;
+        administrator?: boolean;
+        pauling?: boolean;
+        merasmus?: boolean;
       };
       isBadEndingNight6?: boolean;
       isCustomNight?: boolean;
@@ -712,7 +879,7 @@ export class GameScene extends Phaser.Scene {
     const displayNightNumber = this.nightNumber === 7 ? 'Custom' : this.nightNumber === 8 ? 'Nightmare' : this.nightNumber;
     const customEnemies = {
       scout: true, soldier: true, demoman: true, 
-      heavy: true, sniper: true, spy: true, pyro: false, medic: false, administrator: false, pauling: false,
+      heavy: true, sniper: true, spy: true, pyro: false, medic: false, administrator: false, pauling: false, merasmus: false,
       ...data?.customEnemies,  // Override with passed values (backward compatible)
     };
     
@@ -920,6 +1087,9 @@ export class GameScene extends Phaser.Scene {
     
     // Set up input
     this.setupInput();
+    if (this.isMerasmusEnabled()) {
+      this.installMerasmusPointerMirrorFix();
+    }
     
     // Create mobile touch controls if on mobile
     if (this.isMobile) {
@@ -3227,6 +3397,8 @@ export class GameScene extends Phaser.Scene {
 
       // Administrator Mode 1: auto-hack last teleported room on return to Intel
       this.handleAdministratorMode1();
+
+      this.processMerasmusOnReturnToIntel();
     });
   }
 
@@ -8448,8 +8620,11 @@ export class GameScene extends Phaser.Scene {
     const prevAim = this.sentry.aimedDoor;
     
     // Use native DOM key states (more reliable than Phaser with browser extensions)
-    const aDown = this.keyADown;
-    const dDown = this.keyDDown;
+    const rawA = this.keyADown;
+    const rawD = this.keyDDown;
+    const mirrorAim = this.isMerasmusEnabled() && this.merasmusScreenMirrored;
+    const aDown = mirrorAim ? rawD : rawA;
+    const dDown = mirrorAim ? rawA : rawD;
     
     // Hold A = aim left, Hold D = aim right, Neither = aim middle
     if (aDown && !dDown) {
@@ -10984,6 +11159,8 @@ export class GameScene extends Phaser.Scene {
   
   private gameOver(reason: string): void {
     if (this.gameStatus !== 'PLAYING') return;
+
+    this.clearMerasmusMirrorDomAndFlags();
     
     this.gameStatus = 'LOST';
     // Stop ALL sounds immediately
@@ -11462,6 +11639,8 @@ export class GameScene extends Phaser.Scene {
   
   private victory(): void {
     if (this.gameStatus !== 'PLAYING') return;
+
+    this.clearMerasmusMirrorDomAndFlags();
     
     this.gameStatus = 'WON';
     this.stopAllGameSounds(); // Stop ALL sounds
@@ -11953,6 +12132,7 @@ export class GameScene extends Phaser.Scene {
     if (this.timeAccumulator >= GAME_CONSTANTS.MS_PER_GAME_MINUTE) {
       this.timeAccumulator -= GAME_CONSTANTS.MS_PER_GAME_MINUTE;
       this.gameMinutes++;
+      this.maybeArmMerasmusFlipQueue();
       
       // Track total survival time for endless mode
       if (this.isBadEndingNight6) {
