@@ -68,6 +68,7 @@
 
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
+import { CustomNightScene } from './scenes/CustomNightScene';
 import { GameScene } from './scenes/GameScene';
 import { isMobileDevice, isLandscape, onOrientationChange } from './utils/mobile';
 
@@ -121,7 +122,7 @@ const config: Phaser.Types.Core.GameConfig = {
   height: 720,
   parent: 'game-container',
   backgroundColor: '#1a1a2e',
-  scene: [BootScene, GameScene],
+  scene: [BootScene, CustomNightScene, GameScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
