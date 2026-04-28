@@ -12,6 +12,7 @@ import { loadCustomNightEnemies } from '../data/customNightStorage';
 import {
   playGameStartChime,
   playMenuButtonSound,
+  playMenuHoverSound,
   playMenuToggleOffSound,
   playMenuToggleOnSound,
 } from '../utils/menuSounds';
@@ -56,6 +57,11 @@ export class BootScene extends Phaser.Scene {
       color: '#ff6600',
     });
     loadingText.setOrigin(0.5);
+
+    // Menu background music
+    if (!this.cache.audio.exists('menu-music')) {
+      this.load.audio('menu-music', 'audio/menu-music.mp3');
+    }
   }
   
   create(): void {
@@ -78,136 +84,214 @@ export class BootScene extends Phaser.Scene {
     
     // Clear loading text
     this.children.removeAll();
-    
-    // ===== BACKGROUND =====
-    // Dark gradient background
-    const bgGradient = this.add.graphics();
-    bgGradient.fillGradientStyle(0x0a0a18, 0x0a0a18, 0x141428, 0x141428, 1);
-    bgGradient.fillRect(0, 0, width, height);
-    
-    // Subtle grid pattern
-    const grid = this.add.graphics();
-    grid.lineStyle(1, 0x1a1a2a, 0.3);
-    for (let x = 0; x < width; x += 40) {
-      grid.lineBetween(x, 0, x, height);
+
+    // ===== MENU MUSIC =====
+    // Stop any already-playing instance (scene restart / dev unlock)
+    if (this.sound.get('menu-music')) {
+      this.sound.get('menu-music').stop();
     }
-    for (let y = 0; y < height; y += 40) {
-      grid.lineBetween(0, y, width, y);
+    const menuMusic = this.sound.add('menu-music', { loop: true, volume: 0.18 });
+    menuMusic.play();
+    // Stop cleanly when the scene shuts down (game start, etc.)
+    this.events.once('shutdown', () => menuMusic.stop());
+    
+    // ===== BACKGROUND — horror atmosphere =====
+    // Near-black base
+    const bgBase = this.add.graphics();
+    bgBase.fillStyle(0x000000, 1);
+    bgBase.fillRect(0, 0, width, height);
+
+    // Warm orange-red edge glow (2Fort emergency-lighting feel)
+    const edgeGlow = this.add.graphics();
+    edgeGlow.fillStyle(0x3a1200, 0.4);
+    edgeGlow.fillRect(0, 0, 90, height);
+    edgeGlow.fillStyle(0x200a00, 0.22);
+    edgeGlow.fillRect(0, 0, 210, height);
+    edgeGlow.fillStyle(0x3a1200, 0.4);
+    edgeGlow.fillRect(width - 90, 0, 90, height);
+    edgeGlow.fillStyle(0x200a00, 0.22);
+    edgeGlow.fillRect(width - 210, 0, 210, height);
+    // Bottom warm glow
+    edgeGlow.fillStyle(0x1a0800, 0.38);
+    edgeGlow.fillRect(0, height - 130, width, 130);
+    // Top vignette (camera darkness)
+    edgeGlow.fillStyle(0x000000, 0.55);
+    edgeGlow.fillRect(0, 0, width, 65);
+
+    // Scanlines — subtle CRT / security-camera feel
+    const scanlines = this.add.graphics();
+    scanlines.setDepth(90);
+    for (let sy = 0; sy < height; sy += 4) {
+      scanlines.lineStyle(1, 0x000000, 0.1);
+      scanlines.lineBetween(0, sy, width, sy);
     }
-    
-    // Corner accents
-    const corners = this.add.graphics();
-    corners.lineStyle(2, 0xff6600, 0.6);
-    // Top left
-    corners.lineBetween(30, 30, 30, 80);
-    corners.lineBetween(30, 30, 80, 30);
-    // Top right
-    corners.lineBetween(width - 30, 30, width - 30, 80);
-    corners.lineBetween(width - 30, 30, width - 80, 30);
-    // Bottom left
-    corners.lineBetween(30, height - 30, 30, height - 80);
-    corners.lineBetween(30, height - 30, 80, height - 30);
-    // Bottom right
-    corners.lineBetween(width - 30, height - 30, width - 30, height - 80);
-    corners.lineBetween(width - 30, height - 30, width - 80, height - 30);
-    
-    // ===== TITLE (top) =====
-    // Title glow
+
+    // ===== HEAVY BACKGROUND SILHOUETTE — right panel =====
+    // FNAF-style animatronic lurking in the dark on the right side
+    const heavyBodyGfx = this.add.graphics();
+    const heavyEyeGfx  = this.add.graphics();
+    const heavyContainer = this.add.container(0, 0, [heavyBodyGfx, heavyEyeGfx]);
+    heavyContainer.setDepth(2);
+
+    const hx = Math.round(width * 0.742); // right-panel centre ≈ 950 on 1280px
+    const hy = 305; // head-centre Y
+
+    // Reddish ambient aura
+    heavyBodyGfx.fillStyle(0xff0000, 0.05);
+    heavyBodyGfx.fillCircle(hx, hy + 100, 310);
+
+    const sil = 0x060202; // near-black silhouette
+
+    // ── EARS (wide, flat) ───────────────────────────────────────────
+    heavyBodyGfx.fillStyle(sil, 0.8);
+    heavyBodyGfx.fillCircle(hx - 104, hy + 4, 28);
+    heavyBodyGfx.fillCircle(hx + 104, hy + 4, 28);
+
+    // ── LARGE BALD HEAD ─────────────────────────────────────────────
+    heavyBodyGfx.fillStyle(sil, 0.82);
+    heavyBodyGfx.fillCircle(hx, hy, 100);
+
+    // ── THICK BROW RIDGE (angry, Heavy's signature scowl) ───────────
+    heavyBodyGfx.fillStyle(0x020000, 0.97);
+    heavyBodyGfx.fillRect(hx - 92, hy - 60, 184, 30);
+
+    // ── SHORT THICK NECK ────────────────────────────────────────────
+    heavyBodyGfx.fillStyle(sil, 0.86);
+    heavyBodyGfx.fillRect(hx - 42, hy + 95, 84, 58);
+
+    // ── MASSIVE BARREL CHEST (signature Heavy shape) ────────────────
+    heavyBodyGfx.fillRoundedRect(hx - 170, hy + 115, 340, 260, 28);
+
+    // ── WIDE STUBBY ARMS ────────────────────────────────────────────
+    heavyBodyGfx.fillRoundedRect(hx - 265, hy + 118, 110, 255, 18);
+    heavyBodyGfx.fillRoundedRect(hx + 155, hy + 118, 110, 255, 18);
+
+    // ── MEATY FISTS ─────────────────────────────────────────────────
+    heavyBodyGfx.fillCircle(hx - 228, hy + 378, 40);
+    heavyBodyGfx.fillCircle(hx + 228, hy + 378, 40);
+
+    // ── LOWER BODY (continues off screen bottom) ────────────────────
+    heavyBodyGfx.fillRoundedRect(hx - 155, hy + 355, 310, 480, 16);
+
+    // ── MINIGUN "SASHA" ─────────────────────────────────────────────
+    heavyBodyGfx.fillStyle(0x040100, 0.76);
+    heavyBodyGfx.fillRoundedRect(hx - 270, hy + 268, 340, 65, 12);
+    heavyBodyGfx.fillCircle(hx - 225, hy + 300, 46); // barrel cluster
+
+    heavyBodyGfx.setAlpha(0.84);
+
+    // ── GLOWING RED EYES ────────────────────────────────────────────
+    const eyeX1 = hx - 36;
+    const eyeX2 = hx + 36;
+    const eyeY  = hy - 22;
+
+    // Outer atmospheric glow
+    heavyEyeGfx.fillStyle(0xff0000, 0.1);
+    heavyEyeGfx.fillCircle(eyeX1, eyeY, 36);
+    heavyEyeGfx.fillCircle(eyeX2, eyeY, 36);
+    // Mid glow
+    heavyEyeGfx.fillStyle(0xff0000, 0.42);
+    heavyEyeGfx.fillCircle(eyeX1, eyeY, 20);
+    heavyEyeGfx.fillCircle(eyeX2, eyeY, 20);
+    // Bright iris
+    heavyEyeGfx.fillStyle(0xff1100, 1);
+    heavyEyeGfx.fillCircle(eyeX1, eyeY, 13);
+    heavyEyeGfx.fillCircle(eyeX2, eyeY, 13);
+    // Hot centre
+    heavyEyeGfx.fillStyle(0xff9977, 1);
+    heavyEyeGfx.fillCircle(eyeX1, eyeY, 6);
+    heavyEyeGfx.fillCircle(eyeX2, eyeY, 6);
+    // White glint
+    heavyEyeGfx.fillStyle(0xffffff, 0.8);
+    heavyEyeGfx.fillCircle(eyeX1 - 4, eyeY - 4, 3);
+    heavyEyeGfx.fillCircle(eyeX2 - 4, eyeY - 4, 3);
+
+    // Eyes pulse (slow breathing)
+    this.tweens.add({
+      targets: heavyEyeGfx,
+      alpha: { from: 0.7, to: 1 },
+      duration: 2800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Occasional twitch — Heavy jerks unpredictably
+    const scheduleTwitch = () => {
+      this.time.delayedCall(Phaser.Math.Between(2500, 6000), () => {
+        this.tweens.add({
+          targets: heavyContainer,
+          x: { from: 0, to: Phaser.Math.Between(-8, 8) },
+          y: { from: 0, to: Phaser.Math.Between(-4, 4) },
+          duration: 42,
+          yoyo: true,
+          repeat: Phaser.Math.Between(1, 4),
+          ease: 'Linear',
+          onComplete: () => {
+            heavyContainer.setPosition(0, 0);
+            scheduleTwitch();
+          },
+        });
+      });
+    };
+    scheduleTwitch();
+
+    // Subtle vertical divider between left UI panel and right Heavy panel
+    const divider = this.add.graphics();
+    divider.lineStyle(1, 0xff4400, 0.09);
+    divider.lineBetween(width / 2, 175, width / 2, height - 30);
+    divider.setDepth(3);
+
+    // ===== TITLE =====
+    // Outermost glow layer — flickering
+    const titleGlow0 = this.add.text(width / 2, 100, 'FIVE NIGHTS AT 2FORT', {
+      fontFamily: 'Impact, "Arial Narrow", Arial, sans-serif',
+      fontSize: '72px',
+      color: '#cc2200',
+    }).setOrigin(0.5).setAlpha(0.14).setScale(1.07);
+
+    // Second glow
     this.add.text(width / 2, 100, 'FIVE NIGHTS AT 2FORT', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '56px',
-      color: '#ff4400',
-      fontStyle: 'bold',
-    }).setOrigin(0.5).setAlpha(0.2).setScale(1.02);
-    
+      fontFamily: 'Impact, "Arial Narrow", Arial, sans-serif',
+      fontSize: '72px',
+      color: '#ff3300',
+    }).setOrigin(0.5).setAlpha(0.28).setScale(1.025);
+
+    // Third glow
     this.add.text(width / 2, 100, 'FIVE NIGHTS AT 2FORT', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '56px',
+      fontFamily: 'Impact, "Arial Narrow", Arial, sans-serif',
+      fontSize: '72px',
       color: '#ff6600',
-      fontStyle: 'bold',
+    }).setOrigin(0.5).setAlpha(0.6);
+
+    // Main title
+    this.add.text(width / 2, 100, 'FIVE NIGHTS AT 2FORT', {
+      fontFamily: 'Impact, "Arial Narrow", Arial, sans-serif',
+      fontSize: '72px',
+      color: '#ffaa55',
     }).setOrigin(0.5);
-    
+
+    // Slow outer-glow flicker
+    this.tweens.add({
+      targets: titleGlow0,
+      alpha: { from: 0.14, to: 0.3 },
+      duration: 3200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Separator line under title
+    const titleLine = this.add.graphics();
+    titleLine.lineStyle(1, 0xff5500, 0.45);
+    titleLine.lineBetween(width / 2 - 285, 136, width / 2 + 285, 136);
+
     // Subtitle
-    this.add.text(width / 2, 155, 'A TF2-Inspired FNAF Experience', {
+    this.add.text(width / 2, 156, '— A TF2-INSPIRED FNAF EXPERIENCE —', {
       fontFamily: 'Courier New, monospace',
       fontSize: '13px',
-      color: '#555566',
+      color: '#aa5533',
     }).setOrigin(0.5);
-    
-    // ===== CONTROLS LEGEND (left side with background) =====
-    // Only show keyboard controls on desktop
-    if (!this.isMobile) {
-      const controlsX = 115;
-      const controlsY = 350;
-      
-      // Background panel for controls
-      const controlsBg = this.add.rectangle(controlsX, controlsY, 150, 170, 0x0a0f15, 0.9);
-      controlsBg.setStrokeStyle(1, 0x2a3545);
-      
-      this.add.text(controlsX, controlsY - 65, 'CONTROLS', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '12px',
-        color: '#5588aa',
-        fontStyle: 'bold',
-      }).setOrigin(0.5);
-      
-      const controlsList = [
-        ['F', 'Wrangler'],
-        ['A/D', 'Aim'],
-        ['SPACE', 'Fire'],
-        ['TAB', 'Cameras'],
-        ['R', 'Build'],
-      ];
-      
-      controlsList.forEach((ctrl, i) => {
-        const cy = controlsY - 35 + i * 26;
-        // Key
-        const keyBg = this.add.rectangle(controlsX - 35, cy, 40, 20, 0x152535);
-        keyBg.setStrokeStyle(1, 0x3a4a5a);
-        this.add.text(controlsX - 35, cy, ctrl[0], {
-          fontFamily: 'Courier New, monospace',
-          fontSize: '11px',
-          color: '#7799bb',
-          fontStyle: 'bold',
-        }).setOrigin(0.5);
-        // Action
-        this.add.text(controlsX + 5, cy, ctrl[1], {
-          fontFamily: 'Courier New, monospace',
-          fontSize: '11px',
-          color: '#556677',
-        }).setOrigin(0, 0.5);
-      });
-    } else {
-      // Mobile touch controls hint
-      const controlsX = 115;
-      const controlsY = 350;
-      
-      // Background panel
-      const controlsBg = this.add.rectangle(controlsX, controlsY, 150, 140, 0x0a0f15, 0.9);
-      controlsBg.setStrokeStyle(1, 0x2a3545);
-      
-      this.add.text(controlsX, controlsY - 50, 'TOUCH CONTROLS', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '10px',
-        color: '#5588aa',
-        fontStyle: 'bold',
-      }).setOrigin(0.5);
-      
-      const touchHints = [
-        'Hold edges to aim',
-        'Tap sentry to fire',
-        'CAM button: cameras',
-        'Action button: build',
-      ];
-      
-      touchHints.forEach((hint, i) => {
-        this.add.text(controlsX, controlsY - 20 + i * 22, hint, {
-          fontFamily: 'Courier New, monospace',
-          fontSize: '10px',
-          color: '#556677',
-        }).setOrigin(0.5);
-      });
-    }
     
     // ===== MENU BUTTONS (center area) =====
     // Different menu layouts based on game state
@@ -286,14 +370,18 @@ export class BootScene extends Phaser.Scene {
     this.setupDevPasswordInput();
     this.setupDevPasswordListener();
     
-    // ===== SIDE MENU BUTTONS (right side - with button backgrounds) =====
-    const menuX = width - 115;
+    // ===== SIDE MENU BUTTONS (left panel — stacked below main action buttons) =====
+    const menuX = 310;
+    const save = loadSave();
+    const isPostGame = save?.hasBeatenNight5 || false;
+    // Snap side-menu close below the last main button for each state
+    const sideBase = isPostGame ? 495 : 360;
     
     // How to Play button
-    const tutorialBtnBg = this.add.rectangle(menuX, 330, 130, 32, 0x0a1520);
+    const tutorialBtnBg = this.add.rectangle(menuX, sideBase, 130, 32, 0x0a1520);
     tutorialBtnBg.setStrokeStyle(1, 0x334455);
     tutorialBtnBg.setInteractive({ useHandCursor: true });
-    const tutorialBtnText = this.add.text(menuX, 330, '? HOW TO PLAY', {
+    const tutorialBtnText = this.add.text(menuX, sideBase, '? HOW TO PLAY', {
       fontFamily: 'Courier New, monospace',
       fontSize: '11px',
       color: '#5588aa',
@@ -301,6 +389,7 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5);
     
     tutorialBtnBg.on('pointerover', () => {
+      playMenuHoverSound();
       tutorialBtnBg.setFillStyle(0x152535);
       tutorialBtnBg.setStrokeStyle(1, 0x5588aa);
       tutorialBtnText.setColor('#88bbdd');
@@ -316,10 +405,10 @@ export class BootScene extends Phaser.Scene {
     });
     
     // Gallery button
-    const extrasBtnBg = this.add.rectangle(menuX, 375, 130, 32, 0x1a1510);
+    const extrasBtnBg = this.add.rectangle(menuX, sideBase + 35, 130, 32, 0x1a1510);
     extrasBtnBg.setStrokeStyle(1, 0x554433);
     extrasBtnBg.setInteractive({ useHandCursor: true });
-    const extrasBtnText = this.add.text(menuX, 375, '★ GALLERY', {
+    const extrasBtnText = this.add.text(menuX, sideBase + 35, '★ GALLERY', {
       fontFamily: 'Courier New, monospace',
       fontSize: '11px',
       color: '#aa8855',
@@ -327,6 +416,7 @@ export class BootScene extends Phaser.Scene {
     }).setOrigin(0.5);
     
     extrasBtnBg.on('pointerover', () => {
+      playMenuHoverSound();
       extrasBtnBg.setFillStyle(0x2a2520);
       extrasBtnBg.setStrokeStyle(1, 0xaa8855);
       extrasBtnText.setColor('#ddaa77');
@@ -342,12 +432,11 @@ export class BootScene extends Phaser.Scene {
     });
     
     // Endings preview button (for testing/dev mode - shows after beating Night 5)
-    const save = loadSave();
     if (save?.hasBeatenNight5) {
-      const endingsBtnBg = this.add.rectangle(menuX, 410, 130, 32, 0x151520);
+      const endingsBtnBg = this.add.rectangle(menuX, sideBase + 70, 130, 32, 0x151520);
       endingsBtnBg.setStrokeStyle(1, 0x445566);
       endingsBtnBg.setInteractive({ useHandCursor: true });
-      const endingsBtnText = this.add.text(menuX, 410, '☆ ENDINGS', {
+      const endingsBtnText = this.add.text(menuX, sideBase + 70, '☆ ENDINGS', {
         fontFamily: 'Courier New, monospace',
         fontSize: '11px',
         color: '#8899bb',
@@ -355,6 +444,7 @@ export class BootScene extends Phaser.Scene {
       }).setOrigin(0.5);
       
       endingsBtnBg.on('pointerover', () => {
+        playMenuHoverSound();
         endingsBtnBg.setFillStyle(0x252535);
         endingsBtnBg.setStrokeStyle(1, 0x8899bb);
         endingsBtnText.setColor('#aabbdd');
@@ -371,7 +461,7 @@ export class BootScene extends Phaser.Scene {
     }
     
     // Audio logs toggle (default ON) - persist in localStorage
-    const audioLogsY = save?.hasBeatenNight5 ? 445 : 420;
+    const audioLogsY = save?.hasBeatenNight5 ? sideBase + 105 : sideBase + 70;
     const audioLogsStorage = localStorage.getItem('audioLogsEnabled');
     let audioLogsOn = audioLogsStorage === null || audioLogsStorage === 'true';
     
@@ -397,6 +487,7 @@ export class BootScene extends Phaser.Scene {
     };
     
     audioLogsBg.on('pointerover', () => {
+      playMenuHoverSound();
       audioLogsBg.setFillStyle(0x152520);
       audioLogsBg.setStrokeStyle(1, 0x558877);
     });
@@ -421,10 +512,10 @@ export class BootScene extends Phaser.Scene {
     this.createEndingsOverlay();
     
     // Version
-    this.add.text(width - 60, height - 30, 'v1.1', {
+    this.add.text(width - 50, height - 22, 'v1.1', {
       fontFamily: 'Courier New, monospace',
       fontSize: '10px',
-      color: '#333344',
+      color: '#3a2a1a',
     }).setOrigin(0.5);
   }
   
@@ -437,18 +528,19 @@ export class BootScene extends Phaser.Scene {
     hasExistingSave: boolean,
     startGame: (night: number, isCustomNight?: boolean, isBadEndingNight6?: boolean, isNightmareMode?: boolean) => void
   ): void {
-    const centerY = 300;
+    const centerY = 255;
     const btnWidth = 280;
     const btnHeight = 50;
+    const btnX = 310; // left-panel centre X
     
     // NEW GAME button
     const newGameY = hasExistingSave ? centerY - 35 : centerY;
-    const newGameGlow = this.add.rectangle(width / 2, newGameY, btnWidth + 8, btnHeight + 8, 0x44ff44, 0.08);
-    const newGameBg = this.add.rectangle(width / 2, newGameY, btnWidth, btnHeight, 0x0f1f0f);
+    const newGameGlow = this.add.rectangle(btnX, newGameY, btnWidth + 8, btnHeight + 8, 0x44ff44, 0.08);
+    const newGameBg = this.add.rectangle(btnX, newGameY, btnWidth, btnHeight, 0x0f1f0f);
     newGameBg.setStrokeStyle(3, 0x44aa44);
     newGameBg.setInteractive({ useHandCursor: true });
     
-    const newGameText = this.add.text(width / 2, newGameY, '▶ NEW GAME', {
+    const newGameText = this.add.text(btnX, newGameY, '▶ NEW GAME', {
       fontFamily: 'Courier New, monospace',
       fontSize: '24px',
       color: '#55dd55',
@@ -466,6 +558,7 @@ export class BootScene extends Phaser.Scene {
     });
     
     newGameBg.on('pointerover', () => {
+      playMenuHoverSound();
       newGameBg.setFillStyle(0x225522);
       newGameBg.setStrokeStyle(3, 0x66ff66);
       newGameText.setColor('#88ff88');
@@ -492,11 +585,11 @@ export class BootScene extends Phaser.Scene {
       const continueY = centerY + 35;
       const continueNight = this.saveData.currentNight;
       
-      const continueBg = this.add.rectangle(width / 2, continueY, btnWidth, btnHeight, 0x0f1520);
+      const continueBg = this.add.rectangle(btnX, continueY, btnWidth, btnHeight, 0x0f1520);
       continueBg.setStrokeStyle(2, 0x446688);
       continueBg.setInteractive({ useHandCursor: true });
       
-      const continueText = this.add.text(width / 2, continueY, `▶ CONTINUE - NIGHT ${continueNight}`, {
+      const continueText = this.add.text(btnX, continueY, `▶ CONTINUE - NIGHT ${continueNight}`, {
         fontFamily: 'Courier New, monospace',
         fontSize: '20px',
         color: '#6699bb',
@@ -504,6 +597,7 @@ export class BootScene extends Phaser.Scene {
       }).setOrigin(0.5);
       
       continueBg.on('pointerover', () => {
+        playMenuHoverSound();
         continueBg.setFillStyle(0x152535);
         continueBg.setStrokeStyle(2, 0x6699bb);
         continueText.setColor('#88bbdd');
@@ -558,7 +652,7 @@ export class BootScene extends Phaser.Scene {
     const canRedeemForGoodEnding = save?.hasBeatenNight5 && !goodEndingAchieved && totalDestructions < 5;
     
     // Night selection header
-    const nightSelY = 560;
+    const nightSelY = 445;
     
     // Show destruction status hint
     let statusColor: string;
@@ -566,15 +660,12 @@ export class BootScene extends Phaser.Scene {
     const badEndingAchieved = save?.badEndingAchieved || false;
     
     if (goodEndingAchieved) {
-      // Already got good ending - just show stats
       statusColor = '#44ff44';
       statusText = `Total destructions: ${totalDestructions} - Good ending achieved!`;
     } else if (canRedeemForGoodEnding) {
-      // Can redeem from bad ending path
       statusColor = '#ffcc00';
       statusText = `Total destructions: ${totalDestructions}/5 - Good ending available!`;
     } else {
-      // Too many destructions - show bad ending status if achieved
       statusColor = '#ff6644';
       if (badEndingAchieved) {
         statusText = `Total destructions: ${totalDestructions}/5 - Bad ending achieved. Replay to reduce`;
@@ -583,25 +674,25 @@ export class BootScene extends Phaser.Scene {
       }
     }
     
-    this.add.text(width / 2, nightSelY - 80, statusText, {
+    this.add.text(310, nightSelY - 78, statusText, {
       fontFamily: 'Courier New, monospace',
       fontSize: '11px',
       color: statusColor,
     }).setOrigin(0.5);
     
-    this.add.text(width / 2, nightSelY - 60, 'SELECT NIGHT', {
+    this.add.text(310, nightSelY - 55, 'SELECT NIGHT', {
       fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
+      fontSize: '13px',
       color: '#446644',
     }).setOrigin(0.5);
     
     // Night buttons - compact row (1-5 + 6)
     const nightButtons: Phaser.GameObjects.Container[] = [];
     const nights = [1, 2, 3, 4, 5, 6];
-    const nightBtnWidth = 55;
-    const nightBtnGap = 10;
+    const nightBtnWidth = 48;
+    const nightBtnGap = 8;
     const totalNightWidth = nights.length * nightBtnWidth + (nights.length - 1) * nightBtnGap;
-    const buttonStartX = (width - totalNightWidth) / 2 + nightBtnWidth / 2;
+    const buttonStartX = 310 - totalNightWidth / 2 + nightBtnWidth / 2;
     const buttonY = nightSelY;
     
     // Reference to start text (assigned later, used in button handlers)
@@ -673,6 +764,7 @@ export class BootScene extends Phaser.Scene {
       btnBg.setInteractive({ useHandCursor: true });
       
       btnBg.on('pointerover', () => {
+        playMenuHoverSound();
         btnBg.setFillStyle(hoverBgColor);
         btnBg.setStrokeStyle(2, hoverStrokeColor);
         nightNum.setColor(hoverTextColor);
@@ -775,13 +867,13 @@ export class BootScene extends Phaser.Scene {
     });
     
     // Start selected night button
-    const startBtnY = 290;
-    const startBtnGlow = this.add.rectangle(width / 2, startBtnY, 320, 60, 0x44ff44, 0.08);
-    const startBtnBg = this.add.rectangle(width / 2, startBtnY, 300, 50, 0x0f1f0f);
+    const startBtnY = 220;
+    const startBtnGlow = this.add.rectangle(310, startBtnY, 320, 60, 0x44ff44, 0.08);
+    const startBtnBg = this.add.rectangle(310, startBtnY, 300, 50, 0x0f1f0f);
     startBtnBg.setStrokeStyle(3, 0x44aa44);
     startBtnBg.setInteractive({ useHandCursor: true });
     
-    const startText = this.add.text(width / 2, startBtnY, `▶ START NIGHT ${this.selectedNight}`, {
+    const startText = this.add.text(310, startBtnY, `▶ START NIGHT ${this.selectedNight}`, {
       fontFamily: 'Courier New, monospace',
       fontSize: '22px',
       color: '#55dd55',
@@ -801,6 +893,7 @@ export class BootScene extends Phaser.Scene {
     });
     
     startBtnBg.on('pointerover', () => {
+      playMenuHoverSound();
       startBtnBg.setFillStyle(0x225522);
       startBtnBg.setStrokeStyle(3, 0x66ff66);
       startText.setColor('#88ff88');
@@ -823,11 +916,11 @@ export class BootScene extends Phaser.Scene {
     // ===== CUSTOM NIGHT BUTTON (below start button) =====
     // Custom Night is available after beating Night 5
     const customNightUnlocked = save?.hasBeatenNight5 || false;
-    const customBtnY = 360;
-    const customBtnBg = this.add.rectangle(width / 2, customBtnY, 220, 40, 0x151520);
+    const customBtnY = 272;
+    const customBtnBg = this.add.rectangle(310, customBtnY, 220, 40, 0x151520);
     customBtnBg.setStrokeStyle(2, 0x554488);
     
-    const customBtnText = this.add.text(width / 2, customBtnY, '★ CUSTOM NIGHT', {
+    const customBtnText = this.add.text(310, customBtnY, '★ CUSTOM NIGHT', {
       fontFamily: 'Courier New, monospace',
       fontSize: '16px',
       color: '#8866aa',
@@ -839,6 +932,7 @@ export class BootScene extends Phaser.Scene {
       customBtnBg.setInteractive({ useHandCursor: true });
       
       customBtnBg.on('pointerover', () => {
+        playMenuHoverSound();
         customBtnBg.setFillStyle(0x252535);
         customBtnBg.setStrokeStyle(2, 0x8866cc);
         customBtnText.setColor('#aa88dd');
@@ -864,11 +958,11 @@ export class BootScene extends Phaser.Scene {
     
     // ===== NIGHTMARE MODE BUTTON (below custom night button) =====
     // Nightmare Mode is available after beating Night 5 (same unlock as Custom Night)
-    const nightmareBtnY = customBtnY + 50;
-    const nightmareBtnBg = this.add.rectangle(width / 2, nightmareBtnY, 220, 40, 0x150505);
+    const nightmareBtnY = customBtnY + 47;
+    const nightmareBtnBg = this.add.rectangle(310, nightmareBtnY, 220, 40, 0x150505);
     nightmareBtnBg.setStrokeStyle(2, 0x882222);
     
-    const nightmareBtnText = this.add.text(width / 2, nightmareBtnY, '☠ NIGHTMARE MODE', {
+    const nightmareBtnText = this.add.text(310, nightmareBtnY, '☠ NIGHTMARE MODE', {
       fontFamily: 'Courier New, monospace',
       fontSize: '16px',
       color: '#cc4444',
@@ -879,6 +973,7 @@ export class BootScene extends Phaser.Scene {
       nightmareBtnBg.setInteractive({ useHandCursor: true });
       
       nightmareBtnBg.on('pointerover', () => {
+        playMenuHoverSound();
         nightmareBtnBg.setFillStyle(0x251010);
         nightmareBtnBg.setStrokeStyle(2, 0xcc4444);
         nightmareBtnText.setColor('#ff6666');

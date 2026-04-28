@@ -809,6 +809,19 @@ export class GameScene extends Phaser.Scene {
     this.events.off('soldierRocket');
   }
   
+  /**
+   * Return to title: stop gameplay HTMLAudio (intel room loop) and Web Audio before switching scenes,
+   * so ambience cannot keep playing over BootScene.
+   */
+  private goToMainMenu(): void {
+    this.isPaused = false;
+    this.pauseMenu?.setVisible(false);
+    this.physics?.resume();
+    this.stopRecording();
+    this.stopAllGameSounds();
+    this.scene.start('BootScene');
+  }
+  
   create(): void {
     // Read mode flags from scene data BEFORE resetGameState so pre-seeding works correctly
     const earlyData = this.scene.settings.data as { isNightmareMode?: boolean; isBadEndingNight6?: boolean } | undefined;
@@ -7815,8 +7828,8 @@ export class GameScene extends Phaser.Scene {
     
     this.isRecordingPlaying = false;
     this.hasPlayedRecording = true;
-    this.recordingSkipButton.setVisible(false);
-    this.recordingIndicator.setVisible(false);
+    this.recordingSkipButton?.setVisible(false);
+    this.recordingIndicator?.setVisible(false);
     console.log('🎙️ Recording stopped');
   }
   
@@ -8503,8 +8516,7 @@ export class GameScene extends Phaser.Scene {
     menuBtn.on('pointerover', () => menuBtn.setFillStyle(0x333366));
     menuBtn.on('pointerout', () => menuBtn.setFillStyle(0x222244));
     menuBtn.on('pointerdown', () => {
-      this.stopDetectionSound();
-      this.scene.start('BootScene');
+      this.goToMainMenu();
     });
     this.pauseMenu.add(menuBtn);
     
@@ -11364,10 +11376,10 @@ export class GameScene extends Phaser.Scene {
     
     // Return to menu on space or click
     this.input.keyboard?.once('keydown-SPACE', () => {
-      this.scene.start('BootScene');
+      this.goToMainMenu();
     });
     this.input.once('pointerdown', () => {
-      this.scene.start('BootScene');
+      this.goToMainMenu();
     });
   }
   
@@ -11627,13 +11639,13 @@ export class GameScene extends Phaser.Scene {
       if (shouldPlaySadChime) {
         this.playGiveUpSound();
       }
-      this.scene.start('BootScene');
+      this.goToMainMenu();
     });
     this.input.once('pointerdown', () => {
       if (shouldPlaySadChime) {
         this.playGiveUpSound();
       }
-      this.scene.start('BootScene');
+      this.goToMainMenu();
     });
   }
   
@@ -11760,10 +11772,10 @@ export class GameScene extends Phaser.Scene {
     
     // Return to menu on space or click
     this.input.keyboard?.once('keydown-SPACE', () => {
-      this.scene.start('BootScene');
+      this.goToMainMenu();
     });
     this.input.once('pointerdown', () => {
-      this.scene.start('BootScene');
+      this.goToMainMenu();
     });
   }
   
@@ -11841,10 +11853,10 @@ export class GameScene extends Phaser.Scene {
     this.endScreen.setVisible(true);
     
     this.input.keyboard?.once('keydown-SPACE', () => {
-      this.scene.start('BootScene');
+      this.goToMainMenu();
     });
     this.input.once('pointerdown', () => {
-      this.scene.start('BootScene');
+      this.goToMainMenu();
     });
   }
   
@@ -12099,10 +12111,10 @@ export class GameScene extends Phaser.Scene {
     this.endScreen.setVisible(true);
     
     this.input.keyboard?.once('keydown-SPACE', () => {
-      this.scene.start('BootScene');
+      this.goToMainMenu();
     });
     this.input.once('pointerdown', () => {
-      this.scene.start('BootScene');
+      this.goToMainMenu();
     });
   }
   

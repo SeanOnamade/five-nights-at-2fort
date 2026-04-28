@@ -48,6 +48,13 @@ export function playMenuButtonSound(): void {
   beep(ctx, 920, 0.05, 'square', 0.055);
 }
 
+/** Subtle hover sound for menu buttons */
+export function playMenuHoverSound(): void {
+  const ctx = getMenuAudioContext();
+  if (!ctx) return;
+  beep(ctx, 660, 0.025, 'sine', 0.018);
+}
+
 /** Turning a threat / toggle ON */
 export function playMenuToggleOnSound(): void {
   const ctx = getMenuAudioContext();
