@@ -329,7 +329,7 @@ export class BootScene extends Phaser.Scene {
               pyro: true,
               medic: true,
               administrator: true,
-              pauling: true,
+              pauling: false,
               merasmus: false,
             }
           });

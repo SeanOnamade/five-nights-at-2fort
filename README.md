@@ -123,7 +123,7 @@ After completing the game, Custom Night unlocks — toggle any combination of al
 - Plus all story enemies
 
 ### Nightmare Mode
-A special endless mode featuring all enemies at maximum aggression. Unlocks alongside Custom Night.
+A special endless mode featuring all enemies at maximum aggression (everyone except Merasmus and Miss Pauling). Unlocks alongside Custom Night.
 
 ---
 
