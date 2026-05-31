@@ -328,6 +328,8 @@ export const GAME_CONSTANTS = {
   PYRO_INTEL_SPAWN_CHANCE: 0.15,      // 15% chance to spawn in Intel each check (reduced from 30%)
   PYRO_INTEL_CHECK_INTERVAL: 4000,    // Check for Intel spawn every 4 sec (was 2 sec)
   PYRO_INTEL_ESCAPE_COOLDOWN: 8000,   // Cooldown after player escapes before Pyro can attack again
+  PYRO_HALLWAY_HISS_MAX_GAIN: 0.16,   // Steady hallway flame hiss volume in Intel (cameras down)
+  PYRO_HALLWAY_HISS_FADE_MS: 2000,    // Fade-in duration for hallway hiss
   
   // Medic settings - CUSTOM NIGHT ONLY
   MEDIC_HOUR_INTERVAL: 60000,         // Time between Über target selections (60 sec = 1 in-game hour)

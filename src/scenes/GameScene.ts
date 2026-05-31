@@ -86,6 +86,9 @@ export class GameScene extends Phaser.Scene {
   // Demoman eye glow sound
   private demoEyeGlowSoundPlaying: boolean = false;
   private demoEyeGlowOscillator: OscillatorNode | null = null;
+  private demoEyeGlowOscillator2: OscillatorNode | null = null;
+  private demoEyeGlowLfo: OscillatorNode | null = null;
+  private demoEyeGlowLfoGain: GainNode | null = null;
   private demoEyeGlowGain: GainNode | null = null;
   
   // Pause state
@@ -234,7 +237,9 @@ export class GameScene extends Phaser.Scene {
   private sapperRemoveClicks: number = 0;
   private sapperRemoveTimeout: number = 0;
   private sapperSoundOscillator: OscillatorNode | null = null;
+  private sapperSoundModulator: OscillatorNode | null = null;
   private sapperSoundGain: GainNode | null = null;
+  private isPlayingSapperSound: boolean = false;
   
   // Night 3+ features
   // Camera destruction states
@@ -381,18 +386,103 @@ export class GameScene extends Phaser.Scene {
   
   // Sound state for detection buzzer
   private isPlayingDetectionSound: boolean = false;
-  private detectionSoundContext: AudioContext | null = null;
-  
+  private detectionSoundReleaseFrames: number = 0;
+  private detectionOscillator: OscillatorNode | null = null;
+  private detectionGain: GainNode | null = null;
+  private detectionLfo: OscillatorNode | null = null;
+  private detectionLfoGain: GainNode | null = null;
+
   // Sound state for sniper laser hum
   private isPlayingSniperHum: boolean = false;
   private sniperHumOscillator: OscillatorNode | null = null;
   private sniperHumOscillator2: OscillatorNode | null = null;  // Second harmonic oscillator
   private sniperHumGain: GainNode | null = null;
-  private detectionOscillator: OscillatorNode | null = null;
+
+  // Sound state for Pyro hallway lighter hiss (ROOM mode, Intel view)
+  private isPlayingPyroHallwayHiss: boolean = false;
+  private pyroHallwayHissStopping: boolean = false;
+  private pyroHallwayHissGain: GainNode | null = null;
+  private pyroHallwayHissBodyNoise: AudioBufferSourceNode | null = null;
+  private pyroHallwayHissBodyFilter: BiquadFilterNode | null = null;
+  private pyroHallwayHissBodyGain: GainNode | null = null;
+  private pyroHallwayHissHissNoise: AudioBufferSourceNode | null = null;
+  private pyroHallwayHissHissHighpass: BiquadFilterNode | null = null;
+  private pyroHallwayHissHissFilter: BiquadFilterNode | null = null;
+  private pyroHallwayHissHissGain: GainNode | null = null;
+  private pyroHallwayHissPanner: StereoPannerNode | null = null;
+  private pyroHallwayHissSide: 'LEFT' | 'RIGHT' | null = null;
+  private pyroHallwayHissStopTimeout: number | null = null;
+  private pyroHallwayHissAudible: boolean = false;
+  private pyroHallwayHissIntroDone: boolean = false;
   
   // Shared audio context for consistent sound levels
   private sharedAudioContext: AudioContext | null = null;
-  
+  private masterAudioGain: GainNode | null = null;
+  private masterAudioCompressor: DynamicsCompressorNode | null = null;
+
+  /**
+   * Get or create the shared AudioContext with a soft master compressor to tame stacking peaks.
+   */
+  private ensureSharedAudioContext(): AudioContext | null {
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        this.masterAudioGain = this.sharedAudioContext.createGain();
+        this.masterAudioGain.gain.value = 1;
+        this.masterAudioCompressor = this.sharedAudioContext.createDynamicsCompressor();
+        this.masterAudioCompressor.threshold.value = -18;
+        this.masterAudioCompressor.knee.value = 12;
+        this.masterAudioCompressor.ratio.value = 8;
+        this.masterAudioCompressor.attack.value = 0.002;
+        this.masterAudioCompressor.release.value = 0.15;
+        this.masterAudioGain.connect(this.masterAudioCompressor);
+        this.masterAudioCompressor.connect(this.sharedAudioContext.destination);
+      }
+      if (this.sharedAudioContext.state === 'suspended') {
+        void this.sharedAudioContext.resume();
+      }
+      if (!this.masterAudioGain || !this.masterAudioCompressor) {
+        this.masterAudioGain = this.sharedAudioContext.createGain();
+        this.masterAudioGain.gain.value = 1;
+        this.masterAudioCompressor = this.sharedAudioContext.createDynamicsCompressor();
+        this.masterAudioCompressor.threshold.value = -18;
+        this.masterAudioCompressor.knee.value = 12;
+        this.masterAudioCompressor.ratio.value = 8;
+        this.masterAudioCompressor.attack.value = 0.002;
+        this.masterAudioCompressor.release.value = 0.15;
+        this.masterAudioGain.connect(this.masterAudioCompressor);
+        this.masterAudioCompressor.connect(this.sharedAudioContext.destination);
+      }
+      return this.sharedAudioContext;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Route game audio through the shared master bus (with soft limiting). */
+  private connectGameAudio(node: AudioNode): void {
+    const ctx = this.ensureSharedAudioContext();
+    if (!ctx) return;
+    if (this.masterAudioGain) {
+      node.connect(this.masterAudioGain);
+    } else {
+      node.connect(ctx.destination);
+    }
+  }
+
+  /** Stop and disconnect an oscillator node safely. */
+  private stopOscillator(node: OscillatorNode | null): null {
+    if (!node) return null;
+    try {
+      node.stop();
+      node.disconnect();
+    } catch {
+      // Already stopped
+    }
+    return null;
+  }
+
+
   // Dispenser ambient hum (plays in Intel room)
   private isPlayingDispenserHum: boolean = false;
   private dispenserHumOscillator: OscillatorNode | null = null;
@@ -764,6 +854,7 @@ export class GameScene extends Phaser.Scene {
     this.stopSniperLaserHum();
     this.stopSapperSound();
     this.stopDispenserHum();
+    this.stopPyroHallwayHiss(true);
     this.disposeIntelRoomAmbience();
     
     // Reset Engineer recording state
@@ -5365,26 +5456,24 @@ export class GameScene extends Phaser.Scene {
    * Start the Demoman eye glow fire sound (looping crackle)
    */
   private startDemoEyeGlowSound(): void {
-    if (this.demoEyeGlowSoundPlaying) return;
+    if (this.demoEyeGlowSoundPlaying || this.demoEyeGlowOscillator) return;
     
     try {
-      const audioContext = this.sharedAudioContext || new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
       
-      // Create a subtle crackling fire sound
       const osc1 = audioContext.createOscillator();
       const osc2 = audioContext.createOscillator();
       const lfo = audioContext.createOscillator();
       const lfoGain = audioContext.createGain();
       const mainGain = audioContext.createGain();
       
-      // LFO for crackling effect
       lfo.type = 'square';
-      lfo.frequency.value = 8; // Crackle rate
+      lfo.frequency.value = 8;
       lfo.connect(lfoGain);
       lfoGain.gain.value = 30;
       lfoGain.connect(osc1.frequency);
       
-      // Main oscillators - low rumble with higher crackle
       osc1.type = 'sawtooth';
       osc1.frequency.value = 80;
       osc2.type = 'triangle';
@@ -5392,23 +5481,22 @@ export class GameScene extends Phaser.Scene {
       
       osc1.connect(mainGain);
       osc2.connect(mainGain);
-      mainGain.connect(audioContext.destination);
+      this.connectGameAudio(mainGain);
       
-      mainGain.gain.value = 0.08; // Subtle
+      mainGain.gain.value = 0.08;
       
       lfo.start();
       osc1.start();
       osc2.start();
       
       this.demoEyeGlowOscillator = osc1;
+      this.demoEyeGlowOscillator2 = osc2;
+      this.demoEyeGlowLfo = lfo;
+      this.demoEyeGlowLfoGain = lfoGain;
       this.demoEyeGlowGain = mainGain;
       this.demoEyeGlowSoundPlaying = true;
-      
-      // Store references for cleanup
-      (osc1 as unknown as { _lfo: OscillatorNode })._lfo = lfo;
-      (osc1 as unknown as { _osc2: OscillatorNode })._osc2 = osc2;
     } catch (e) {
-      // Audio not available
+      this.stopDemoEyeGlowSound();
     }
   }
   
@@ -5416,29 +5504,24 @@ export class GameScene extends Phaser.Scene {
    * Stop the Demoman eye glow fire sound
    */
   private stopDemoEyeGlowSound(): void {
-    if (!this.demoEyeGlowSoundPlaying) return;
+    if (!this.demoEyeGlowSoundPlaying && !this.demoEyeGlowOscillator) return;
     
     try {
       if (this.demoEyeGlowGain) {
-        this.demoEyeGlowGain.gain.linearRampToValueAtTime(0, 
-          (this.sharedAudioContext?.currentTime || 0) + 0.1);
+        this.demoEyeGlowGain.disconnect();
       }
-      if (this.demoEyeGlowOscillator) {
-        const osc = this.demoEyeGlowOscillator as unknown as { _lfo?: OscillatorNode; _osc2?: OscillatorNode };
-        setTimeout(() => {
-          try {
-            this.demoEyeGlowOscillator?.stop();
-            osc._lfo?.stop();
-            osc._osc2?.stop();
-          } catch (e) { /* ignore */ }
-        }, 150);
-      }
-    } catch (e) {
-      // ignore
+    } catch {
+      // Already disconnected
     }
-    
-    this.demoEyeGlowOscillator = null;
+
+    this.demoEyeGlowOscillator = this.stopOscillator(this.demoEyeGlowOscillator);
+    this.demoEyeGlowOscillator2 = this.stopOscillator(this.demoEyeGlowOscillator2);
+    this.demoEyeGlowLfo = this.stopOscillator(this.demoEyeGlowLfo);
+    if (this.demoEyeGlowLfoGain) {
+      try { this.demoEyeGlowLfoGain.disconnect(); } catch { /* ignore */ }
+    }
     this.demoEyeGlowGain = null;
+    this.demoEyeGlowLfoGain = null;
     this.demoEyeGlowSoundPlaying = false;
   }
   
@@ -5675,19 +5758,11 @@ export class GameScene extends Phaser.Scene {
    */
   private startApproachGrowl(): void {
     try {
-      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
-        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      }
-      const audioContext = this.sharedAudioContext;
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
       
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      
-      // Stop any existing growl
       this.stopApproachGrowl();
       
-      // Create low rumbling growl
       this.approachGrowlOsc = audioContext.createOscillator();
       const osc2 = audioContext.createOscillator();
       this.approachGrowlGain = audioContext.createGain();
@@ -5696,7 +5771,7 @@ export class GameScene extends Phaser.Scene {
       this.approachGrowlOsc.connect(filter);
       osc2.connect(filter);
       filter.connect(this.approachGrowlGain);
-      this.approachGrowlGain.connect(audioContext.destination);
+      this.connectGameAudio(this.approachGrowlGain);
       
       // Low menacing rumble
       this.approachGrowlOsc.type = 'sawtooth';
@@ -5736,7 +5811,7 @@ export class GameScene extends Phaser.Scene {
       // Intensity increases as time runs out (5s -> 0s maps to 0.1 -> 0.8)
       const maxTime = GAME_CONSTANTS.TELEPORT_ESCAPE_TIME;
       const progress = 1 - (timeRemaining / maxTime);
-      const volume = 0.1 + (progress * 0.7);
+      const volume = 0.08 + (progress * 0.32);
       
       this.approachGrowlGain.gain.setValueAtTime(volume, this.sharedAudioContext.currentTime);
       
@@ -5959,8 +6034,8 @@ export class GameScene extends Phaser.Scene {
       
       // Create master gain for crackling - starts quiet
       this.pyroCracklingGain = audioContext.createGain();
-      this.pyroCracklingGain.gain.setValueAtTime(0.08, audioContext.currentTime); // Start low
-      this.pyroCracklingGain.connect(audioContext.destination);
+      this.pyroCracklingGain.gain.setValueAtTime(0.08, audioContext.currentTime);
+      this.connectGameAudio(this.pyroCracklingGain);
       
       // Reset intensity tracking
       this.pyroCracklingIntensity = 0;
@@ -6078,6 +6153,280 @@ export class GameScene extends Phaser.Scene {
       this.pyroCracklingGain = null;
     }
     this.pyroCracklingIntensity = 0;
+  }
+
+  /**
+   * Create a looped noise buffer for Pyro hallway flame layers
+   */
+  private createPyroHallwayNoiseBuffer(audioContext: AudioContext, durationSec: number): AudioBuffer {
+    const bufferLength = audioContext.sampleRate * durationSec;
+    const noiseBuffer = audioContext.createBuffer(1, bufferLength, audioContext.sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferLength; i++) {
+      noiseData[i] = Math.random() * 2 - 1;
+    }
+    return noiseBuffer;
+  }
+
+  /**
+   * Start steady lighter/flame hiss when Pyro is in a hallway (ROOM mode, Intel view)
+   */
+  private startPyroHallwayHiss(side: 'LEFT' | 'RIGHT'): void {
+    if (!this.isPyroEnabled()) return;
+
+    try {
+      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
+        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const audioContext = this.sharedAudioContext;
+
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+
+      const loopDuration = 2;
+      const bodyBuffer = this.createPyroHallwayNoiseBuffer(audioContext, loopDuration);
+      const hissBuffer = this.createPyroHallwayNoiseBuffer(audioContext, loopDuration);
+
+      // Low flame body layer
+      this.pyroHallwayHissBodyNoise = audioContext.createBufferSource();
+      this.pyroHallwayHissBodyNoise.buffer = bodyBuffer;
+      this.pyroHallwayHissBodyNoise.loop = true;
+
+      this.pyroHallwayHissBodyFilter = audioContext.createBiquadFilter();
+      this.pyroHallwayHissBodyFilter.type = 'bandpass';
+      this.pyroHallwayHissBodyFilter.frequency.value = 420;
+      this.pyroHallwayHissBodyFilter.Q.value = 0.7;
+
+      this.pyroHallwayHissBodyGain = audioContext.createGain();
+      this.pyroHallwayHissBodyGain.gain.value = 0.65;
+
+      // High lighter/flame hiss layer
+      this.pyroHallwayHissHissNoise = audioContext.createBufferSource();
+      this.pyroHallwayHissHissNoise.buffer = hissBuffer;
+      this.pyroHallwayHissHissNoise.loop = true;
+
+      this.pyroHallwayHissHissHighpass = audioContext.createBiquadFilter();
+      this.pyroHallwayHissHissHighpass.type = 'highpass';
+      this.pyroHallwayHissHissHighpass.frequency.value = 900;
+
+      this.pyroHallwayHissHissFilter = audioContext.createBiquadFilter();
+      this.pyroHallwayHissHissFilter.type = 'bandpass';
+      this.pyroHallwayHissHissFilter.frequency.value = 1800;
+      this.pyroHallwayHissHissFilter.Q.value = 0.8;
+
+      this.pyroHallwayHissHissGain = audioContext.createGain();
+      this.pyroHallwayHissHissGain.gain.value = 0.35;
+
+      // Master gain — audibility controlled by updatePyroHallwayAudio (fade-in once per hallway visit)
+      this.pyroHallwayHissGain = audioContext.createGain();
+      this.pyroHallwayHissGain.gain.setValueAtTime(0, audioContext.currentTime);
+
+      this.pyroHallwayHissPanner = audioContext.createStereoPanner();
+      this.pyroHallwayHissPanner.pan.value = side === 'LEFT' ? -0.65 : 0.65;
+
+      this.pyroHallwayHissBodyNoise.connect(this.pyroHallwayHissBodyFilter);
+      this.pyroHallwayHissBodyFilter.connect(this.pyroHallwayHissBodyGain);
+      this.pyroHallwayHissBodyGain.connect(this.pyroHallwayHissGain);
+
+      this.pyroHallwayHissHissNoise.connect(this.pyroHallwayHissHissHighpass);
+      this.pyroHallwayHissHissHighpass.connect(this.pyroHallwayHissHissFilter);
+      this.pyroHallwayHissHissFilter.connect(this.pyroHallwayHissHissGain);
+      this.pyroHallwayHissHissGain.connect(this.pyroHallwayHissGain);
+
+      this.pyroHallwayHissGain.connect(this.pyroHallwayHissPanner);
+      this.connectGameAudio(this.pyroHallwayHissPanner);
+
+      this.pyroHallwayHissBodyNoise.start();
+      this.pyroHallwayHissHissNoise.start();
+      this.pyroHallwayHissSide = side;
+      this.pyroHallwayHissStopping = false;
+      this.isPlayingPyroHallwayHiss = true;
+    } catch (e) {
+      this.stopPyroHallwayHiss(true);
+    }
+  }
+
+  /**
+   * Fade in hallway hiss on first audible appearance this hallway visit
+   */
+  private applyPyroHallwayHissAudible(fadeIn: boolean): void {
+    if (!this.pyroHallwayHissGain || !this.sharedAudioContext) return;
+
+    const audioContext = this.sharedAudioContext;
+    const now = audioContext.currentTime;
+    const maxGain = GAME_CONSTANTS.PYRO_HALLWAY_HISS_MAX_GAIN;
+
+    try {
+      this.pyroHallwayHissGain.gain.cancelScheduledValues(now);
+      if (fadeIn) {
+        this.pyroHallwayHissGain.gain.setValueAtTime(0, now);
+        const fadeSec = GAME_CONSTANTS.PYRO_HALLWAY_HISS_FADE_MS / 1000;
+        this.pyroHallwayHissGain.gain.linearRampToValueAtTime(maxGain, now + fadeSec);
+      } else {
+        this.pyroHallwayHissGain.gain.setValueAtTime(maxGain, now);
+      }
+    } catch (e) {
+      // Gain node may have been disconnected
+    }
+  }
+
+  /**
+   * Mute hallway hiss while cameras are up or player is teleported (keeps loop running)
+   */
+  private applyPyroHallwayHissMuted(): void {
+    if (!this.pyroHallwayHissGain || !this.sharedAudioContext) return;
+
+    try {
+      const now = this.sharedAudioContext.currentTime;
+      this.pyroHallwayHissGain.gain.cancelScheduledValues(now);
+      this.pyroHallwayHissGain.gain.setValueAtTime(0, now);
+    } catch (e) {
+      // Gain node may have been disconnected
+    }
+  }
+
+  /**
+   * Update hallway hiss stereo pan when side changes mid-play
+   */
+  private updatePyroHallwayHiss(side: 'LEFT' | 'RIGHT'): void {
+    if (!this.isPlayingPyroHallwayHiss || !this.pyroHallwayHissPanner) return;
+
+    this.pyroHallwayHissPanner.pan.value = side === 'LEFT' ? -0.65 : 0.65;
+  }
+
+  /**
+   * Disconnect all Pyro hallway hiss audio nodes immediately
+   */
+  private disconnectPyroHallwayHissNodes(): void {
+    if (this.pyroHallwayHissStopTimeout !== null) {
+      window.clearTimeout(this.pyroHallwayHissStopTimeout);
+      this.pyroHallwayHissStopTimeout = null;
+    }
+
+    const stopSource = (source: AudioBufferSourceNode | null) => {
+      if (!source) return;
+      try {
+        source.stop();
+        source.disconnect();
+      } catch (e) {
+        // Already stopped
+      }
+    };
+
+    const disconnectNode = (node: AudioNode | null) => {
+      if (!node) return;
+      try {
+        node.disconnect();
+      } catch (e) {
+        // Already disconnected
+      }
+    };
+
+    stopSource(this.pyroHallwayHissBodyNoise);
+    stopSource(this.pyroHallwayHissHissNoise);
+    disconnectNode(this.pyroHallwayHissBodyFilter);
+    disconnectNode(this.pyroHallwayHissBodyGain);
+    disconnectNode(this.pyroHallwayHissHissHighpass);
+    disconnectNode(this.pyroHallwayHissHissFilter);
+    disconnectNode(this.pyroHallwayHissHissGain);
+    disconnectNode(this.pyroHallwayHissGain);
+    disconnectNode(this.pyroHallwayHissPanner);
+
+    this.pyroHallwayHissBodyNoise = null;
+    this.pyroHallwayHissBodyFilter = null;
+    this.pyroHallwayHissBodyGain = null;
+    this.pyroHallwayHissHissNoise = null;
+    this.pyroHallwayHissHissHighpass = null;
+    this.pyroHallwayHissHissFilter = null;
+    this.pyroHallwayHissHissGain = null;
+    this.pyroHallwayHissGain = null;
+    this.pyroHallwayHissPanner = null;
+    this.isPlayingPyroHallwayHiss = false;
+    this.pyroHallwayHissStopping = false;
+    this.pyroHallwayHissSide = null;
+    this.pyroHallwayHissAudible = false;
+    this.pyroHallwayHissIntroDone = false;
+  }
+
+  /**
+   * Stop hallway lighter hiss (400ms fade-out unless immediate)
+   */
+  private stopPyroHallwayHiss(immediate: boolean = false): void {
+    if (!this.isPlayingPyroHallwayHiss && !this.pyroHallwayHissGain) {
+      this.pyroHallwayHissStopping = false;
+      return;
+    }
+
+    if (immediate || !this.pyroHallwayHissGain || !this.sharedAudioContext) {
+      this.disconnectPyroHallwayHissNodes();
+      return;
+    }
+
+    if (this.pyroHallwayHissStopping) return;
+
+    this.pyroHallwayHissStopping = true;
+    const audioContext = this.sharedAudioContext;
+    const now = audioContext.currentTime;
+    const fadeOutSec = 0.4;
+
+    try {
+      this.pyroHallwayHissGain.gain.cancelScheduledValues(now);
+      this.pyroHallwayHissGain.gain.setValueAtTime(this.pyroHallwayHissGain.gain.value, now);
+      this.pyroHallwayHissGain.gain.exponentialRampToValueAtTime(0.001, now + fadeOutSec);
+    } catch (e) {
+      this.disconnectPyroHallwayHissNodes();
+      return;
+    }
+
+    this.pyroHallwayHissStopTimeout = window.setTimeout(() => {
+      this.disconnectPyroHallwayHissNodes();
+    }, fadeOutSec * 1000 + 50);
+  }
+
+  /**
+   * Manage Pyro hallway hiss based on game state
+   */
+  private updatePyroHallwayAudio(_delta: number): void {
+    if (this.pyroHallwayHissStopping) return;
+
+    const pyroInHallway =
+      this.isPyroEnabled() &&
+      this.pyro &&
+      !this.pyro.isForceDespawned() &&
+      this.pyro.shouldPlayHallwayHiss();
+
+    const shouldAudible =
+      pyroInHallway &&
+      !this.isCameraMode &&
+      !this.isTeleported;
+
+    if (!pyroInHallway) {
+      this.pyroHallwayHissAudible = false;
+      this.pyroHallwayHissIntroDone = false;
+      if (this.isPlayingPyroHallwayHiss) {
+        this.stopPyroHallwayHiss();
+      }
+      return;
+    }
+
+    const side = this.pyro!.getHallway()!;
+
+    if (!this.isPlayingPyroHallwayHiss) {
+      this.startPyroHallwayHiss(side);
+    } else if (this.pyroHallwayHissSide !== side) {
+      this.pyroHallwayHissSide = side;
+      this.updatePyroHallwayHiss(side);
+    }
+
+    if (shouldAudible && !this.pyroHallwayHissAudible) {
+      this.pyroHallwayHissAudible = true;
+      this.applyPyroHallwayHissAudible(!this.pyroHallwayHissIntroDone);
+      this.pyroHallwayHissIntroDone = true;
+    } else if (!shouldAudible && this.pyroHallwayHissAudible) {
+      this.pyroHallwayHissAudible = false;
+      this.applyPyroHallwayHissMuted();
+    }
   }
   
   /**
@@ -6397,23 +6746,16 @@ export class GameScene extends Phaser.Scene {
    */
   private playDeniedSound(): void {
     try {
-      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
-        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      }
-      const audioContext = this.sharedAudioContext;
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
       
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      
-      // Two descending tones - classic "denied" sound
       const osc1 = audioContext.createOscillator();
       const osc2 = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
       
       osc1.connect(gainNode);
       osc2.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      this.connectGameAudio(gainNode);
       
       // First tone (higher)
       osc1.type = 'square';
@@ -6663,26 +7005,18 @@ export class GameScene extends Phaser.Scene {
    */
   private playEnemyRetreatSound(): void {
     try {
-      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
-        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      }
-      const audioContext = this.sharedAudioContext;
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
       
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      
-      // Series of fading footsteps (running away)
       const stepCount = 5;
       for (let i = 0; i < stepCount; i++) {
         const delay = i * 0.15;
-        const volume = 0.2 * (1 - i / stepCount); // Fade out
+        const volume = 0.09 * (1 - i / stepCount);
         
-        // Thud
         const thud = audioContext.createOscillator();
         const thudGain = audioContext.createGain();
         thud.connect(thudGain);
-        thudGain.connect(audioContext.destination);
+        this.connectGameAudio(thudGain);
         
         thud.type = 'sine';
         thud.frequency.setValueAtTime(60 + i * 5, audioContext.currentTime + delay);
@@ -6694,7 +7028,6 @@ export class GameScene extends Phaser.Scene {
         thud.start(audioContext.currentTime + delay);
         thud.stop(audioContext.currentTime + delay + 0.1);
         
-        // Scuff noise
         const noiseBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.05, audioContext.sampleRate);
         const noiseData = noiseBuffer.getChannelData(0);
         for (let j = 0; j < noiseData.length; j++) {
@@ -6704,7 +7037,7 @@ export class GameScene extends Phaser.Scene {
         const noiseGain = audioContext.createGain();
         noise.buffer = noiseBuffer;
         noise.connect(noiseGain);
-        noiseGain.connect(audioContext.destination);
+        this.connectGameAudio(noiseGain);
         noiseGain.gain.setValueAtTime(volume * 0.3, audioContext.currentTime + delay + 0.02);
         noiseGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + delay + 0.07);
         noise.start(audioContext.currentTime + delay + 0.02);
@@ -8743,7 +9076,7 @@ export class GameScene extends Phaser.Scene {
       }
       
       // Show Pyro floating mask if Pyro is in left hall (Custom Night)
-      // No sound here - only visual. Sound is for cameras only.
+      // Hallway hiss is heard from Intel; wrangler light reveals the mask visually.
       const pyroInLeftHall = this.isPyroEnabled() && this.pyro && 
                              !this.pyro.isForceDespawned() && 
                              this.pyro.getHallway() === 'LEFT';
@@ -8793,7 +9126,7 @@ export class GameScene extends Phaser.Scene {
       }
       
       // Show Pyro floating mask if Pyro is in right hall (Custom Night)
-      // No sound here - only visual. Sound is for cameras only.
+      // Hallway hiss is heard from Intel; wrangler light reveals the mask visually.
       const pyroInRightHall = this.isPyroEnabled() && this.pyro && 
                               !this.pyro.isForceDespawned() && 
                               this.pyro.getHallway() === 'RIGHT';
@@ -8810,11 +9143,15 @@ export class GameScene extends Phaser.Scene {
       this.aimBeam.lineBetween(sentryX, sentryY, sentryX, 250);
     }
     
-    // Handle scary detection sound
+    // Handle scary detection sound (hysteresis avoids rapid start/stop flicker at doorway edge)
     if (enemyDetected) {
+      this.detectionSoundReleaseFrames = 0;
       this.startDetectionSound();
-    } else {
-      this.stopDetectionSound();
+    } else if (this.isPlayingDetectionSound) {
+      this.detectionSoundReleaseFrames++;
+      if (this.detectionSoundReleaseFrames >= 4) {
+        this.stopDetectionSound();
+      }
     }
   }
   
@@ -8905,7 +9242,7 @@ export class GameScene extends Phaser.Scene {
       
       this.sniperHumOscillator.connect(this.sniperHumGain);
       this.sniperHumOscillator2.connect(this.sniperHumGain);
-      this.sniperHumGain.connect(audioContext.destination);
+      this.connectGameAudio(this.sniperHumGain);
       
       // Low electrical hum
       this.sniperHumOscillator.type = 'sawtooth';
@@ -8959,34 +9296,25 @@ export class GameScene extends Phaser.Scene {
     if (this.isPlayingDispenserHum) return;
     
     try {
-      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
-        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      }
-      const audioContext = this.sharedAudioContext;
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
       
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      
-      // Main gain node
       this.dispenserHumGain = audioContext.createGain();
       this.dispenserHumGain.gain.setValueAtTime(0.045, audioContext.currentTime);
-      this.dispenserHumGain.connect(audioContext.destination);
+      this.connectGameAudio(this.dispenserHumGain);
       
-      // Primary low hum (electrical transformer sound)
       this.dispenserHumOscillator = audioContext.createOscillator();
       this.dispenserHumOscillator.type = 'sine';
       this.dispenserHumOscillator.frequency.setValueAtTime(100, audioContext.currentTime);
       this.dispenserHumOscillator.connect(this.dispenserHumGain);
       
-      // Secondary harmonic for richness (higher pitch whir)
       this.dispenserHumOscillator2 = audioContext.createOscillator();
       this.dispenserHumOscillator2.type = 'triangle';
       this.dispenserHumOscillator2.frequency.setValueAtTime(200, audioContext.currentTime);
       
       const secondaryGain = audioContext.createGain();
       secondaryGain.gain.setValueAtTime(0.022, audioContext.currentTime);
-      secondaryGain.connect(audioContext.destination);
+      this.connectGameAudio(secondaryGain);
       this.dispenserHumOscillator2.connect(secondaryGain);
       
       // Add subtle wobble to make it sound more organic
@@ -9088,47 +9416,38 @@ export class GameScene extends Phaser.Scene {
    * Play sapper sparking/buzzing sound (Night 5+)
    */
   private playSapperSound(): void {
-    // Don't play if game is over
     if (this.gameStatus !== 'PLAYING') return;
+    if (this.isPlayingSapperSound || this.sapperSoundOscillator) return;
     
     try {
-      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
-        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      }
-      const audioContext = this.sharedAudioContext;
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
       
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      
-      // Create oscillators for electrical sparking sound
       this.sapperSoundGain = audioContext.createGain();
-      this.sapperSoundGain.gain.setValueAtTime(0.15, audioContext.currentTime);
-      this.sapperSoundGain.connect(audioContext.destination);
+      this.sapperSoundGain.gain.setValueAtTime(0.12, audioContext.currentTime);
+      this.connectGameAudio(this.sapperSoundGain);
       
-      // Main buzzing oscillator
       this.sapperSoundOscillator = audioContext.createOscillator();
       this.sapperSoundOscillator.type = 'sawtooth';
       this.sapperSoundOscillator.frequency.setValueAtTime(120, audioContext.currentTime);
       
-      // Add modulation for sparking effect
-      const modulator = audioContext.createOscillator();
-      modulator.type = 'square';
-      modulator.frequency.setValueAtTime(8, audioContext.currentTime);
+      this.sapperSoundModulator = audioContext.createOscillator();
+      this.sapperSoundModulator.type = 'square';
+      this.sapperSoundModulator.frequency.setValueAtTime(8, audioContext.currentTime);
       
       const modulatorGain = audioContext.createGain();
       modulatorGain.gain.setValueAtTime(30, audioContext.currentTime);
       
-      modulator.connect(modulatorGain);
+      this.sapperSoundModulator.connect(modulatorGain);
       modulatorGain.connect(this.sapperSoundOscillator.frequency);
       
       this.sapperSoundOscillator.connect(this.sapperSoundGain);
       
       this.sapperSoundOscillator.start();
-      modulator.start();
-      
+      this.sapperSoundModulator.start();
+      this.isPlayingSapperSound = true;
     } catch (e) {
-      console.log('Failed to play sapper sound:', e);
+      this.stopSapperSound();
     }
   }
   
@@ -9137,18 +9456,16 @@ export class GameScene extends Phaser.Scene {
    */
   private stopSapperSound(): void {
     try {
-      if (this.sapperSoundOscillator) {
-        this.sapperSoundOscillator.stop();
-        this.sapperSoundOscillator.disconnect();
-        this.sapperSoundOscillator = null;
-      }
       if (this.sapperSoundGain) {
         this.sapperSoundGain.disconnect();
-        this.sapperSoundGain = null;
       }
-    } catch (e) {
-      // Already stopped
+    } catch {
+      // Already disconnected
     }
+    this.sapperSoundOscillator = this.stopOscillator(this.sapperSoundOscillator);
+    this.sapperSoundModulator = this.stopOscillator(this.sapperSoundModulator);
+    this.sapperSoundGain = null;
+    this.isPlayingSapperSound = false;
   }
 
   /**
@@ -9323,35 +9640,33 @@ export class GameScene extends Phaser.Scene {
     if (this.isPlayingDetectionSound) return;
     
     try {
-      this.detectionSoundContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
       
-      // Create an unsettling buzz/drone
-      this.detectionOscillator = this.detectionSoundContext.createOscillator();
-      const gainNode = this.detectionSoundContext.createGain();
+      this.detectionOscillator = audioContext.createOscillator();
+      this.detectionGain = audioContext.createGain();
+      this.detectionLfo = audioContext.createOscillator();
+      this.detectionLfoGain = audioContext.createGain();
       
-      // Low frequency modulator for wobble effect
-      const lfo = this.detectionSoundContext.createOscillator();
-      const lfoGain = this.detectionSoundContext.createGain();
+      this.detectionLfo.frequency.value = 8;
+      this.detectionLfoGain.gain.value = 30;
       
-      lfo.frequency.value = 8; // Wobble speed
-      lfoGain.gain.value = 30; // Wobble depth
-      
-      lfo.connect(lfoGain);
-      lfoGain.connect(this.detectionOscillator.frequency);
+      this.detectionLfo.connect(this.detectionLfoGain);
+      this.detectionLfoGain.connect(this.detectionOscillator.frequency);
       
       this.detectionOscillator.type = 'sawtooth';
       this.detectionOscillator.frequency.value = 80;
       
-      this.detectionOscillator.connect(gainNode);
-      gainNode.connect(this.detectionSoundContext.destination);
+      this.detectionOscillator.connect(this.detectionGain);
+      this.connectGameAudio(this.detectionGain);
       
-      gainNode.gain.value = 0.15;
+      this.detectionGain.gain.value = 0.12;
       
-      lfo.start();
+      this.detectionLfo.start();
       this.detectionOscillator.start();
       this.isPlayingDetectionSound = true;
     } catch (e) {
-      console.log('Detection sound not available');
+      this.stopDetectionSound();
     }
   }
   
@@ -9362,19 +9677,22 @@ export class GameScene extends Phaser.Scene {
     if (!this.isPlayingDetectionSound) return;
     
     try {
-      if (this.detectionOscillator) {
-        this.detectionOscillator.stop();
-        this.detectionOscillator.disconnect();
-        this.detectionOscillator = null;
+      if (this.detectionGain) {
+        this.detectionGain.disconnect();
       }
-      if (this.detectionSoundContext) {
-        this.detectionSoundContext.close();
-        this.detectionSoundContext = null;
-      }
-    } catch (e) {
-      // Ignore errors
+    } catch {
+      // Already disconnected
     }
+
+    this.detectionOscillator = this.stopOscillator(this.detectionOscillator);
+    this.detectionLfo = this.stopOscillator(this.detectionLfo);
+    if (this.detectionLfoGain) {
+      try { this.detectionLfoGain.disconnect(); } catch { /* ignore */ }
+    }
+    this.detectionGain = null;
+    this.detectionLfoGain = null;
     this.isPlayingDetectionSound = false;
+    this.detectionSoundReleaseFrames = 0;
   }
   
   /**
@@ -9390,6 +9708,7 @@ export class GameScene extends Phaser.Scene {
     this.stopDispenserHum();
     this.disposeIntelRoomAmbience();
     this.stopPyroCracklingAmbient();
+    this.stopPyroHallwayHiss(true);
     
     // Force stop any oscillators that might still be running
     const oscillatorsToStop = [
@@ -9416,10 +9735,17 @@ export class GameScene extends Phaser.Scene {
     
     // Null out all oscillator references
     this.demoEyeGlowOscillator = null;
+    this.demoEyeGlowOscillator2 = null;
+    this.demoEyeGlowLfo = null;
+    this.demoEyeGlowLfoGain = null;
     this.sapperSoundOscillator = null;
+    this.sapperSoundModulator = null;
     this.sniperHumOscillator = null;
     this.sniperHumOscillator2 = null;
     this.detectionOscillator = null;
+    this.detectionGain = null;
+    this.detectionLfo = null;
+    this.detectionLfoGain = null;
     this.approachGrowlOsc = null;
     this.dispenserHumOscillator = null;
     this.dispenserHumOscillator2 = null;
@@ -9439,21 +9765,14 @@ export class GameScene extends Phaser.Scene {
       } catch (e) {
         // Ignore errors
       }
-      this.sharedAudioContext = null;  // Will be recreated when needed
-    }
-    
-    // Also close the detection sound's separate audio context
-    if (this.detectionSoundContext) {
-      try {
-        this.detectionSoundContext.close();
-      } catch (e) {
-        // Ignore errors
-      }
-      this.detectionSoundContext = null;
+      this.sharedAudioContext = null;
+      this.masterAudioGain = null;
+      this.masterAudioCompressor = null;
     }
     
     // Reset all audio state flags
     this.isPlayingDetectionSound = false;
+    this.isPlayingSapperSound = false;
     this.isPlayingSniperHum = false;
     this.demoEyeGlowSoundPlaying = false;
   }
@@ -9852,62 +10171,63 @@ export class GameScene extends Phaser.Scene {
    */
   private playSound(type: 'fire' | 'rocketHit' | 'sentryDestroyed'): void {
     try {
-      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+
       switch (type) {
-        case 'fire':
-          // Sharp attack sound
+        case 'fire': {
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          oscillator.connect(gainNode);
+          this.connectGameAudio(gainNode);
           oscillator.type = 'sawtooth';
-          oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-          oscillator.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.1);
-          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.1);
+          oscillator.frequency.setValueAtTime(200, now);
+          oscillator.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+          gainNode.gain.setValueAtTime(0.16, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+          oscillator.start(now);
+          oscillator.stop(now + 0.1);
           break;
-          
-        case 'rocketHit':
-          // Explosion - balanced volume
+        }
+
+        case 'rocketHit': {
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          oscillator.connect(gainNode);
+          this.connectGameAudio(gainNode);
           oscillator.type = 'sawtooth';
-          oscillator.frequency.setValueAtTime(80, audioContext.currentTime);
-          oscillator.frequency.exponentialRampToValueAtTime(20, audioContext.currentTime + 0.4);
-          gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.4);
-          
-          // Bass thump
+          oscillator.frequency.setValueAtTime(80, now);
+          oscillator.frequency.exponentialRampToValueAtTime(20, now + 0.4);
+          gainNode.gain.setValueAtTime(0.24, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+          oscillator.start(now);
+          oscillator.stop(now + 0.4);
+
           const bassOsc = audioContext.createOscillator();
           const bassGain = audioContext.createGain();
           bassOsc.connect(bassGain);
-          bassGain.connect(audioContext.destination);
+          this.connectGameAudio(bassGain);
           bassOsc.type = 'sine';
-          bassOsc.frequency.setValueAtTime(50, audioContext.currentTime);
-          bassOsc.frequency.exponentialRampToValueAtTime(25, audioContext.currentTime + 0.25);
-          bassGain.gain.setValueAtTime(0.35, audioContext.currentTime);
-          bassGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
-          bassOsc.start(audioContext.currentTime);
-          bassOsc.stop(audioContext.currentTime + 0.25);
-          
-          // Impact crack
+          bassOsc.frequency.setValueAtTime(50, now);
+          bassOsc.frequency.exponentialRampToValueAtTime(25, now + 0.25);
+          bassGain.gain.setValueAtTime(0.18, now);
+          bassGain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+          bassOsc.start(now);
+          bassOsc.stop(now + 0.25);
+
           const crackOsc = audioContext.createOscillator();
           const crackGain = audioContext.createGain();
           crackOsc.connect(crackGain);
-          crackGain.connect(audioContext.destination);
+          this.connectGameAudio(crackGain);
           crackOsc.type = 'square';
-          crackOsc.frequency.setValueAtTime(150, audioContext.currentTime);
-          crackOsc.frequency.exponentialRampToValueAtTime(40, audioContext.currentTime + 0.1);
-          crackGain.gain.setValueAtTime(0.25, audioContext.currentTime);
-          crackGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-          crackOsc.start(audioContext.currentTime);
-          crackOsc.stop(audioContext.currentTime + 0.1);
-          
-          // Explosion noise
+          crackOsc.frequency.setValueAtTime(150, now);
+          crackOsc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+          crackGain.gain.setValueAtTime(0.14, now);
+          crackGain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+          crackOsc.start(now);
+          crackOsc.stop(now + 0.1);
+
           const noiseBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.2, audioContext.sampleRate);
           const noiseData = noiseBuffer.getChannelData(0);
           for (let i = 0; i < noiseData.length; i++) {
@@ -9917,38 +10237,41 @@ export class GameScene extends Phaser.Scene {
           const noiseGain = audioContext.createGain();
           noiseSource.buffer = noiseBuffer;
           noiseSource.connect(noiseGain);
-          noiseGain.connect(audioContext.destination);
-          noiseGain.gain.setValueAtTime(0.2, audioContext.currentTime);
-          noiseGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-          noiseSource.start(audioContext.currentTime);
+          this.connectGameAudio(noiseGain);
+          noiseGain.gain.setValueAtTime(0.1, now);
+          noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+          noiseSource.start(now);
           break;
-          
-        case 'sentryDestroyed':
-          // Descending crash/explosion
+        }
+
+        case 'sentryDestroyed': {
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          oscillator.connect(gainNode);
+          this.connectGameAudio(gainNode);
           oscillator.type = 'square';
-          oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
-          oscillator.frequency.exponentialRampToValueAtTime(20, audioContext.currentTime + 0.5);
-          gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-          oscillator.start(audioContext.currentTime);
-          oscillator.stop(audioContext.currentTime + 0.5);
-          
-          // Add a second layer for more impact
+          oscillator.frequency.setValueAtTime(300, now);
+          oscillator.frequency.exponentialRampToValueAtTime(20, now + 0.5);
+          gainNode.gain.setValueAtTime(0.22, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+          oscillator.start(now);
+          oscillator.stop(now + 0.5);
+
           const osc2 = audioContext.createOscillator();
           const gain2 = audioContext.createGain();
           osc2.connect(gain2);
-          gain2.connect(audioContext.destination);
+          this.connectGameAudio(gain2);
           osc2.type = 'sawtooth';
-          osc2.frequency.setValueAtTime(100, audioContext.currentTime);
-          osc2.frequency.exponentialRampToValueAtTime(10, audioContext.currentTime + 0.6);
-          gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
-          gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.6);
-          osc2.start(audioContext.currentTime);
-          osc2.stop(audioContext.currentTime + 0.6);
+          osc2.frequency.setValueAtTime(100, now);
+          osc2.frequency.exponentialRampToValueAtTime(10, now + 0.6);
+          gain2.gain.setValueAtTime(0.14, now);
+          gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+          osc2.start(now);
+          osc2.stop(now + 0.6);
           break;
+        }
       }
     } catch (e) {
-      // Audio not supported, fail silently
       console.log('Audio not available');
     }
   }
@@ -11016,16 +11339,16 @@ export class GameScene extends Phaser.Scene {
    */
   private playDemomanBattleCry(): void {
     try {
-      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
       
-      // Scottish battle cry - low growl with harmonics
       const osc1 = audioContext.createOscillator();
       const osc2 = audioContext.createOscillator();
       const gain = audioContext.createGain();
       
       osc1.connect(gain);
       osc2.connect(gain);
-      gain.connect(audioContext.destination);
+      this.connectGameAudio(gain);
       
       osc1.type = 'sawtooth';
       osc1.frequency.setValueAtTime(100, audioContext.currentTime);
@@ -11037,8 +11360,8 @@ export class GameScene extends Phaser.Scene {
       osc2.frequency.linearRampToValueAtTime(300, audioContext.currentTime + 0.3);
       osc2.frequency.linearRampToValueAtTime(150, audioContext.currentTime + 0.6);
       
-      gain.gain.setValueAtTime(0.4, audioContext.currentTime);
-      gain.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.28, audioContext.currentTime);
+      gain.gain.linearRampToValueAtTime(0.32, audioContext.currentTime + 0.2);
       gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.7);
       
       osc1.start(audioContext.currentTime);
@@ -11055,16 +11378,16 @@ export class GameScene extends Phaser.Scene {
    */
   private playDemomanDistantCry(): void {
     try {
-      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
       
-      // Filtered/distant version
       const osc = audioContext.createOscillator();
       const filter = audioContext.createBiquadFilter();
       const gain = audioContext.createGain();
       
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(audioContext.destination);
+      this.connectGameAudio(gain);
       
       filter.type = 'lowpass';
       filter.frequency.value = 400;
@@ -11073,7 +11396,7 @@ export class GameScene extends Phaser.Scene {
       osc.frequency.setValueAtTime(120, audioContext.currentTime);
       osc.frequency.linearRampToValueAtTime(180, audioContext.currentTime + 0.4);
       
-      gain.gain.setValueAtTime(0.2, audioContext.currentTime);
+      gain.gain.setValueAtTime(0.16, audioContext.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
       
       osc.start(audioContext.currentTime);
@@ -12840,6 +13163,8 @@ export class GameScene extends Phaser.Scene {
         this.stopPyroCracklingAmbient();
       }
     }
+
+    this.updatePyroHallwayAudio(delta);
     
     // Update Medic ghost apparition (Endless Night 6 only)
     this.updateMedicGhost(delta);

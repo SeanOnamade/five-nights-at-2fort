@@ -4,7 +4,8 @@
  * A ghostly, invisible threat with two alternating modes:
  * - ROOM Mode: Teleports rapidly between rooms. Invisible on cameras but emits
  *   burning/crackling sounds. Teleporting to Pyro's room = death. In hallways,
- *   a floating Pyro mask is visible with wrangler light. Firing sentry at Pyro
+ *   emits a low steady lighter/flame hiss audible from Intel (stereo-panned).
+ *   A floating Pyro mask is visible with wrangler light. Firing sentry at Pyro
  *   in hallway = sentry destroyed (reflected attack).
  * - INTEL Mode: Has a chance to appear in Intel room (while player is there).
  *   Match igniting sound warns player. Must teleport away within 10 seconds or die.
@@ -451,6 +452,13 @@ export class PyroEnemy {
    */
   public shouldPlayBurningSound(cameraNode: NodeId): boolean {
     return this.mode === 'ROOM' && this.currentNode === cameraNode;
+  }
+
+  /**
+   * Check if hallway lighter hiss should play (ROOM mode, in a hallway, not transitioning)
+   */
+  public shouldPlayHallwayHiss(): boolean {
+    return this.mode === 'ROOM' && this.isInHallway() && !this.isTransitioning();
   }
   
   /**

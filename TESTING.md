@@ -53,6 +53,9 @@ This document outlines all the testing scenarios for the game.
 - [ ] Pyro invisible on cameras (crackling sound only)
 - [ ] Pyro room mode: Floats between rooms
 - [ ] Shining wrangler light in hallway repels Pyro
+- [ ] Pyro in hallway: quiet steady lighter hiss from correct side in Intel (cameras down)
+- [ ] Hallway hiss fades in over ~2 seconds; stops when Pyro leaves, cameras open, or player teleports
+- [ ] Intel match attack uses distinct loud click + escalating crackle (not hallway hiss)
 - [ ] Pyro Intel mode: Match lights = 10 second countdown
 - [ ] Must teleport away before match expires
 - [ ] Pyro REFLECTS sentry rockets (destroys sentry!)

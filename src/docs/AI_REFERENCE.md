@@ -215,6 +215,7 @@ Ghostly, invisible menace. **Very difficult!**
 - Teleports rapidly between all rooms (including hallways)
 - **Invisible on cameras** - only heard as crackling/burning sound!
 - Teleporting to Pyro's room = **instant death**
+- In hallways beside Intel: low steady lighter/flame hiss audible from Intel (cameras down), stereo-panned left/right. Distinct from Intel match attack (click + escalating crackle)
 - In hallways: **floating Pyro mask** visible with wrangler light
 - **Firing sentry at Pyro = SENTRY DESTROYED** (reflected attack!)
 
