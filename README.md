@@ -119,7 +119,7 @@ After completing the game, Custom Night unlocks — toggle any combination of al
 - **Medic** — Übercharges Scout/Soldier/Demoman, making them immune to sentry fire. Never appears on cameras — only the blue-glowing target is visible. Teleport away to survive (sentry is lost).
 - **Administrator** — Hacks teleporter nodes remotely. Auto-hacks your last room on return to Intel (1/hour); if you stop teleporting for 60s, a visible hack bar appears on a random camera — teleport there to scare her off, or click the bar to interrupt.
 - **Miss Pauling** — Crawls silently through a horseshoe vent system. No sound whatsoever — track her on vent cameras only. Seal the correct vent opening (LEFT or RIGHT) before she pries it open. If blocked, she retreats all the way and starts over.
-- **Merasmus** — After 2 AM he mirrors the entire screen, reversing your controls and aim until 4 AM. Cackles when it happens.
+- **Merasmus** — Materializes in Intel over 60 real seconds while your view is normal. Press **Q** (FLIP on mobile) to mirror the screen and repel him at 8× speed; after fully repelled, stay unflipped 10 uninterrupted seconds before he returns. Green tint and hum warn you even on cameras.
 - Plus all story enemies
 
 ### Nightmare Mode
@@ -141,7 +141,7 @@ A special endless mode featuring all enemies at maximum aggression (everyone exc
 | Medic | C | Übercharges Scout/Soldier/Demo — sentry-immune | Teleport away (sentry is lost, but you survive) |
 | Administrator | C | Hacks teleporter nodes remotely, cutting off escape routes | Teleport to her target room (TARGETING) or click the hack bar (HACKING) |
 | Miss Pauling | C | Crawls silently through vents — no audio cue, vent cameras only | Seal the correct vent opening (LEFT or RIGHT) before she pries it open |
-| Merasmus | C | Mirrors the entire screen after 2 AM, reversing your controls | Adapt — everything is flipped until 4 AM |
+| Merasmus | C | Materializes in Intel over 60s; timer runs on cameras too | **Q** / FLIP to mirror view and repel at 8×; 10s unflipped respite before he returns |
 
 ---
 

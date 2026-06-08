@@ -223,14 +223,20 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * Merasmus (Custom Night only when `customEnemies.merasmus` is true).
-   * Does not touch enemy logic, Spy, Administrator, etc. — only DOM mirror, optional pointer wrap, A/D remap, and queue.
+   * Fade-in threat in Intel; Q toggles full-screen mirror to repel at 8× speed.
    */
-  private merasmusScreenMirrored = false;
-  private merasmusPendingFlip: Array<'on' | 'off'> = [];
-  private merasmusHasQueuedPost2AM = false;
-  private merasmusHasQueuedPost4AM = false;
+  private merasmusViewFlipped = false;
+  private merasmusLinearProgress = 0;
+  private merasmusRespiteUnflippedMs = 0;
+  private merasmusInRespite = false;
   /** Stock Phaser pointer mapper; restored on shutdown so DOM mirror + X invert stay in sync */
   private merasmusStockTransformPointer: Phaser.Input.InputManager['transformPointer'] | null = null;
+  private merasmusVignette!: Phaser.GameObjects.Container;
+  private merasmusFigureContainer!: Phaser.GameObjects.Container;
+  private merasmusHumOscillator: OscillatorNode | null = null;
+  private merasmusHumOscillator2: OscillatorNode | null = null;
+  private merasmusHumGain: GainNode | null = null;
+  private merasmusHumPlaying = false;
   
   // Night 5+ features - Spy sapper
   private sapperIndicator!: Phaser.GameObjects.Container;
@@ -521,6 +527,7 @@ export class GameScene extends Phaser.Scene {
   private mobileActionCostText!: Phaser.GameObjects.Text;
   private mobileFireButton!: Phaser.GameObjects.Container;
   private mobilePauseButton!: Phaser.GameObjects.Container;
+  private mobileMerasmusFlipButton!: Phaser.GameObjects.Container;
   private mobileLeftZone!: Phaser.GameObjects.Rectangle;
   private mobileRightZone!: Phaser.GameObjects.Rectangle;
   private mobileLeftHint!: Phaser.GameObjects.Graphics;
@@ -580,16 +587,34 @@ export class GameScene extends Phaser.Scene {
     return this.customEnemies ? this.customEnemies.merasmus ?? false : false;
   }
 
-  private clearMerasmusMirrorDomAndFlags(): void {
-    this.merasmusPendingFlip = [];
-    this.merasmusHasQueuedPost2AM = false;
-    this.merasmusHasQueuedPost4AM = false;
+  private resetMerasmusState(): void {
+    this.merasmusLinearProgress = 0;
+    this.merasmusRespiteUnflippedMs = 0;
+    this.merasmusInRespite = false;
     this.setMerasmusDomMirror(false);
+    this.stopMerasmusHum();
+    if (this.merasmusVignette) {
+      this.merasmusVignette.setVisible(false);
+      this.merasmusVignette.setAlpha(0);
+    }
+    if (this.merasmusFigureContainer) {
+      this.merasmusFigureContainer.setVisible(false);
+      this.merasmusFigureContainer.setAlpha(0);
+    }
+  }
+
+  private clearMerasmusMirrorDomAndFlags(): void {
+    this.resetMerasmusState();
+  }
+
+  private getMerasmusDisplayAlpha(): number {
+    const p = Phaser.Math.Clamp(this.merasmusLinearProgress, 0, 1);
+    return Math.pow(p, GAME_CONSTANTS.MERASMUS_EASE_POWER);
   }
 
   private setMerasmusDomMirror(mirrored: boolean): void {
     if (mirrored && !this.isMerasmusEnabled()) return;
-    this.merasmusScreenMirrored = mirrored;
+    this.merasmusViewFlipped = mirrored;
     const canvas = this.game?.canvas;
     if (!canvas) return;
     if (mirrored) {
@@ -599,6 +624,7 @@ export class GameScene extends Phaser.Scene {
       canvas.style.transform = '';
       canvas.style.transformOrigin = '';
     }
+    this.updateMobileMerasmusFlipButton();
   }
 
   /**
@@ -612,7 +638,7 @@ export class GameScene extends Phaser.Scene {
     this.merasmusStockTransformPointer = im.transformPointer.bind(im);
     im.transformPointer = (pointer, pageX, pageY, wasMove) => {
       this.merasmusStockTransformPointer!.call(im, pointer, pageX, pageY, wasMove);
-      if (scene.merasmusScreenMirrored && scene.isMerasmusEnabled()) {
+      if (scene.merasmusViewFlipped && scene.isMerasmusEnabled()) {
         const w = scene.scale.width;
         pointer.position.x = w - pointer.position.x;
       }
@@ -625,15 +651,183 @@ export class GameScene extends Phaser.Scene {
     this.merasmusStockTransformPointer = null;
   }
 
-  private maybeArmMerasmusFlipQueue(): void {
-    if (!this.isCustomNightMode || !this.isMerasmusEnabled()) return;
-    if (this.gameMinutes >= 120 && !this.merasmusHasQueuedPost2AM) {
-      this.merasmusHasQueuedPost2AM = true;
-      this.merasmusPendingFlip.push('on');
+  private createMerasmusOverlays(): void {
+    const width = 1280;
+    const height = 720;
+
+    this.merasmusVignette = this.add.container(0, 0);
+    this.merasmusVignette.setDepth(140);
+    const vignetteGfx = this.add.graphics();
+    const fadeDepth = 360;
+    const green = 0x44ff66;
+    const edgeAlpha = 0.14;
+
+    // Screen-edge vignette only — soft linear fades, no corner rings
+    vignetteGfx.fillGradientStyle(green, green, green, green, edgeAlpha, edgeAlpha, 0, 0);
+    vignetteGfx.fillRect(0, 0, width, fadeDepth);
+    vignetteGfx.fillGradientStyle(green, green, green, green, 0, 0, edgeAlpha, edgeAlpha);
+    vignetteGfx.fillRect(0, height - fadeDepth, width, fadeDepth);
+    vignetteGfx.fillGradientStyle(green, green, green, green, edgeAlpha, 0, edgeAlpha, 0);
+    vignetteGfx.fillRect(0, 0, fadeDepth, height);
+    vignetteGfx.fillGradientStyle(green, green, green, green, 0, edgeAlpha, 0, edgeAlpha);
+    vignetteGfx.fillRect(width - fadeDepth, 0, fadeDepth, height);
+
+    this.merasmusVignette.add(vignetteGfx);
+    this.merasmusVignette.setVisible(false);
+    this.merasmusVignette.setAlpha(0);
+
+    // Door frame is 260px tall — scale Merasmus to match wizard height
+    const doorCenterY = height / 2 - 50;
+    this.merasmusFigureContainer = this.add.container(640, doorCenterY + 8);
+    this.merasmusFigureContainer.setDepth(141);
+    const figure = this.add.graphics();
+    drawCharacterSilhouette(figure, 0, 0, 'MERASMUS', 0x8866dd);
+    this.merasmusFigureContainer.add(figure);
+    this.merasmusFigureContainer.setScale(2.05);
+    this.merasmusFigureContainer.setVisible(false);
+    this.merasmusFigureContainer.setAlpha(0);
+  }
+
+  private toggleMerasmusFlip(): void {
+    if (!this.isMerasmusEnabled()) return;
+    if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isTeleported) return;
+    this.setMerasmusDomMirror(!this.merasmusViewFlipped);
+  }
+
+  private updateMerasmus(delta: number): void {
+    if (!this.isMerasmusEnabled()) return;
+
+    if (this.isTeleported) {
+      if (this.merasmusVignette) {
+        this.merasmusVignette.setVisible(false);
+      }
+      if (this.merasmusFigureContainer) {
+        this.merasmusFigureContainer.setVisible(false);
+      }
+      this.updateMerasmusHumVolume(0);
+      return;
     }
-    if (this.gameMinutes >= 240 && !this.merasmusHasQueuedPost4AM) {
-      this.merasmusHasQueuedPost4AM = true;
-      this.merasmusPendingFlip.push('off');
+
+    const buildTime = GAME_CONSTANTS.MERASMUS_BUILD_TIME_MS;
+    const repelMult = GAME_CONSTANTS.MERASMUS_REPEL_MULTIPLIER;
+    const respiteMs = GAME_CONSTANTS.MERASMUS_RESPITE_UNFLIPPED_MS;
+
+    if (this.merasmusLinearProgress >= 1) {
+      this.playMerasmusCackle();
+      this.gameOver('Merasmus got you!');
+      return;
+    }
+
+    if (this.merasmusInRespite) {
+      if (this.merasmusViewFlipped) {
+        this.merasmusRespiteUnflippedMs = 0;
+      } else {
+        this.merasmusRespiteUnflippedMs += delta;
+        if (this.merasmusRespiteUnflippedMs >= respiteMs) {
+          this.merasmusInRespite = false;
+          this.merasmusRespiteUnflippedMs = 0;
+        }
+      }
+    } else if (this.merasmusViewFlipped && this.merasmusLinearProgress > 0) {
+      this.merasmusLinearProgress -= (repelMult * delta) / buildTime;
+      if (this.merasmusLinearProgress <= 0) {
+        this.merasmusLinearProgress = 0;
+        this.merasmusInRespite = true;
+        this.merasmusRespiteUnflippedMs = 0;
+        this.playMerasmusRespiteFlash();
+      }
+    } else if (!this.merasmusViewFlipped) {
+      this.merasmusLinearProgress += delta / buildTime;
+      if (this.merasmusLinearProgress >= 1) {
+        this.merasmusLinearProgress = 1;
+      }
+    }
+
+    const displayAlpha = this.getMerasmusDisplayAlpha();
+
+    if (this.merasmusVignette) {
+      const showVignette = displayAlpha > 0.001;
+      this.merasmusVignette.setVisible(showVignette);
+      this.merasmusVignette.setAlpha(displayAlpha * 0.18);
+    }
+
+    if (this.merasmusFigureContainer) {
+      const showFigure = displayAlpha > 0.001 && !this.isCameraMode;
+      this.merasmusFigureContainer.setVisible(showFigure);
+      this.merasmusFigureContainer.setAlpha(displayAlpha);
+      this.merasmusFigureContainer.setScale(2.05 + displayAlpha * 0.2);
+    }
+
+    this.updateMerasmusHumVolume(displayAlpha);
+  }
+
+  private startMerasmusHum(): void {
+    if (this.merasmusHumPlaying || this.merasmusHumOscillator) return;
+
+    try {
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
+
+      const osc1 = audioContext.createOscillator();
+      const osc2 = audioContext.createOscillator();
+      const mainGain = audioContext.createGain();
+
+      osc1.type = 'sine';
+      osc1.frequency.value = 52;
+      osc2.type = 'triangle';
+      osc2.frequency.value = 78;
+
+      osc1.connect(mainGain);
+      osc2.connect(mainGain);
+      this.connectGameAudio(mainGain);
+
+      mainGain.gain.value = 0;
+
+      osc1.start();
+      osc2.start();
+
+      this.merasmusHumOscillator = osc1;
+      this.merasmusHumOscillator2 = osc2;
+      this.merasmusHumGain = mainGain;
+      this.merasmusHumPlaying = true;
+    } catch {
+      this.stopMerasmusHum();
+    }
+  }
+
+  private stopMerasmusHum(): void {
+    if (!this.merasmusHumPlaying && !this.merasmusHumOscillator) return;
+
+    try {
+      if (this.merasmusHumGain) {
+        this.merasmusHumGain.disconnect();
+      }
+    } catch {
+      /* already disconnected */
+    }
+
+    this.merasmusHumOscillator = this.stopOscillator(this.merasmusHumOscillator);
+    this.merasmusHumOscillator2 = this.stopOscillator(this.merasmusHumOscillator2);
+    this.merasmusHumGain = null;
+    this.merasmusHumPlaying = false;
+  }
+
+  private updateMerasmusHumVolume(displayAlpha: number): void {
+    if (!this.isMerasmusEnabled()) return;
+
+    if (displayAlpha <= 0.001) {
+      if (this.merasmusHumPlaying) {
+        this.stopMerasmusHum();
+      }
+      return;
+    }
+
+    if (!this.merasmusHumPlaying) {
+      this.startMerasmusHum();
+    }
+
+    if (this.merasmusHumGain) {
+      this.merasmusHumGain.gain.value = 0.02 + displayAlpha * 0.18;
     }
   }
 
@@ -647,80 +841,9 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private showMerasmusVanishFigure(): void {
-    const overlay = this.add.container(640, 360);
-    overlay.setDepth(205);
-
-    const aura = this.add.graphics();
-    aura.fillStyle(0x44ff66, 0.06);
-    aura.fillCircle(0, -20, 140);
-    aura.fillStyle(0x33dd55, 0.1);
-    aura.fillCircle(0, -35, 70);
-    aura.setAlpha(1);
-    overlay.add(aura);
-
-    const g = this.add.graphics();
-    drawCharacterSilhouette(g, 0, 0, 'MERASMUS', 0x8866dd);
-    overlay.add(g);
-
-    overlay.setScale(0.3);
-    overlay.setAlpha(0);
-
-    const destroyOverlay = (): void => {
-      if (overlay.active) overlay.destroy();
-    };
-
-    // Materialize (~0.65s), hold at full read (~1.35s), subtle pulse, then dissolve (~1.1s)
-    this.tweens.add({
-      targets: overlay,
-      alpha: 1,
-      scale: 0.6,
-      duration: 650,
-      ease: 'Cubic.easeOut',
-      onComplete: () => {
-        this.time.delayedCall(600, () => {
-          this.tweens.add({
-            targets: overlay,
-            scale: 0.64,
-            duration: 320,
-            ease: 'Sine.easeInOut',
-            yoyo: true,
-          });
-        });
-        this.time.delayedCall(1550, () => {
-          this.tweens.add({
-            targets: overlay,
-            alpha: 0,
-            scale: 0.82,
-            duration: 1100,
-            ease: 'Power2.easeIn',
-            onComplete: destroyOverlay,
-          });
-          this.tweens.add({
-            targets: aura,
-            alpha: 0,
-            duration: 1000,
-            ease: 'Power1',
-          });
-        });
-      },
-    });
-  }
-
-  /** After return-to-Intel teleport completes: consume one pending Merasmus flip if any */
-  private processMerasmusOnReturnToIntel(): void {
-    if (!this.isCustomNightMode || !this.isMerasmusEnabled()) return;
-    const next = this.merasmusPendingFlip.shift();
-    if (!next) return;
-
-    if (next === 'on') {
-      this.setMerasmusDomMirror(true);
-      this.playMerasmusCackle();
-      this.showMerasmusVanishFigure();
-    } else {
-      this.setMerasmusDomMirror(false);
-      this.cameras.main.flash(220, 120, 80, 200, false);
-    }
+  /** Brief green flash when repel completes — signals safe to unflip */
+  private playMerasmusRespiteFlash(): void {
+    this.cameras.main.flash(320, 48, 200, 72, false);
   }
 
   /** Returns true if the currently selected camera's room has a hacked teleporter */
@@ -893,6 +1016,7 @@ export class GameScene extends Phaser.Scene {
   private cleanup(): void {
     this.uninstallMerasmusPointerMirrorFix();
     this.clearMerasmusMirrorDomAndFlags();
+    this.stopMerasmusHum();
     this.disposeIntelRoomAmbience();
     this.stopDetectionSound();
     this.events.off('scoutAtDoor');
@@ -1193,6 +1317,7 @@ export class GameScene extends Phaser.Scene {
     this.setupInput();
     if (this.isMerasmusEnabled()) {
       this.installMerasmusPointerMirrorFix();
+      this.createMerasmusOverlays();
     }
     
     // Create mobile touch controls if on mobile
@@ -1828,8 +1953,10 @@ export class GameScene extends Phaser.Scene {
     });
     
     // Controls hint (bottom)
-    this._controlsText = this.add.text(640, 700, 
-      'F: Wrangler | HOLD A/D: Aim Left/Right | SPACE: Fire | TAB: Cameras | R: Build/Repair/Upgrade', {
+    const controlsLine = this.isMerasmusEnabled()
+      ? 'F: Wrangler | A/D: Aim | SPACE: Fire | TAB: Cameras | R: Build/Repair | Q: Flip View'
+      : 'F: Wrangler | HOLD A/D: Aim Left/Right | SPACE: Fire | TAB: Cameras | R: Build/Repair/Upgrade';
+    this._controlsText = this.add.text(640, 700, controlsLine, {
       fontFamily: 'Courier New, monospace',
       fontSize: '14px',
       color: '#666666',
@@ -3501,8 +3628,6 @@ export class GameScene extends Phaser.Scene {
 
       // Administrator Mode 1: auto-hack last teleported room on return to Intel
       this.handleAdministratorMode1();
-
-      this.processMerasmusOnReturnToIntel();
     });
   }
 
@@ -8267,6 +8392,7 @@ export class GameScene extends Phaser.Scene {
     
     // Prevent browser from capturing other game keys
     keyboard.addCapture([
+      Phaser.Input.Keyboard.KeyCodes.Q,
       Phaser.Input.Keyboard.KeyCodes.F,
       Phaser.Input.Keyboard.KeyCodes.R,
       Phaser.Input.Keyboard.KeyCodes.TAB,
@@ -8274,6 +8400,11 @@ export class GameScene extends Phaser.Scene {
       Phaser.Input.Keyboard.KeyCodes.ESC,
     ]);
     
+    // Q - Toggle Merasmus view flip (Custom Night)
+    keyboard.on('keydown-Q', () => {
+      this.toggleMerasmusFlip();
+    });
+
     // F - Toggle Wrangler
     keyboard.on('keydown-F', () => {
       if (this.gameStatus !== 'PLAYING') return;
@@ -8495,6 +8626,17 @@ export class GameScene extends Phaser.Scene {
       this.toggleCameraMode();
     });
     this.mobileUI.add(this.mobileCameraButton);
+
+    // ===== MERASMUS FLIP BUTTON (second row under CAM, Custom Night only) =====
+    this.mobileMerasmusFlipButton = this.createMobileButton(width - 145, 100, 'FLIP', () => {
+      this.toggleMerasmusFlip();
+    });
+    const flipBg = this.mobileMerasmusFlipButton.list[0] as Phaser.GameObjects.Rectangle;
+    flipBg.setStrokeStyle(2, 0x66cc66);
+    const flipLabel = this.mobileMerasmusFlipButton.list[1] as Phaser.GameObjects.Text;
+    flipLabel.setColor('#aa88dd');
+    this.mobileMerasmusFlipButton.setVisible(this.isMerasmusEnabled());
+    this.mobileUI.add(this.mobileMerasmusFlipButton);
     
     // ===== WRANGLER BUTTON (below pause/cam row) =====
     this.mobileWranglerButton = this.createMobileButton(width - 50, 100, 'WRANGLE', () => {
@@ -8652,6 +8794,32 @@ export class GameScene extends Phaser.Scene {
     
     // Pause button: always visible
     this.mobilePauseButton.setVisible(true);
+
+    // Merasmus flip: Custom Night only, not when teleported
+    if (this.mobileMerasmusFlipButton) {
+      this.mobileMerasmusFlipButton.setVisible(this.isMerasmusEnabled() && !this.isTeleported);
+      this.updateMobileMerasmusFlipButton();
+    }
+  }
+
+  /**
+   * Update Merasmus flip button appearance when view is mirrored
+   */
+  private updateMobileMerasmusFlipButton(): void {
+    if (!this.isMobile || !this.mobileMerasmusFlipButton) return;
+
+    const bg = this.mobileMerasmusFlipButton.list[0] as Phaser.GameObjects.Rectangle;
+    const label = this.mobileMerasmusFlipButton.list[1] as Phaser.GameObjects.Text;
+
+    if (this.merasmusViewFlipped) {
+      bg.setFillStyle(0x3a2a5a);
+      bg.setStrokeStyle(2, 0x88ff66);
+      label.setColor('#88ff88');
+    } else {
+      bg.setFillStyle(0x1a2a3a, 0.9);
+      bg.setStrokeStyle(2, 0x66cc66);
+      label.setColor('#aa88dd');
+    }
   }
   
   /**
@@ -8919,6 +9087,7 @@ export class GameScene extends Phaser.Scene {
       this.stopIntelRoomAmbience();
       this.stopSniperLaserHum();
       this.stopPyroCracklingAmbient();
+      this.stopMerasmusHum();
       this.stopMedicGhostScream();  // Stop ghost scream during pause
       this.physics?.pause();
       
@@ -8967,7 +9136,7 @@ export class GameScene extends Phaser.Scene {
     // Use native DOM key states (more reliable than Phaser with browser extensions)
     const rawA = this.keyADown;
     const rawD = this.keyDDown;
-    const mirrorAim = this.isMerasmusEnabled() && this.merasmusScreenMirrored;
+    const mirrorAim = this.isMerasmusEnabled() && this.merasmusViewFlipped;
     const aDown = mirrorAim ? rawD : rawA;
     const dDown = mirrorAim ? rawA : rawD;
     
@@ -9704,6 +9873,7 @@ export class GameScene extends Phaser.Scene {
     this.stopSniperLaserHum();
     this.stopSapperSound();
     this.stopDemoEyeGlowSound();
+    this.stopMerasmusHum();
     this.stopApproachGrowl();
     this.stopDispenserHum();
     this.disposeIntelRoomAmbience();
@@ -9720,6 +9890,8 @@ export class GameScene extends Phaser.Scene {
       this.approachGrowlOsc,
       this.dispenserHumOscillator,
       this.dispenserHumOscillator2,
+      this.merasmusHumOscillator,
+      this.merasmusHumOscillator2,
     ];
     
     for (const osc of oscillatorsToStop) {
@@ -9749,6 +9921,10 @@ export class GameScene extends Phaser.Scene {
     this.approachGrowlOsc = null;
     this.dispenserHumOscillator = null;
     this.dispenserHumOscillator2 = null;
+    this.merasmusHumOscillator = null;
+    this.merasmusHumOscillator2 = null;
+    this.merasmusHumGain = null;
+    this.merasmusHumPlaying = false;
     
     // Null out gain nodes too
     this.demoEyeGlowGain = null;
@@ -11518,6 +11694,7 @@ export class GameScene extends Phaser.Scene {
     const isSniper = reasonLower.includes('snipe') || reasonLower.includes('sniper');
     const isPyro = reasonLower.includes('pyro') || reasonLower.includes('burned') || reasonLower.includes('overheated');
     const isPauling = reasonLower.includes('pauling') || reasonLower.includes('vent');
+    const isMerasmus = reasonLower.includes('merasmus');
     
     // Create jumpscare container
     this.endScreen.removeAll(true);
@@ -11535,6 +11712,8 @@ export class GameScene extends Phaser.Scene {
     const enemyGraphics = this.add.graphics();
     if (isPauling) {
       drawPaulingJumpscarePortrait(enemyGraphics);
+    } else if (isMerasmus) {
+      drawCharacterSilhouette(enemyGraphics, 0, 0, 'MERASMUS', 0x8866dd);
     } else {
       this.drawJumpscareSilhouette(enemyGraphics, isScout, isSoldier, isDemoman, isHeavy, isSniper, isPyro);
     }
@@ -12467,7 +12646,6 @@ export class GameScene extends Phaser.Scene {
     if (this.timeAccumulator >= GAME_CONSTANTS.MS_PER_GAME_MINUTE) {
       this.timeAccumulator -= GAME_CONSTANTS.MS_PER_GAME_MINUTE;
       this.gameMinutes++;
-      this.maybeArmMerasmusFlipQueue();
       
       // Track total survival time for endless mode
       if (this.isBadEndingNight6) {
@@ -12517,6 +12695,9 @@ export class GameScene extends Phaser.Scene {
     
     // ---- UPDATE AIMING (hold A/D to aim) ----
     this.updateAiming();
+
+    // ---- MERASMUS FADE THREAT (Custom Night) ----
+    this.updateMerasmus(delta);
     
     // ---- UPDATE ENEMIES ----
     this.updateEnemies(delta);

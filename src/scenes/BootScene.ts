@@ -1182,6 +1182,7 @@ export class BootScene extends Phaser.Scene {
       ['SPACE', 'Fire (50 metal)'],
       ['TAB', 'Open Cameras'],
       ['R', 'Build/Repair/Upgrade'],
+      ['Q', 'Flip view (Merasmus)'],
     ];
     controls.forEach(([key, action]) => {
       this.addKeyAction(leftX - 140, y, key, action);

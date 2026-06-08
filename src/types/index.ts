@@ -328,7 +328,7 @@ export const GAME_CONSTANTS = {
   PYRO_INTEL_SPAWN_CHANCE: 0.15,      // 15% chance to spawn in Intel each check (reduced from 30%)
   PYRO_INTEL_CHECK_INTERVAL: 4000,    // Check for Intel spawn every 4 sec (was 2 sec)
   PYRO_INTEL_ESCAPE_COOLDOWN: 8000,   // Cooldown after player escapes before Pyro can attack again
-  PYRO_HALLWAY_HISS_MAX_GAIN: 0.16,   // Steady hallway flame hiss volume in Intel (cameras down)
+  PYRO_HALLWAY_HISS_MAX_GAIN: 0.08,   // Steady hallway flame hiss volume in Intel (cameras down)
   PYRO_HALLWAY_HISS_FADE_MS: 2000,    // Fade-in duration for hallway hiss
   
   // Medic settings - CUSTOM NIGHT ONLY
@@ -354,5 +354,11 @@ export const GAME_CONSTANTS = {
   THERMOSTAT_MAX: 100,                          // Internal max (display shows 50°-110°)
   THERMOSTAT_DISPLAY_MIN: 50,                   // Display minimum temperature
   THERMOSTAT_DISPLAY_MAX: 110,                  // Display maximum temperature (Pyro trigger)
+
+  // Merasmus settings - CUSTOM NIGHT ONLY
+  MERASMUS_BUILD_TIME_MS: 60000,               // Real-time ms to fully materialize while unflipped
+  MERASMUS_REPEL_MULTIPLIER: 8,                 // Fade-out rate while view is flipped
+  MERASMUS_RESPITE_UNFLIPPED_MS: 10000,         // Unflipped ms at 0% before next build cycle
+  MERASMUS_EASE_POWER: 2.5,                     // Ease-in exponent for display alpha
 } as const;
 

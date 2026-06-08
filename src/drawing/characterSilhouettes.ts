@@ -1019,10 +1019,10 @@ export function drawCharacterSilhouette(
         const staff = 0x4a3528;
         const staffHi = 0x6a5040;
 
-        graphics.fillStyle(magic, 0.14);
-        graphics.fillCircle(x, y - 20, 88);
-        graphics.fillStyle(magic, 0.08);
-        graphics.fillEllipse(x, y + 10, 100, 120);
+        graphics.fillStyle(magic, 0.05);
+        graphics.fillCircle(x, y - 20, 52);
+        graphics.fillStyle(magic, 0.03);
+        graphics.fillEllipse(x, y + 10, 58, 72);
 
         graphics.fillStyle(0x000000, 0.45);
         graphics.fillEllipse(x, y + 62, 48, 12);
