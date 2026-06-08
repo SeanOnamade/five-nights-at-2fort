@@ -8626,17 +8626,6 @@ export class GameScene extends Phaser.Scene {
       this.toggleCameraMode();
     });
     this.mobileUI.add(this.mobileCameraButton);
-
-    // ===== MERASMUS FLIP BUTTON (second row under CAM, Custom Night only) =====
-    this.mobileMerasmusFlipButton = this.createMobileButton(width - 145, 100, 'FLIP', () => {
-      this.toggleMerasmusFlip();
-    });
-    const flipBg = this.mobileMerasmusFlipButton.list[0] as Phaser.GameObjects.Rectangle;
-    flipBg.setStrokeStyle(2, 0x66cc66);
-    const flipLabel = this.mobileMerasmusFlipButton.list[1] as Phaser.GameObjects.Text;
-    flipLabel.setColor('#aa88dd');
-    this.mobileMerasmusFlipButton.setVisible(this.isMerasmusEnabled());
-    this.mobileUI.add(this.mobileMerasmusFlipButton);
     
     // ===== WRANGLER BUTTON (below pause/cam row) =====
     this.mobileWranglerButton = this.createMobileButton(width - 50, 100, 'WRANGLE', () => {
@@ -8660,7 +8649,7 @@ export class GameScene extends Phaser.Scene {
     this.mobileUI.add(this.mobileWranglerButton);
     
     // ===== ACTION BUTTON (to the left of CAM button, visible in camera mode too) =====
-    // Spacing: Pause at width-50, CAM at width-145 (95px apart), ACTION at width-240 (95px apart)
+    // Spacing: Pause width-50, CAM width-145, ACTION width-240, FLIP width-335 (95px apart)
     this.mobileActionButton = this.add.container(width - 240, 50);
     
     const actionBg = this.add.rectangle(0, 0, 80, 40, 0x224422);
@@ -8692,6 +8681,13 @@ export class GameScene extends Phaser.Scene {
     
     this.mobileActionButton.add([actionBg, this.mobileActionText, this.mobileActionCostText]);
     this.mobileUI.add(this.mobileActionButton);
+
+    // ===== MERASMUS FLIP BUTTON (left of ACTION, Custom Night only) =====
+    this.mobileMerasmusFlipButton = this.createMobileButton(width - 335, 50, 'FLIP', () => {
+      this.toggleMerasmusFlip();
+    });
+    this.mobileMerasmusFlipButton.setVisible(this.isMerasmusEnabled());
+    this.mobileUI.add(this.mobileMerasmusFlipButton);
     
     // Initial update
     this.updateMobileUI();
@@ -8812,13 +8808,15 @@ export class GameScene extends Phaser.Scene {
     const label = this.mobileMerasmusFlipButton.list[1] as Phaser.GameObjects.Text;
 
     if (this.merasmusViewFlipped) {
-      bg.setFillStyle(0x3a2a5a);
-      bg.setStrokeStyle(2, 0x88ff66);
-      label.setColor('#88ff88');
+      bg.setFillStyle(0x2a4a2a);
+      bg.setStrokeStyle(2, 0x44ff44);
+      label.setColor('#44ff44');
+      label.setText('FLIPPED');
     } else {
       bg.setFillStyle(0x1a2a3a, 0.9);
-      bg.setStrokeStyle(2, 0x66cc66);
-      label.setColor('#aa88dd');
+      bg.setStrokeStyle(2, 0x3a5a7a);
+      label.setColor('#7799bb');
+      label.setText('FLIP');
     }
   }
   
