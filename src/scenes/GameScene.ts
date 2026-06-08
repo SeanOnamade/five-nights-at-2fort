@@ -691,6 +691,9 @@ export class GameScene extends Phaser.Scene {
   private toggleMerasmusFlip(): void {
     if (!this.isMerasmusEnabled()) return;
     if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isTeleported) return;
+    // Clear edge holds so swapped zone→key mapping doesn't leave stale aim
+    this.keyADown = false;
+    this.keyDDown = false;
     this.setMerasmusDomMirror(!this.merasmusViewFlipped);
   }
 
@@ -8499,6 +8502,28 @@ export class GameScene extends Phaser.Scene {
   // ============================================
   // MOBILE CONTROLS
   // ============================================
+
+  /**
+   * Merasmus mirror inverts pointer X, so left/right edge taps hit the opposite zone.
+   * Swap which key each zone drives while flipped so screen-side aim stays intuitive.
+   */
+  private setMobileAimLeftActive(active: boolean): void {
+    const mirrored = this.isMerasmusEnabled() && this.merasmusViewFlipped;
+    if (mirrored) {
+      this.keyDDown = active;
+    } else {
+      this.keyADown = active;
+    }
+  }
+
+  private setMobileAimRightActive(active: boolean): void {
+    const mirrored = this.isMerasmusEnabled() && this.merasmusViewFlipped;
+    if (mirrored) {
+      this.keyADown = active;
+    } else {
+      this.keyDDown = active;
+    }
+  }
   
   /**
    * Create mobile touch controls (only called on mobile devices)
@@ -8525,14 +8550,14 @@ export class GameScene extends Phaser.Scene {
     
     // Left zone touch handlers
     const resetLeftZone = () => {
-      this.keyADown = false;
+      this.setMobileAimLeftActive(false);
       this.mobileLeftHint.clear();
       this.mobileLeftHint.fillStyle(0x4488ff, 0.15);
       this.mobileLeftHint.fillRect(0, 50, 15, height - 100);
     };
     this.mobileLeftZone.on('pointerdown', () => {
       if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isCameraMode || this.isTeleported) return;
-      this.keyADown = true;
+      this.setMobileAimLeftActive(true);
       this.mobileLeftHint.clear();
       this.mobileLeftHint.fillStyle(0x4488ff, 0.4);
       this.mobileLeftHint.fillRect(0, 50, 30, height - 100);
@@ -8555,14 +8580,14 @@ export class GameScene extends Phaser.Scene {
     
     // Right zone touch handlers
     const resetRightZone = () => {
-      this.keyDDown = false;
+      this.setMobileAimRightActive(false);
       this.mobileRightHint.clear();
       this.mobileRightHint.fillStyle(0x4488ff, 0.15);
       this.mobileRightHint.fillRect(width - 15, 50, 15, height - 100);
     };
     this.mobileRightZone.on('pointerdown', () => {
       if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isCameraMode || this.isTeleported) return;
-      this.keyDDown = true;
+      this.setMobileAimRightActive(true);
       this.mobileRightHint.clear();
       this.mobileRightHint.fillStyle(0x4488ff, 0.4);
       this.mobileRightHint.fillRect(width - 30, 50, 30, height - 100);
