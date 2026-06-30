@@ -285,6 +285,14 @@ export class GameScene extends Phaser.Scene {
   private soldierInDoorway!: Phaser.GameObjects.Container;
   private demomanInDoorway!: Phaser.GameObjects.Container;
   private demomanApproachGlow!: Phaser.GameObjects.Graphics; // Green glow when approaching
+  private heavyInDoorway!: Phaser.GameObjects.Container;
+  private heavyDoorwayGraphics!: Phaser.GameObjects.Graphics;
+  private heavyDoorwayMaskLeft!: Phaser.GameObjects.Graphics;
+  private heavyDoorwayMaskRight!: Phaser.GameObjects.Graphics;
+  private heavyDoorwayLeftMask!: Phaser.Display.Masks.GeometryMask;
+  private heavyDoorwayRightMask!: Phaser.Display.Masks.GeometryMask;
+  private heavyDoorwayLastLured: boolean | null = null;
+  private heavyDoorwayPulseTween: Phaser.Tweens.Tween | null = null;
   
   // Über glow effects for Medic (Custom Night only)
   private uberGlowLeft!: Phaser.GameObjects.Graphics;
@@ -1415,6 +1423,34 @@ export class GameScene extends Phaser.Scene {
     this.demomanApproachGlow = this.add.graphics();
     this.demomanApproachGlow.setVisible(false);
     this.demomanApproachGlow.setDepth(9);
+    
+    // Heavy shadow (massive silhouette behind other doorway enemies — wrangler light only)
+    const doorCenterY = height / 2 - 50;
+    const doorW = 120;
+    const doorH = 260;
+    const leftDoorX = 120;
+    const rightDoorX = 1280 - 120;
+
+    this.heavyInDoorway = this.add.container(leftDoorX, doorCenterY);
+    this.heavyDoorwayGraphics = this.add.graphics();
+    this.drawHeavyDoorwayShadow(this.heavyDoorwayGraphics, false);
+    this.heavyInDoorway.add(this.heavyDoorwayGraphics);
+    this.heavyInDoorway.setVisible(false);
+    this.heavyInDoorway.setDepth(7); // Behind Scout/Soldier/Demo (10) and glows (9)
+    this.heavyInDoorway.setScale(1.4);
+
+    // Clip Heavy to doorway opening — keeps mass inside door frame
+    this.heavyDoorwayMaskLeft = this.add.graphics();
+    this.heavyDoorwayMaskLeft.fillStyle(0xffffff);
+    this.heavyDoorwayMaskLeft.fillRect(leftDoorX - doorW / 2, doorCenterY - doorH / 2, doorW, doorH);
+    this.heavyDoorwayMaskLeft.setVisible(false);
+    this.heavyDoorwayLeftMask = this.heavyDoorwayMaskLeft.createGeometryMask();
+
+    this.heavyDoorwayMaskRight = this.add.graphics();
+    this.heavyDoorwayMaskRight.fillStyle(0xffffff);
+    this.heavyDoorwayMaskRight.fillRect(rightDoorX - doorW / 2, doorCenterY - doorH / 2, doorW, doorH);
+    this.heavyDoorwayMaskRight.setVisible(false);
+    this.heavyDoorwayRightMask = this.heavyDoorwayMaskRight.createGeometryMask();
     
     // Über glow effects for Medic (Custom Night)
     // These create a pulsing red aura around Übered enemies
@@ -5087,6 +5123,73 @@ export class GameScene extends Phaser.Scene {
     for (let i = 0; i < 4; i++) {
       graphics.fillRect(2, 18 + i * 5, 12, 2);
     }
+  }
+
+  /**
+   * Draw Heavy as a massive shadow in the hallway — dark mass with glowing eyes.
+   * Shown behind Scout/Soldier when wrangler light hits the doorway.
+   */
+  private drawHeavyDoorwayShadow(graphics: Phaser.GameObjects.Graphics, isLured: boolean): void {
+    graphics.clear();
+
+    const auraColor = isLured ? 0xccaa00 : 0x441111;
+    graphics.fillStyle(auraColor, isLured ? 0.08 : 0.05);
+    graphics.fillCircle(0, -10, 110);
+    graphics.fillStyle(auraColor, isLured ? 0.06 : 0.04);
+    graphics.fillCircle(0, -20, 85);
+
+    // Ground shadow — very wide
+    graphics.fillStyle(0x000000, 0.75);
+    graphics.fillEllipse(0, 95, 150, 28);
+
+    // Massive dark body — shoulders wider than Scout in front
+    graphics.fillStyle(0x080808, 0.95);
+    graphics.fillRoundedRect(-72, -35, 144, 75, 14);
+    graphics.fillStyle(0x050505, 0.9);
+    graphics.fillRoundedRect(-65, -28, 130, 65, 12);
+
+    // Thick leg masses at sides (visible past Scout)
+    graphics.fillStyle(0x0a0a0a, 0.92);
+    graphics.fillRect(-58, 30, 32, 48);
+    graphics.fillRect(26, 30, 32, 48);
+
+    // Huge arm bulges framing the doorway
+    graphics.fillStyle(0x0c0c0c, 0.9);
+    graphics.fillCircle(-68, -10, 28);
+    graphics.fillCircle(68, -10, 28);
+    graphics.fillRect(-88, -18, 36, 58);
+    graphics.fillRect(52, -18, 36, 58);
+
+    // Big bald head mass looming above Scout
+    graphics.fillStyle(0x0a0a0a, 0.95);
+    graphics.fillCircle(0, -58, 42);
+    graphics.fillStyle(0x060606, 0.9);
+    graphics.fillCircle(0, -54, 36);
+
+    // Brow ridge — menacing silhouette
+    graphics.fillStyle(0x111111, 1);
+    graphics.fillRect(-30, -72, 60, 14);
+
+    // Glowing eyes piercing the shadow
+    const eyeColor = isLured ? 0xffcc00 : 0xff0000;
+    const eyeGlow = isLured ? 0xffffaa : 0xffaaaa;
+    graphics.fillStyle(eyeColor, 0.35);
+    graphics.fillCircle(-16, -52, 18);
+    graphics.fillCircle(16, -52, 18);
+    graphics.fillStyle(eyeColor, 0.85);
+    graphics.fillCircle(-16, -52, 11);
+    graphics.fillCircle(16, -52, 11);
+    graphics.fillStyle(eyeGlow, 1);
+    graphics.fillCircle(-16, -52, 5);
+    graphics.fillCircle(16, -52, 5);
+    graphics.fillStyle(0xffffff, 0.9);
+    graphics.fillCircle(-19, -55, 2.5);
+    graphics.fillCircle(13, -55, 2.5);
+
+    // Minigun silhouette hint at bottom edge
+    graphics.fillStyle(0x111111, 0.85);
+    graphics.fillRoundedRect(-78, 38, 150, 22, 4);
+    graphics.fillCircle(-88, 48, 18);
   }
   
   /**
@@ -9194,11 +9297,65 @@ export class GameScene extends Phaser.Scene {
   // ============================================
   // WRANGLER MECHANICS
   // ============================================
+
+  private isHeavyAtHallway(hall: 'LEFT' | 'RIGHT'): boolean {
+    if (!this.isHeavyEnabled() || !this.hasHeavyStarted()) return false;
+    if (!this.heavy.isActive()) return false;
+    const node = hall === 'LEFT' ? 'LEFT_HALL' : 'RIGHT_HALL';
+    return this.heavy.currentNode === node;
+  }
+
+  private hideHeavyDoorwayShadow(): void {
+    this.heavyInDoorway.setVisible(false);
+    this.heavyInDoorway.clearMask(false);
+    this.stopHeavyDoorwayPulse();
+    this.heavyDoorwayLastLured = null;
+  }
+
+  private showHeavyDoorwayShadow(doorX: number): void {
+    const doorCenterY = 720 / 2 - 50;
+    const isLured = this.heavy.isCurrentlyLured();
+    if (this.heavyDoorwayLastLured !== isLured) {
+      this.drawHeavyDoorwayShadow(this.heavyDoorwayGraphics, isLured);
+      this.heavyDoorwayLastLured = isLured;
+    }
+    this.heavyInDoorway.setPosition(doorX, doorCenterY);
+    this.heavyInDoorway.setMask(
+      doorX < 640 ? this.heavyDoorwayLeftMask : this.heavyDoorwayRightMask
+    );
+    this.heavyInDoorway.setVisible(true);
+    this.startHeavyDoorwayPulse();
+  }
+
+  private startHeavyDoorwayPulse(): void {
+    if (this.heavyDoorwayPulseTween?.isPlaying()) return;
+    this.heavyDoorwayPulseTween = this.tweens.add({
+      targets: this.heavyInDoorway,
+      scaleX: 1.48,
+      scaleY: 1.48,
+      duration: 2200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  private stopHeavyDoorwayPulse(): void {
+    if (this.heavyDoorwayPulseTween) {
+      this.heavyDoorwayPulseTween.stop();
+      this.heavyDoorwayPulseTween.remove();
+      this.heavyDoorwayPulseTween = null;
+    }
+    if (this.heavyInDoorway) {
+      this.heavyInDoorway.setScale(1.4);
+    }
+  }
   
   private updateWranglerVisuals(): void {
     // Hide enemies by default
     this.scoutInDoorway.setVisible(false);
     this.soldierInDoorway.setVisible(false);
+    this.heavyInDoorway.setVisible(false);
     
     // Hide Pyro masks by default
     if (this.pyroMaskLeft) this.pyroMaskLeft.setVisible(false);
@@ -9213,9 +9370,13 @@ export class GameScene extends Phaser.Scene {
     this.rightDoor.setFillStyle(0x000000);
     
     let enemyDetected = false;
+    let heavyDetected = false;
     
     if (!this.sentry.exists || !this.sentry.isWrangled) {
       this.aimBeam.setVisible(false);
+      this.stopHeavyDoorwayPulse();
+      this.heavyDoorwayLastLured = null;
+      this.heavyInDoorway.clearMask(false);
       this.stopDetectionSound();
       return;
     }
@@ -9276,6 +9437,13 @@ export class GameScene extends Phaser.Scene {
         this.pyroMaskLeft.setVisible(true);
         enemyDetected = true;
       }
+
+      // Massive Heavy shadow behind other left-door silhouettes
+      if (this.isHeavyAtHallway('LEFT')) {
+        this.showHeavyDoorwayShadow(120);
+        enemyDetected = true;
+        heavyDetected = true;
+      }
     } else if (this.sentry.aimedDoor === 'RIGHT') {
       // ========== WRANGLER CONE CONFIG (RIGHT DOOR) ==========
       // Adjust these values to change the cone shape:
@@ -9326,6 +9494,13 @@ export class GameScene extends Phaser.Scene {
         this.pyroMaskRight.setVisible(true);
         enemyDetected = true;
       }
+
+      // Massive Heavy shadow behind other right-door silhouettes
+      if (this.isHeavyAtHallway('RIGHT')) {
+        this.showHeavyDoorwayShadow(1280 - 120);
+        enemyDetected = true;
+        heavyDetected = true;
+      }
     } else {
       // Aiming middle (NONE) - cone straight ahead
       this.aimBeam.fillStyle(0xff4400, 0.06);
@@ -9334,11 +9509,18 @@ export class GameScene extends Phaser.Scene {
       this.aimBeam.lineStyle(3, 0xff0000, 0.6);
       this.aimBeam.lineBetween(sentryX, sentryY, sentryX, 250);
     }
+
+    if (!heavyDetected) {
+      this.stopHeavyDoorwayPulse();
+      this.heavyDoorwayLastLured = null;
+      this.heavyInDoorway.clearMask(false);
+    }
     
     // Handle scary detection sound (hysteresis avoids rapid start/stop flicker at doorway edge)
     if (enemyDetected) {
       this.detectionSoundReleaseFrames = 0;
-      this.startDetectionSound();
+      this.startDetectionSound(heavyDetected);
+      this.updateDetectionSoundIntensity(heavyDetected);
     } else if (this.isPlayingDetectionSound) {
       this.detectionSoundReleaseFrames++;
       if (this.detectionSoundReleaseFrames >= 4) {
@@ -9827,8 +10009,9 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * Start the scary buzzing/detection sound when enemy is in lit doorway
+   * @param heavyPresent - deeper/louder hum when Heavy's shadow is in the light
    */
-  private startDetectionSound(): void {
+  private startDetectionSound(heavyPresent = false): void {
     if (this.isPlayingDetectionSound) return;
     
     try {
@@ -9840,25 +10023,50 @@ export class GameScene extends Phaser.Scene {
       this.detectionLfo = audioContext.createOscillator();
       this.detectionLfoGain = audioContext.createGain();
       
-      this.detectionLfo.frequency.value = 8;
-      this.detectionLfoGain.gain.value = 30;
+      this.detectionLfo.frequency.value = heavyPresent ? 6 : 8;
+      this.detectionLfoGain.gain.value = heavyPresent ? 35 : 30;
       
       this.detectionLfo.connect(this.detectionLfoGain);
       this.detectionLfoGain.connect(this.detectionOscillator.frequency);
       
       this.detectionOscillator.type = 'sawtooth';
-      this.detectionOscillator.frequency.value = 80;
+      this.detectionOscillator.frequency.value = heavyPresent ? 62 : 80;
       
       this.detectionOscillator.connect(this.detectionGain);
       this.connectGameAudio(this.detectionGain);
       
-      this.detectionGain.gain.value = 0.12;
+      this.detectionGain.gain.value = heavyPresent ? 0.19 : 0.12;
       
       this.detectionLfo.start();
       this.detectionOscillator.start();
       this.isPlayingDetectionSound = true;
     } catch (e) {
       this.stopDetectionSound();
+    }
+  }
+
+  /**
+   * Adjust detection hum when Heavy enters/leaves the lit doorway while buzz is playing
+   */
+  private updateDetectionSoundIntensity(heavyPresent: boolean): void {
+    if (!this.isPlayingDetectionSound || !this.detectionGain || !this.detectionOscillator) return;
+
+    try {
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
+
+      const now = audioContext.currentTime;
+      const targetGain = heavyPresent ? 0.19 : 0.12;
+      const targetFreq = heavyPresent ? 62 : 80;
+      const targetLfo = heavyPresent ? 6 : 8;
+
+      this.detectionGain.gain.setTargetAtTime(targetGain, now, 0.15);
+      this.detectionOscillator.frequency.setTargetAtTime(targetFreq, now, 0.15);
+      if (this.detectionLfo) {
+        this.detectionLfo.frequency.setTargetAtTime(targetLfo, now, 0.15);
+      }
+    } catch {
+      // Audio node may have been stopped
     }
   }
   
@@ -10148,9 +10356,16 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // If we missed, show feedback
+    // If we missed, show feedback (Heavy absorbs sentry fire — lure only)
     if (!hitEnemy) {
-      this.showAlert('FIRED! (-50 metal)', 0xffaa00);
+      const heavyBlocking =
+        (this.sentry.aimedDoor === 'LEFT' && this.isHeavyAtHallway('LEFT')) ||
+        (this.sentry.aimedDoor === 'RIGHT' && this.isHeavyAtHallway('RIGHT'));
+      if (heavyBlocking) {
+        this.showAlert('HEAVY IGNORES SENTRY! LURE HIM!', 0xff6600);
+      } else {
+        this.showAlert('FIRED! (-50 metal)', 0xffaa00);
+      }
     }
   }
   
@@ -10329,6 +10544,7 @@ export class GameScene extends Phaser.Scene {
     // Hide any enemies shown in doorways (fixes Scout glitch)
     this.scoutInDoorway.setVisible(false);
     this.soldierInDoorway.setVisible(false);
+    this.hideHeavyDoorwayShadow();
     
     // Stop detection sound
     this.stopDetectionSound();

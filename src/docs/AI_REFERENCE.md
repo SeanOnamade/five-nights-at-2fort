@@ -87,6 +87,7 @@ Unstoppable tank. **IMMUNE to all sentries - must be LURED!**
 - Cannot be stopped by any sentry - player MUST use lures
 - If watched on camera too long → Destroys camera
 - **Visual:** Yellow glow + eyes when lured
+- **Hallway:** Wrangler light reveals a massive shadow behind other silhouettes (glowing eyes); triggers detection hum (deeper when Heavy is present)
 - Reaches Intel without lure → Death
 
 ---
