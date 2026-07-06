@@ -71,7 +71,11 @@ import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { CustomNightScene } from './scenes/CustomNightScene';
 import { GameScene } from './scenes/GameScene';
+import { installTimestampedConsole } from './utils/gameClock';
 import { isMobileDevice, isLandscape, onOrientationChange } from './utils/mobile';
+
+// Prefix every console.log/warn/error with the in-game clock time
+installTimestampedConsole();
 
 inject();
 

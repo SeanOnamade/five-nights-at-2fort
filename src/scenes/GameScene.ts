@@ -12,6 +12,7 @@ import {
   LureData,
   ROOM_ADJACENCY,
 } from '../types';
+import { setGameClock } from '../utils/gameClock';
 import { isMobileDevice } from '../utils/mobile';
 import { 
   updateSaveOnVictory, 
@@ -1055,6 +1056,7 @@ export class GameScene extends Phaser.Scene {
   private resetGameState(): void {
     this.gameStatus = 'PLAYING';
     this.gameMinutes = 0;
+    setGameClock(0, 0);  // Reset log timestamps to 12:00AM
     this.timeAccumulator = 0;
     this.metal = GAME_CONSTANTS.START_METAL;
     this.isCameraMode = false;
@@ -13295,6 +13297,9 @@ export class GameScene extends Phaser.Scene {
       this.timeAccumulator -= GAME_CONSTANTS.MS_PER_GAME_MINUTE;
       this.gameMinutes++;
       
+      // Keep the global log-timestamp clock in sync
+      setGameClock(Math.floor(this.gameMinutes / 60), this.gameMinutes % 60);
+      
       // Track total survival time for endless mode
       if (this.isBadEndingNight6) {
         this.endlessSurvivalMinutes++;
@@ -13879,10 +13884,6 @@ export class GameScene extends Phaser.Scene {
     
     // Update Spy (if enabled)
     if (this.isSpyEnabled() && this.spy) {
-      // Pass game time to Spy for logging
-      const hours24 = Math.floor(this.gameMinutes / 60);
-      const minutes = Math.floor(this.gameMinutes % 60);
-      this.spy.setGameTime(hours24, minutes);
       this.spy.update(delta);
       
       // Handle sapper removal timeout - if player doesn't press SPACE again in time, reset counter

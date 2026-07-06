@@ -76,22 +76,7 @@ export class SpyEnemy {
     this.getDisguiseTargetNode = locator;
   }
   
-  // Track game time for logging
-  private gameTime: { hours: number; minutes: number } = { hours: 12, minutes: 0 };
   private lastLoggedSecond: number = -1; // For periodic debug logging
-  
-  /**
-   * Set game time for logging purposes
-   */
-  public setGameTime(hours: number, minutes: number): void {
-    this.gameTime = { hours, minutes };
-  }
-  
-  private getTimeString(): string {
-    const h = this.gameTime.hours === 0 ? 12 : this.gameTime.hours;
-    const m = this.gameTime.minutes.toString().padStart(2, '0');
-    return `${h}:${m}AM`;
-  }
   
   /**
    * Main update loop
@@ -103,7 +88,7 @@ export class SpyEnemy {
     const currentSecond = Math.floor(this.stateTimer / 10000);
     if (currentSecond !== this.lastLoggedSecond && currentSecond > 0) {
       this.lastLoggedSecond = currentSecond;
-      console.log(`🕵️ [${this.getTimeString()}] Spy update running - state=${this.spyState}, stateTimer=${(this.stateTimer/1000).toFixed(1)}s, teleportTimer=${(this.teleportTimer/1000).toFixed(1)}s, at ${this.currentNode}`);
+      console.log(`🕵️ Spy update running - state=${this.spyState}, stateTimer=${(this.stateTimer/1000).toFixed(1)}s, teleportTimer=${(this.teleportTimer/1000).toFixed(1)}s, at ${this.currentNode}`);
     }
     
     // State toggle timer
@@ -120,7 +105,7 @@ export class SpyEnemy {
       if (this.teleportTimer >= GAME_CONSTANTS.SPY_TELEPORT_INTERVAL) {
         this.teleportTimer = 0;
         this.teleportToRandomRoom();
-        console.log(`🕵️ [${this.getTimeString()}] Spy teleported to ${this.currentNode} (disguised as ${this.currentDisguise})`);
+        console.log(`🕵️ Spy teleported to ${this.currentNode} (disguised as ${this.currentDisguise})`);
       }
       
       // Evict Spy if the disguise target wandered into his room
@@ -128,7 +113,7 @@ export class SpyEnemy {
         const targetNode = this.getDisguiseTargetNode(this.currentDisguise);
         if (targetNode && targetNode === this.currentNode) {
           this.teleportToRandomRoom();
-          console.log(`🕵️ [${this.getTimeString()}] Spy evicted from ${targetNode} - disguise target moved in! Now at ${this.currentNode}`);
+          console.log(`🕵️ Spy evicted from ${targetNode} - disguise target moved in! Now at ${this.currentNode}`);
         }
       }
       
@@ -171,7 +156,7 @@ export class SpyEnemy {
     
     // If sapping-only mode, stay in SAPPING (just reset timer)
     if (this.sappingOnlyMode) {
-      console.log(`🕵️ [${this.getTimeString()}] Spy continues SAPPING (no disguise targets)`);
+      console.log(`🕵️ Spy continues SAPPING (no disguise targets)`);
       return;
     }
     
@@ -179,13 +164,13 @@ export class SpyEnemy {
       this.spyState = 'SAPPING';
       // Clear disguise-related state
       this.fakeWatchTimer = 0;
-      console.log(`🕵️ [${this.getTimeString()}] Spy switched to SAPPING state`);
+      console.log(`🕵️ Spy switched to SAPPING state`);
     } else {
       this.spyState = 'DISGUISE';
       this.pickNewDisguise();
       this.teleportToRandomRoom();
       // DO NOT clear sapper - it persists until player removes it!
-      console.log(`🕵️ [${this.getTimeString()}] Spy switched to DISGUISE state as ${this.currentDisguise} at ${this.currentNode}${this._isSapping ? ' (sapper still active!)' : ''}`);
+      console.log(`🕵️ Spy switched to DISGUISE state as ${this.currentDisguise} at ${this.currentNode}${this._isSapping ? ' (sapper still active!)' : ''}`);
     }
   }
   
@@ -234,11 +219,11 @@ export class SpyEnemy {
     // Roll for sap chance
     if (Math.random() < GAME_CONSTANTS.SPY_SAP_CHANCE) {
       this._isSapping = true;
-      console.log(`🕵️ [${this.getTimeString()}] SPY PLACED SAPPER ON SENTRY!`);
+      console.log(`🕵️ SPY PLACED SAPPER ON SENTRY!`);
       return true;
     }
     
-    console.log(`🕵️ [${this.getTimeString()}] Spy sap attempt failed (rolled > ${GAME_CONSTANTS.SPY_SAP_CHANCE * 100}% chance)`);
+    console.log(`🕵️ Spy sap attempt failed (rolled > ${GAME_CONSTANTS.SPY_SAP_CHANCE * 100}% chance)`);
     return false;
   }
   
@@ -247,7 +232,7 @@ export class SpyEnemy {
    */
   public removeSapper(): void {
     this._isSapping = false;
-    console.log(`🕵️ [${this.getTimeString()}] Sapper removed from sentry!`);
+    console.log(`🕵️ Sapper removed from sentry!`);
   }
   
   /**
