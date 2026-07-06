@@ -449,11 +449,12 @@ export class SniperEnemy extends EnemyBase {
   }
 
   /**
-   * Force despawn (used when lured far enough away)
+   * Permanently despawn - won't respawn on its own (respawn() may still be
+   * called explicitly, e.g. the headshot-dodge teleport in GameScene)
    */
   public forceDespawn(): void {
     this.state = 'DESPAWNED';
-    this.respawnTimer = 0;
+    this.respawnTimer = -999999; // Will never reach respawn threshold
     this.isLured = false;
     this.targetLureNode = null;
     this.chargeTimer = 0;

@@ -620,6 +620,7 @@ export class BootScene extends Phaser.Scene {
     
     // Keyboard shortcuts
     this.input.keyboard?.on('keydown-SPACE', () => {
+      if (this.isOverlayOpen()) return;  // Don't start a night under an open modal
       playMenuButtonSound();
       if (hasExistingSave && this.saveData) {
         // Continue with current save - Night 6 is always bad ending mode
@@ -632,6 +633,18 @@ export class BootScene extends Phaser.Scene {
         startGame(1);
       }
     });
+  }
+
+  /**
+   * True while a full-screen menu overlay (How to Play / Gallery / Endings) is open.
+   * Used to block the SPACE start shortcut from firing under a modal.
+   */
+  private isOverlayOpen(): boolean {
+    return Boolean(
+      this.tutorialContainer?.visible ||
+      this.extrasContainer?.visible ||
+      this.endingsContainer?.visible
+    );
   }
   
   /**
@@ -1000,6 +1013,7 @@ export class BootScene extends Phaser.Scene {
     
     // Keyboard shortcut
     this.input.keyboard?.on('keydown-SPACE', () => {
+      if (this.isOverlayOpen()) return;  // Don't start a night under an open modal
       playMenuButtonSound();
       const isBadEnding = this.selectedNight === 6;
       startGame(this.selectedNight, false, isBadEnding);

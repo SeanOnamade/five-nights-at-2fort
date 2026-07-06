@@ -129,6 +129,11 @@ export class GameScene extends Phaser.Scene {
   private keyDDown: boolean = false;
   private _keyA!: Phaser.Input.Keyboard.Key;
   private _keyD!: Phaser.Input.Keyboard.Key;
+  // Stored so cleanup() can remove them - Phaser reuses the scene instance,
+  // so unremoved window listeners would stack on every restart
+  private domKeyDownHandler: ((e: KeyboardEvent) => void) | null = null;
+  private domKeyUpHandler: ((e: KeyboardEvent) => void) | null = null;
+  private domBlurHandler: (() => void) | null = null;
   
   // Enemies
   private scout!: ScoutEnemy;
@@ -501,6 +506,8 @@ export class GameScene extends Phaser.Scene {
   private isPlayingDispenserHum: boolean = false;
   private dispenserHumOscillator: OscillatorNode | null = null;
   private dispenserHumOscillator2: OscillatorNode | null = null;
+  private dispenserHumLfo: OscillatorNode | null = null;
+  private dispenserHumSecondaryGain: GainNode | null = null;
   private dispenserHumGain: GainNode | null = null;
   
   // 2Fort Intel room ambience (loops while in Intel; not tied to wrangler aim focus mute)
@@ -703,6 +710,103 @@ export class GameScene extends Phaser.Scene {
     this.keyADown = false;
     this.keyDDown = false;
     this.setMerasmusDomMirror(!this.merasmusViewFlipped);
+    this.playMerasmusFlipSound(this.merasmusViewFlipped);
+  }
+
+  /**
+   * Magical, creepy shimmer when the display mirrors horizontally (Merasmus flip).
+   * Rising and bright when entering the mirror, falling and darker when leaving it.
+   */
+  private playMerasmusFlipSound(mirrored: boolean): void {
+    try {
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+      const duration = 0.7;
+
+      // Detuned shimmer pair - the "magic" (slow beat between two close pitches)
+      const shimmerFreqs = mirrored ? [420, 427] : [640, 646];
+      shimmerFreqs.forEach((freq) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now);
+        if (mirrored) {
+          osc.frequency.exponentialRampToValueAtTime(freq * 1.6, now + duration);
+        } else {
+          osc.frequency.exponentialRampToValueAtTime(freq * 0.55, now + duration);
+        }
+
+        // Slow vibrato for an unsettling wobble
+        const lfo = audioContext.createOscillator();
+        const lfoGain = audioContext.createGain();
+        lfo.frequency.value = 6.5;
+        lfoGain.gain.value = 9;
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc.frequency);
+
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.exponentialRampToValueAtTime(0.08, now + 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        lfo.start(now);
+        osc.start(now);
+        lfo.stop(now + duration);
+        osc.stop(now + duration);
+      });
+
+      // Dark undertone - low sweep opposite to the shimmer, gives it menace
+      const under = audioContext.createOscillator();
+      const underGain = audioContext.createGain();
+      under.type = 'sine';
+      if (mirrored) {
+        under.frequency.setValueAtTime(160, now);
+        under.frequency.exponentialRampToValueAtTime(55, now + duration);
+      } else {
+        under.frequency.setValueAtTime(60, now);
+        under.frequency.exponentialRampToValueAtTime(140, now + duration);
+      }
+      underGain.gain.setValueAtTime(0.14, now);
+      underGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      under.connect(underGain);
+      underGain.connect(audioContext.destination);
+      under.start(now);
+      under.stop(now + duration);
+
+      // Whispery sparkle - airy filtered noise that swells and fades
+      const noiseDuration = 0.5;
+      const buffer = audioContext.createBuffer(1, audioContext.sampleRate * noiseDuration, audioContext.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / data.length;
+        data[i] = (Math.random() * 2 - 1) * Math.sin(t * Math.PI);
+      }
+      const noise = audioContext.createBufferSource();
+      noise.buffer = buffer;
+      const noiseFilter = audioContext.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.Q.value = 1.5;
+      if (mirrored) {
+        noiseFilter.frequency.setValueAtTime(2000, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(5000, now + noiseDuration);
+      } else {
+        noiseFilter.frequency.setValueAtTime(5000, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(1800, now + noiseDuration);
+      }
+      const noiseGain = audioContext.createGain();
+      noiseGain.gain.setValueAtTime(0.001, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.1, now + 0.08);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + noiseDuration);
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(audioContext.destination);
+      noise.start(now);
+      noise.stop(now + noiseDuration);
+    } catch (e) {
+      // Audio not available
+    }
   }
 
   private updateMerasmus(delta: number): void {
@@ -954,6 +1058,8 @@ export class GameScene extends Phaser.Scene {
     this.timeAccumulator = 0;
     this.metal = GAME_CONSTANTS.START_METAL;
     this.isCameraMode = false;
+    this.isCameraBooting = false;
+    this.cameraBootTimer = 0;
     this.selectedCamera = 0;
     this.wasWrangledBeforeCamera = false;
     this.isPaused = false;
@@ -981,6 +1087,15 @@ export class GameScene extends Phaser.Scene {
     this.teleportEscapeTimer = 0;
     this.enemyApproachingRoom = false;
     this.approachingEnemyType = 'an enemy';
+    
+    // Cancel any teleport animation left over from a mid-animation restart
+    if (this.teleportAnimationCallback) {
+      this.teleportAnimationCallback.remove();
+      this.teleportAnimationCallback = null;
+    }
+    this.teleportAnimationOverlay = null;  // Scene restart destroys the old display list
+    this.isTeleportAnimating = false;
+    this.pendingTeleportDestination = null;
     
     // Stop any playing sounds
     this.stopDetectionSound();
@@ -1027,12 +1142,34 @@ export class GameScene extends Phaser.Scene {
   private cleanup(): void {
     this.uninstallMerasmusPointerMirrorFix();
     this.clearMerasmusMirrorDomAndFlags();
-    this.stopMerasmusHum();
-    this.disposeIntelRoomAmbience();
-    this.stopDetectionSound();
+    this.stopRecording();
+    // Stops every Web Audio sound (incl. Pyro crackling timeouts and the Medic
+    // ghost scream's separate AudioContext) and closes the shared context
+    this.stopAllGameSounds();
+    this.removeDomKeyListeners();
     this.events.off('scoutAtDoor');
     this.events.off('soldierAtDoor');
     this.events.off('soldierRocket');
+    this.events.off('demomanAtDoor');
+    this.events.off('demomanChargeStart');
+    this.events.off('heavyAtDoor');
+    this.events.off('sniperHeadshot');
+  }
+
+  /** Remove the native window key listeners registered by setupInput() */
+  private removeDomKeyListeners(): void {
+    if (this.domKeyDownHandler) {
+      window.removeEventListener('keydown', this.domKeyDownHandler);
+      this.domKeyDownHandler = null;
+    }
+    if (this.domKeyUpHandler) {
+      window.removeEventListener('keyup', this.domKeyUpHandler);
+      this.domKeyUpHandler = null;
+    }
+    if (this.domBlurHandler) {
+      window.removeEventListener('blur', this.domBlurHandler);
+      this.domBlurHandler = null;
+    }
   }
   
   /**
@@ -1170,7 +1307,13 @@ export class GameScene extends Phaser.Scene {
           case 'SOLDIER': return this.soldier.currentNode;
           case 'HEAVY': return this.isHeavyEnabled() ? this.heavy.currentNode : null;
           case 'SNIPER': return this.isSniperEnabled() ? this.sniper.currentNode : null;
-          case 'DEMOMAN_HEAD': return this.isDemomanEnabled() ? this.demoman.currentNode : null;
+          case 'DEMOMAN_HEAD': {
+            // The head's visible location is headLocation, not currentNode (body position,
+            // which goes stale after a charge). INTEL_ROOM isn't a camera node - no conflict.
+            if (!this.isDemomanEnabled()) return null;
+            const head = this.demoman.headLocation;
+            return head === 'INTEL_ROOM' ? null : head;
+          }
           default: return null;
         }
       });
@@ -1228,8 +1371,10 @@ export class GameScene extends Phaser.Scene {
               // Invalid if Soldier is at door (WAITING/ATTACKING/SIEGING) or despawned
               return this.soldier.state === 'PATROLLING';
             case 'DEMOMAN':
-              // Invalid if Demoman is charging or at door
-              return this.demoman.state === 'DORMANT'; // Only valid when dormant (head watching)
+              // Invalid if Demoman is charging or at door.
+              // Also invalid when >80% built up toward a charge - otherwise he'd get
+              // übered and charge seconds later, giving the player no time to react.
+              return this.demoman.state === 'DORMANT' && this.demoman.getChargeBuildup() < 0.8;
             default:
               return true;
           }
@@ -2620,7 +2765,7 @@ export class GameScene extends Phaser.Scene {
       const hackIndicator = this.add.text(nodeX + 14, nodeY - 14, '✕', {
         fontFamily: 'Courier New, monospace',
         fontSize: '14px',
-        color: '#ff0088',
+        color: '#9944cc',
         fontStyle: 'bold',
       }).setOrigin(0.5).setVisible(false).setDepth(106);
       this.hackedRoomMapIndicators.set(cam.node, hackIndicator);
@@ -2940,7 +3085,7 @@ export class GameScene extends Phaser.Scene {
 
     // Diagonal cross — drawn over the bar track when empty (TARGETING phase warning)
     this.administratorHackBarCross = this.add.graphics();
-    this.administratorHackBarCross.lineStyle(2, 0x885566, 0.8);
+    this.administratorHackBarCross.lineStyle(2, 0x553377, 0.8);
     this.administratorHackBarCross.lineBetween(-178, -2, 178, 14);  // top-left → bottom-right
     this.administratorHackBarCross.lineBetween(-178, 14, 178, -2);  // bottom-left → top-right
     this.administratorHackBarContainer.add(this.administratorHackBarCross);
@@ -2949,7 +3094,7 @@ export class GameScene extends Phaser.Scene {
     const hackLabel = this.add.text(-178, -10, 'TELEPORTER HACK', {
       fontFamily: 'Courier New, monospace',
       fontSize: '10px',
-      color: '#ff44aa',
+      color: '#bb66ee',
       fontStyle: 'bold',
     }).setOrigin(0, 0.5);
     this.administratorHackBarContainer.add(hackLabel);
@@ -2958,7 +3103,7 @@ export class GameScene extends Phaser.Scene {
     const hackHint = this.add.text(178, -10, 'CLICK TO INTERRUPT', {
       fontFamily: 'Courier New, monospace',
       fontSize: '10px',
-      color: '#aa4488',
+      color: '#7744aa',
     }).setOrigin(1, 0.5);
     this.administratorHackBarContainer.add(hackHint);
 
@@ -3002,8 +3147,8 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Repair bar (hidden by default, shown when room is hacked)
-    this.teleportRepairBarBg = this.add.rectangle(0, 10, 156, 7, 0x220011);
-    this.teleportRepairBarBg.setStrokeStyle(1, 0xff44aa);
+    this.teleportRepairBarBg = this.add.rectangle(0, 10, 156, 7, 0x150822);
+    this.teleportRepairBarBg.setStrokeStyle(1, 0xbb66ee);
     this.teleportRepairBarBg.setVisible(false);
 
     this.teleportRepairBarFill = this.add.rectangle(-76, 10, 152, 3, 0x00ff88, 0.9);
@@ -3412,7 +3557,7 @@ export class GameScene extends Phaser.Scene {
 
     // Block teleport if Administrator has hacked this room's teleporter
     if (this.isAdministratorEnabled() && this.hackedRooms.get(node)?.hacked) {
-      this.showAlert('TELEPORTER OFFLINE', 0xff4444);
+      this.showAlert('TELEPORTER OFFLINE', 0x9944cc);
       return;
     }
     
@@ -3702,7 +3847,7 @@ export class GameScene extends Phaser.Scene {
     // Reset the no-teleport timer so Mode 2 doesn't fire right after a Mode 1 hack
     this.administratorNoTeleportTimer = 0;
 
-    this.showAlert(`⚠ ADMINISTRATOR: ${target.replace('_', ' ')} TELEPORTER HACKED`, 0xff0088);
+    this.showAlert(`⚠ ADMINISTRATOR: ${target.replace('_', ' ')} TELEPORTER HACKED`, 0x9944cc);
     this.updateHackedRoomMapIndicators();
     this.updateTeleportButtonAppearance();
     this.playAdministratorHackSound();
@@ -3849,8 +3994,13 @@ export class GameScene extends Phaser.Scene {
       this.teleportAnimationCallback = null;
     }
     
-    // Destroy the overlay
+    // Destroy the overlay (kill child tweens first so orphaned tweens
+    // don't keep running against destroyed targets)
     if (this.teleportAnimationOverlay) {
+      this.teleportAnimationOverlay.each((child: Phaser.GameObjects.GameObject) => {
+        this.tweens.killTweensOf(child);
+      });
+      this.tweens.killTweensOf(this.teleportAnimationOverlay);
       this.teleportAnimationOverlay.destroy();
       this.teleportAnimationOverlay = null;
     }
@@ -3891,9 +4041,9 @@ export class GameScene extends Phaser.Scene {
     if (hacked) {
       // Hacked state — grayed out, shows repair bar
       this.teleportButtonBg.setFillStyle(0x1a1a1a);
-      this.teleportButtonBg.setStrokeStyle(2, 0xff44aa);
+      this.teleportButtonBg.setStrokeStyle(2, 0xbb66ee);
       this.teleportButtonText.setText('✕ HACKED');
-      this.teleportButtonText.setColor('#ff44aa');
+      this.teleportButtonText.setColor('#bb66ee');
       this.teleportRepairBarBg?.setVisible(true);
       this.teleportRepairBarFill?.setVisible(true);
     } else if (this.isTeleportAnimating) {
@@ -5975,6 +6125,7 @@ export class GameScene extends Phaser.Scene {
   
   // Growl sound state for enemy approach
   private approachGrowlOsc: OscillatorNode | null = null;
+  private approachGrowlOsc2: OscillatorNode | null = null;
   private approachGrowlGain: GainNode | null = null;
   
   /**
@@ -5996,6 +6147,7 @@ export class GameScene extends Phaser.Scene {
       
       this.approachGrowlOsc = audioContext.createOscillator();
       const osc2 = audioContext.createOscillator();
+      this.approachGrowlOsc2 = osc2;
       this.approachGrowlGain = audioContext.createGain();
       const filter = audioContext.createBiquadFilter();
       
@@ -6060,16 +6212,31 @@ export class GameScene extends Phaser.Scene {
    * Stop the approach growl sound
    */
   private stopApproachGrowl(): void {
-    try {
-      if (this.approachGrowlOsc) {
+    if (this.approachGrowlOsc) {
+      try {
         this.approachGrowlOsc.stop();
-        this.approachGrowlOsc = null;
+        this.approachGrowlOsc.disconnect();
+      } catch (e) {
+        // Already stopped
       }
-      if (this.approachGrowlGain) {
-        this.approachGrowlGain = null;
+      this.approachGrowlOsc = null;
+    }
+    if (this.approachGrowlOsc2) {
+      try {
+        this.approachGrowlOsc2.stop();
+        this.approachGrowlOsc2.disconnect();
+      } catch (e) {
+        // Already stopped
       }
-    } catch (e) {
-      // Already stopped
+      this.approachGrowlOsc2 = null;
+    }
+    if (this.approachGrowlGain) {
+      try {
+        this.approachGrowlGain.disconnect();
+      } catch (e) {
+        // Already disconnected
+      }
+      this.approachGrowlGain = null;
     }
   }
   
@@ -7452,6 +7619,77 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
+   * Play screen flip sound - soft, lowkey whoosh when raising/lowering the camera monitor
+   * @param direction 'up' when opening cameras, 'down' when closing
+   */
+  private playScreenFlipSound(direction: 'up' | 'down'): void {
+    try {
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+
+      // Short filtered noise whoosh (like fabric/plastic moving quickly)
+      const duration = 0.22;
+      const buffer = audioContext.createBuffer(1, audioContext.sampleRate * duration, audioContext.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / data.length;
+        // Smooth swell in the middle, silent at the edges
+        const envelope = Math.sin(t * Math.PI);
+        data[i] = (Math.random() * 2 - 1) * envelope;
+      }
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+
+      // Bandpass sweep gives the whoosh its motion - up sweeps rising, down sweeps falling
+      const filter = audioContext.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.Q.value = 0.8;
+      if (direction === 'up') {
+        filter.frequency.setValueAtTime(350, now);
+        filter.frequency.exponentialRampToValueAtTime(1600, now + duration);
+      } else {
+        filter.frequency.setValueAtTime(1600, now);
+        filter.frequency.exponentialRampToValueAtTime(350, now + duration);
+      }
+
+      const gainNode = audioContext.createGain();
+      gainNode.gain.setValueAtTime(0.001, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.35, now + 0.04);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      // Direct to destination (like the camera boot blip) so the master
+      // compressor doesn't duck it under other simultaneous sounds
+      source.connect(filter);
+      filter.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      source.start(now);
+      source.stop(now + duration);
+
+      // Soft low "thump" underneath - the physical feel of the monitor moving
+      const thump = audioContext.createOscillator();
+      const thumpGain = audioContext.createGain();
+      thump.type = 'sine';
+      if (direction === 'up') {
+        thump.frequency.setValueAtTime(90, now);
+        thump.frequency.exponentialRampToValueAtTime(140, now + 0.1);
+      } else {
+        thump.frequency.setValueAtTime(140, now);
+        thump.frequency.exponentialRampToValueAtTime(80, now + 0.1);
+      }
+      thumpGain.gain.setValueAtTime(0.12, now);
+      thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      thump.connect(thumpGain);
+      thumpGain.connect(audioContext.destination);
+      thump.start(now);
+      thump.stop(now + 0.12);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
+  /**
    * Play camera boot-up sound - subtle electronic chirp
    */
   private playCameraBootSound(): void {
@@ -7533,6 +7771,7 @@ export class GameScene extends Phaser.Scene {
       gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.1);
       
       noise.start(audioContext.currentTime);
+      noise.stop(audioContext.currentTime + 0.1);
     } catch (e) {
       // Audio not available
     }
@@ -8468,7 +8707,8 @@ export class GameScene extends Phaser.Scene {
     
     // Use native DOM events for A/D keys - more reliable with browser extensions
     // This fixes issues where Phaser doesn't receive keyup events
-    window.addEventListener('keydown', (e) => {
+    this.removeDomKeyListeners();  // Guard against stacking on restart
+    this.domKeyDownHandler = (e: KeyboardEvent) => {
       if (e.key === 'a' || e.key === 'A') {
         this.keyADown = true;
         e.preventDefault();
@@ -8477,22 +8717,25 @@ export class GameScene extends Phaser.Scene {
         this.keyDDown = true;
         e.preventDefault();
       }
-    });
+    };
+    window.addEventListener('keydown', this.domKeyDownHandler);
     
-    window.addEventListener('keyup', (e) => {
+    this.domKeyUpHandler = (e: KeyboardEvent) => {
       if (e.key === 'a' || e.key === 'A') {
         this.keyADown = false;
       }
       if (e.key === 'd' || e.key === 'D') {
         this.keyDDown = false;
       }
-    });
+    };
+    window.addEventListener('keyup', this.domKeyUpHandler);
     
     // Also reset on blur (when window loses focus)
-    window.addEventListener('blur', () => {
+    this.domBlurHandler = () => {
       this.keyADown = false;
       this.keyDDown = false;
-    });
+    };
+    window.addEventListener('blur', this.domBlurHandler);
     
     console.log('[INPUT] Native DOM key listeners registered for A/D');
     
@@ -8931,9 +9174,14 @@ export class GameScene extends Phaser.Scene {
    */
   private updateMobileMerasmusFlipButton(): void {
     if (!this.isMobile || !this.mobileMerasmusFlipButton) return;
+    // During scene shutdown/restart this runs via cleanup() -> resetMerasmusState()
+    // after Phaser has destroyed the container (its list is emptied). Touching the
+    // dead children threw and aborted the scene transition - frozen game on mobile.
+    if (!this.mobileMerasmusFlipButton.active) return;
 
-    const bg = this.mobileMerasmusFlipButton.list[0] as Phaser.GameObjects.Rectangle;
-    const label = this.mobileMerasmusFlipButton.list[1] as Phaser.GameObjects.Text;
+    const bg = this.mobileMerasmusFlipButton.list[0] as Phaser.GameObjects.Rectangle | undefined;
+    const label = this.mobileMerasmusFlipButton.list[1] as Phaser.GameObjects.Text | undefined;
+    if (!bg || !label) return;
 
     if (this.merasmusViewFlipped) {
       bg.setFillStyle(0x2a4a2a);
@@ -9198,6 +9446,15 @@ export class GameScene extends Phaser.Scene {
     this.pauseMenu.add(this.pauseHintText);
   }
   
+  /**
+   * Pause the game if currently playing and not already paused.
+   * Public so main.ts can pause when the mobile portrait overlay appears.
+   */
+  public pauseGame(): void {
+    if (this.gameStatus !== 'PLAYING' || this.isPaused) return;
+    this.togglePause();
+  }
+
   /**
    * Toggle pause state
    */
@@ -9690,6 +9947,7 @@ export class GameScene extends Phaser.Scene {
       secondaryGain.gain.setValueAtTime(0.022, audioContext.currentTime);
       this.connectGameAudio(secondaryGain);
       this.dispenserHumOscillator2.connect(secondaryGain);
+      this.dispenserHumSecondaryGain = secondaryGain;
       
       // Add subtle wobble to make it sound more organic
       const lfo = audioContext.createOscillator();
@@ -9700,6 +9958,7 @@ export class GameScene extends Phaser.Scene {
       lfo.connect(lfoGain);
       lfoGain.connect(this.dispenserHumOscillator.frequency);
       lfo.start();
+      this.dispenserHumLfo = lfo;
       
       this.dispenserHumOscillator.start();
       this.dispenserHumOscillator2.start();
@@ -9725,6 +9984,15 @@ export class GameScene extends Phaser.Scene {
         this.dispenserHumOscillator2.stop();
         this.dispenserHumOscillator2.disconnect();
         this.dispenserHumOscillator2 = null;
+      }
+      if (this.dispenserHumLfo) {
+        this.dispenserHumLfo.stop();
+        this.dispenserHumLfo.disconnect();
+        this.dispenserHumLfo = null;
+      }
+      if (this.dispenserHumSecondaryGain) {
+        this.dispenserHumSecondaryGain.disconnect();
+        this.dispenserHumSecondaryGain = null;
       }
       if (this.dispenserHumGain) {
         this.dispenserHumGain.disconnect();
@@ -10110,7 +10378,10 @@ export class GameScene extends Phaser.Scene {
     this.disposeIntelRoomAmbience();
     this.stopPyroCracklingAmbient();
     this.stopPyroHallwayHiss(true);
-    
+    // Ghost scream runs on its own AudioContext, so closing the shared context
+    // below doesn't silence it - stop it explicitly or it screams over game over
+    this.stopMedicGhostScream();
+
     // Force stop any oscillators that might still be running
     const oscillatorsToStop = [
       this.demoEyeGlowOscillator,
@@ -10119,8 +10390,10 @@ export class GameScene extends Phaser.Scene {
       this.sniperHumOscillator2,
       this.detectionOscillator,
       this.approachGrowlOsc,
+      this.approachGrowlOsc2,
       this.dispenserHumOscillator,
       this.dispenserHumOscillator2,
+      this.dispenserHumLfo,
       this.merasmusHumOscillator,
       this.merasmusHumOscillator2,
     ];
@@ -10150,8 +10423,11 @@ export class GameScene extends Phaser.Scene {
     this.detectionLfo = null;
     this.detectionLfoGain = null;
     this.approachGrowlOsc = null;
+    this.approachGrowlOsc2 = null;
     this.dispenserHumOscillator = null;
     this.dispenserHumOscillator2 = null;
+    this.dispenserHumLfo = null;
+    this.dispenserHumSecondaryGain = null;
     this.merasmusHumOscillator = null;
     this.merasmusHumOscillator2 = null;
     this.merasmusHumGain = null;
@@ -10228,6 +10504,9 @@ export class GameScene extends Phaser.Scene {
     
     // Reset beam after flash
     this.time.delayedCall(100, () => {
+      // Don't run after death - updateWranglerVisuals can restart the
+      // detection sound over the jumpscare
+      if (this.gameStatus !== 'PLAYING') return;
       this.updateWranglerVisuals();
     });
     
@@ -10770,6 +11049,7 @@ export class GameScene extends Phaser.Scene {
   private toggleCameraMode(): void {
     if (this.isCameraMode) {
       // Exiting camera mode - restore wrangler state if it was on before
+      this.playScreenFlipSound('down');
       this.isCameraMode = false;
       this.isCameraBooting = false;
       this.cameraBootTimer = 0;
@@ -10819,8 +11099,9 @@ export class GameScene extends Phaser.Scene {
       this.isCameraBooting = true;
       this.cameraBootTimer = 0;
       this.cameraBootOverlay.setVisible(true);
-      
-      // Play camera boot sound
+
+      // Play screen flip + camera boot sound
+      this.playScreenFlipSound('up');
       this.playCameraBootSound();
       
       // Reset boot bar to 0
@@ -10980,16 +11261,16 @@ export class GameScene extends Phaser.Scene {
         this.administratorHackBarContainer.setVisible(true);
         const hackProgress = administratorState === 'HACKING' ? this.administrator.getHackProgress() : 0;
         this.administratorHackBarFill.setScale(hackProgress, 1);
-        // Colour: grey (0x555555) when targeting/empty, gradient → pink (0xff0088) as bar fills
+        // Colour: grey (0x555555) when targeting/empty, gradient → Pauling purple (0x9944cc) as bar fills
         if (hackProgress <= 0) {
           this.administratorHackBarFill.setFillStyle(0x444444, 0.7);
           this.administratorHackBarBorder?.setStrokeStyle(2, 0x555555);
           this.administratorHackBarCross?.setVisible(true);
         } else {
-          // Lerp grey (0x44,0x44,0x44) → pink (0xff,0x00,0x88) by progress
-          const r = Math.round(0x44 + (0xff - 0x44) * hackProgress);
-          const g = Math.round(0x44 + (0x00 - 0x44) * hackProgress);
-          const b = Math.round(0x44 + (0x88 - 0x44) * hackProgress);
+          // Lerp grey (0x44,0x44,0x44) → purple (0x99,0x44,0xcc) by progress
+          const r = Math.round(0x44 + (0x99 - 0x44) * hackProgress);
+          const g = 0x44;
+          const b = Math.round(0x44 + (0xcc - 0x44) * hackProgress);
           const col = (r << 16) | (g << 8) | b;
           this.administratorHackBarFill.setFillStyle(col, 0.85 + hackProgress * 0.1);
           this.administratorHackBarBorder?.setStrokeStyle(2, col);
@@ -11917,13 +12198,7 @@ export class GameScene extends Phaser.Scene {
     this.stopAllGameSounds();
     this.stopRecording(); // Stop Engineer recording if playing
     console.log('GAME OVER:', reason);
-    
-    // Play jumpscare sound!
-    this.playJumpscareSound();
-    
-    // Screen shake for impact
-    this.cameras.main.shake(300, 0.03);
-    
+
     // Determine which enemy killed the player
     const reasonLower = reason.toLowerCase();
     const isScout = reasonLower.includes('scout');
@@ -11932,7 +12207,8 @@ export class GameScene extends Phaser.Scene {
     const isSoldier = reasonLower.includes('soldier') || reasonLower.includes('breached');
     const isSniper = reasonLower.includes('snipe') || reasonLower.includes('sniper');
     const isPyro = reasonLower.includes('pyro') || reasonLower.includes('burned') || reasonLower.includes('overheated');
-    const isPauling = reasonLower.includes('pauling') || reasonLower.includes('vent');
+    // Note: don't match bare 'vent' - the Pyro thermostat death reason mentions vents too
+    const isPauling = reasonLower.includes('pauling');
     const isMerasmus = reasonLower.includes('merasmus');
     
     // Create jumpscare container
@@ -11958,40 +12234,173 @@ export class GameScene extends Phaser.Scene {
     }
     jumpscareContainer.add(enemyGraphics);
     
-    // Start small and zoom in fast
-    jumpscareContainer.setScale(0.1);
-    jumpscareContainer.setAlpha(0);
-    
-    // Jumpscare zoom animation
-    this.tweens.add({
-      targets: jumpscareContainer,
-      scale: 2.5,
-      alpha: 1,
-      duration: 200,
-      ease: 'Power2',
-      onComplete: () => {
-        // Shake while zoomed
-        this.tweens.add({
-          targets: jumpscareContainer,
-          x: 640 + Phaser.Math.Between(-20, 20),
-          y: 360 + Phaser.Math.Between(-20, 20),
-          duration: 50,
-          repeat: 5,
-          yoyo: true,
-          onComplete: () => {
-            // Fade to game over screen
-            this.tweens.add({
-              targets: jumpscareContainer,
-              alpha: 0,
-              duration: 300,
-              onComplete: () => {
-                this.showGameOverScreen(reason);
-              }
-            });
-          }
-        });
+    // The standard kill: jumpscare sound + shake + fast zoom-in
+    const startKillSequence = () => {
+      flash.setAlpha(1);  // Full blackout behind the jumpscare (linger keeps room visible until now)
+      this.tweens.killTweensOf(enemyGraphics);  // Stop the linger walk bob
+      enemyGraphics.setPosition(0, 0);
+      this.playJumpscareSound();
+      this.cameras.main.shake(300, 0.03);
+
+      // Jumpscare zoom animation
+      this.tweens.add({
+        targets: jumpscareContainer,
+        scale: 2.5,
+        alpha: 1,
+        duration: 200,
+        ease: 'Power2',
+        onComplete: () => {
+          // Shake while zoomed
+          this.tweens.add({
+            targets: jumpscareContainer,
+            x: 640 + Phaser.Math.Between(-20, 20),
+            y: 360 + Phaser.Math.Between(-20, 20),
+            duration: 50,
+            repeat: 5,
+            yoyo: true,
+            onComplete: () => {
+              // Fade to game over screen
+              this.tweens.add({
+                targets: jumpscareContainer,
+                alpha: 0,
+                duration: 300,
+                onComplete: () => {
+                  this.showGameOverScreen(reason);
+                }
+              });
+            }
+          });
+        }
+      });
+    };
+
+    // Easter egg: 2-in-5 Scout kills, he bursts through the left door and
+    // sprints at the player before the actual jumpscare
+    const scoutLinger = isScout && Math.random() < 0.4;
+
+    if (scoutLinger) {
+      console.log('👀 Scout linger easter egg triggered!');
+
+      // Reveal the Intel room - Scout rushes in THROUGH the door, not over black
+      this.cameraUI?.setVisible(false);
+      this.roomViewUI?.setVisible(false);
+      this.isCameraMode = false;
+
+      // Lights dim instead of full blackout so the room stays visible behind him
+      flash.setAlpha(0.4);
+
+      // Scout bursts through the left doorway (his attack path) and sprints at the player
+      jumpscareContainer.setPosition(120, 330);
+      jumpscareContainer.setScale(0.55);
+      jumpscareContainer.setAlpha(0);
+      this.playScoutLingerApproach();
+
+      this.tweens.add({
+        targets: jumpscareContainer,
+        alpha: 1,
+        duration: 80,
+        ease: 'Power2',
+      });
+
+      // The sprint: door to your face in half a second
+      this.tweens.add({
+        targets: jumpscareContainer,
+        scale: 1.35,
+        x: 640,
+        y: 385,
+        duration: 500,
+        ease: 'Quad.easeIn',
+        onComplete: startKillSequence,
+      });
+
+      // Rapid sprint bob on the inner graphics - fast footfalls with a hard tilt
+      this.tweens.add({
+        targets: enemyGraphics,
+        y: 8,
+        angle: 3.5,
+        duration: 70,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: 6,
+      });
+    } else {
+      // Start small and zoom in fast
+      jumpscareContainer.setScale(0.1);
+      jumpscareContainer.setAlpha(0);
+      startKillSequence();
+    }
+  }
+
+  /**
+   * Scout linger easter egg audio: rapid sprinting footsteps that get louder
+   * fast, with heartbeat thumps underneath - sells "he's rushing you from the door"
+   */
+  private playScoutLingerApproach(): void {
+    try {
+      const audioContext = this.ensureSharedAudioContext();
+      if (!audioContext) return;
+      const now = audioContext.currentTime;
+
+      // Four rapid sneaker steps, ramping up hard as he closes in
+      // Timed to the ~140ms sprint-bob cycle of the visual
+      for (let i = 0; i < 4; i++) {
+        const start = now + 0.05 + i * 0.13;
+        const stepDuration = 0.07;
+        const loudness = 0.1 + i * 0.06; // Each step closer = louder
+
+        // Thud body of the step
+        const thud = audioContext.createOscillator();
+        const thudGain = audioContext.createGain();
+        thud.type = 'sine';
+        thud.frequency.setValueAtTime(110 - i * 8, start);
+        thud.frequency.exponentialRampToValueAtTime(50, start + stepDuration);
+        thudGain.gain.setValueAtTime(loudness, start);
+        thudGain.gain.exponentialRampToValueAtTime(0.001, start + stepDuration);
+        thud.connect(thudGain);
+        thudGain.connect(audioContext.destination);
+        thud.start(start);
+        thud.stop(start + stepDuration);
+
+        // Scuff noise on top (sneaker on concrete)
+        const scuffDuration = 0.05;
+        const buffer = audioContext.createBuffer(1, audioContext.sampleRate * scuffDuration, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let j = 0; j < data.length; j++) {
+          data[j] = (Math.random() * 2 - 1) * (1 - j / data.length);
+        }
+        const scuff = audioContext.createBufferSource();
+        scuff.buffer = buffer;
+        const scuffFilter = audioContext.createBiquadFilter();
+        scuffFilter.type = 'highpass';
+        scuffFilter.frequency.value = 1500;
+        const scuffGain = audioContext.createGain();
+        scuffGain.gain.setValueAtTime(loudness * 0.5, start);
+        scuffGain.gain.exponentialRampToValueAtTime(0.001, start + scuffDuration);
+        scuff.connect(scuffFilter);
+        scuffFilter.connect(scuffGain);
+        scuffGain.connect(audioContext.destination);
+        scuff.start(start);
+        scuff.stop(start + scuffDuration);
       }
-    });
+
+      // Heartbeat thumps underneath - the player's own pulse
+      for (let i = 0; i < 2; i++) {
+        const start = now + 0.1 + i * 0.3;
+        const thump = audioContext.createOscillator();
+        const thumpGain = audioContext.createGain();
+        thump.type = 'sine';
+        thump.frequency.setValueAtTime(55, start);
+        thump.frequency.exponentialRampToValueAtTime(35, start + 0.12);
+        thumpGain.gain.setValueAtTime(0.2, start);
+        thumpGain.gain.exponentialRampToValueAtTime(0.001, start + 0.15);
+        thump.connect(thumpGain);
+        thumpGain.connect(audioContext.destination);
+        thump.start(start);
+        thump.stop(start + 0.15);
+      }
+    } catch (e) {
+      // Audio not available
+    }
   }
   
   /**
@@ -13199,6 +13608,11 @@ export class GameScene extends Phaser.Scene {
       this.medic.update(delta);
     }
 
+    // Update Medic ghost apparition (Endless Night 6, Nightmare Mode, Custom Night)
+    // Must be outside updateHeavyAndSniper: that only runs when Heavy/Sniper/Spy/Pyro
+    // are enabled, which silently disabled the ghost on Medic-only loadouts
+    this.updateMedicGhost(delta);
+
     // Update Administrator (Custom Night only) - outside updateHeavyAndSniper so it runs even alone
     if (this.isAdministratorEnabled() && this.administrator && this.administrator.isActive()) {
       // Tick Mode 2 no-teleport timer (only when player is in Intel, not teleported)
@@ -13228,7 +13642,7 @@ export class GameScene extends Phaser.Scene {
           // Only apply if not already hacked by Mode 1 mid-way through
           hackedState.hacked = true;
           hackedState.repairProgress = 0;
-          this.showAlert(`⚠ ADMINISTRATOR: ${administratorResult.targetNode.replace('_', ' ')} TELEPORTER HACKED`, 0xff4444);
+          this.showAlert(`⚠ ADMINISTRATOR: ${administratorResult.targetNode.replace('_', ' ')} TELEPORTER HACKED`, 0x9944cc);
           this.updateHackedRoomMapIndicators();
           this.playAdministratorHackSound();
           if (this.isCameraMode) this.updateTeleportButtonAppearance();
@@ -13585,10 +13999,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.updatePyroHallwayAudio(delta);
-    
-    // Update Medic ghost apparition (Endless Night 6 only)
-    this.updateMedicGhost(delta);
-    
+
     // Update camera repair timers
     const now = Date.now();
     this.cameraStates.forEach((state, _camId) => {
@@ -13962,8 +14373,8 @@ export class GameScene extends Phaser.Scene {
    * Purely psychological - harmless, translucent, disappears when light shines on it
    * 
    * Ghost appears in:
-   * - Endless Night 6: when Medic isn't actively Übering
-   * - Custom Night: when Medic has no valid Über targets (Scout/Soldier/Demoman not enabled)
+   * - Endless Night 6 / Nightmare Mode: when Medic isn't actively Übering
+   * - Custom Night: when Medic is enabled and isn't actively Übering
    */
   private updateMedicGhost(delta: number): void {
     // Check if Medic is enabled
@@ -13972,15 +14383,10 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     
-    // Check if Medic has any valid Über targets in Custom Night
-    const hasUberTargets = this.customEnemies && 
-      (this.customEnemies.scout || this.customEnemies.soldier || this.customEnemies.demoman);
-    
-    // Ghost is active in:
-    // 1. Endless Night 6 (bad ending) - always when not Übering
-    // 2. Nightmare Mode - always when not Übering
-    // 3. Custom Night - only when Medic has NO valid Über targets (ghost-only mode)
-    const ghostModeActive = this.isBadEndingNight6 || this.isNightmareMode || (this.isCustomNightMode && !hasUberTargets);
+    // Ghost appears in every mode where Medic exists (Endless Night 6, Nightmare
+    // Mode, Custom Night), whenever he isn't actively Übering someone. On Custom
+    // Night with über targets enabled this means the 60s gaps between übers.
+    const ghostModeActive = this.isBadEndingNight6 || this.isNightmareMode || this.isCustomNightMode;
     
     if (!ghostModeActive) {
       this.medicGhostVisual?.setVisible(false);

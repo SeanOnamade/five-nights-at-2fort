@@ -47,6 +47,8 @@ export class DemomanEnemy {
   // Flags
   private hasEmittedDoorEvent: boolean = false;
   private isBeingWatched: boolean = false;
+  // One-shot flag so reachedIntel fires once per attack (mirrors EnemyBase)
+  private hasReportedIntel: boolean = false;
   
   // Track if force despawned (for custom night with Demo disabled)
   private _forceDespawned: boolean = false;
@@ -65,6 +67,7 @@ export class DemomanEnemy {
     this.activeEye = 'NONE';
     this.pathIndex = 0;
     this.hasEmittedDoorEvent = false;
+    this.hasReportedIntel = false;
     this.isBeingWatched = false;
     this._watchTimer = 0;
     this.chargeWarningTimer = 0;
@@ -217,10 +220,16 @@ export class DemomanEnemy {
         break;
         
       case 'ATTACKING':
-        result.reachedIntel = true;
+        // Only report reachedIntel ONCE (not every frame)
+        if (!this.hasReportedIntel) {
+          result.reachedIntel = true;
+          this.hasReportedIntel = true;
+        }
         break;
         
       case 'DESPAWNED':
+        // Force-despawned (custom night) - never resurrect via reset()
+        if (this._forceDespawned) break;
         // After being deterred, wait then teleport head
         this.teleportTimer += delta;
         if (this.teleportTimer >= GAME_CONSTANTS.DEMOMAN_HEAD_TELEPORT_DELAY) {

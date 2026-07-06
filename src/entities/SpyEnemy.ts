@@ -213,6 +213,7 @@ export class SpyEnemy {
         rooms = filtered;
       }
     }
+    if (rooms.length === 0) return; // Nowhere to go - stay put rather than corrupt currentNode
     this.currentNode = rooms[Math.floor(Math.random() * rooms.length)];
   }
   

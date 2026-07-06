@@ -26,6 +26,8 @@ export class HeavyEnemy extends EnemyBase {
   private watchTimer: number = 0;
   private isBeingWatched: boolean = false;
   private _destroyingCamera: boolean = false;
+  // One-shot flag so reachedIntel fires once per attack (mirrors EnemyBase)
+  private hasReportedIntel: boolean = false;
   private destroyCameraCallback: ((cameraNode: NodeId) => void) | null = null;
 
   // Lure tracking
@@ -93,6 +95,12 @@ export class HeavyEnemy extends EnemyBase {
         }
         this.watchTimer = 0;
         this.isBeingWatched = false;
+        // Pause briefly while smashing the camera (only interrupts movement states -
+        // WAITING/ATTACKING must not be reset, since DESTROYING_CAMERA exits to patrol)
+        if (this.state === 'PATROLLING' || this.state === 'LURED') {
+          this.state = 'DESTROYING_CAMERA';
+          this.waitTimer = 0;
+        }
       }
     } else if (this.watchTimer > 0 && this.state !== 'DESPAWNED') {
       // Timer slowly decays when NOT being watched (at half the rate it builds)
@@ -133,7 +141,11 @@ export class HeavyEnemy extends EnemyBase {
         break;
 
       case 'ATTACKING':
-        result.reachedIntel = true;
+        // Only report reachedIntel ONCE (not every frame)
+        if (!this.hasReportedIntel) {
+          result.reachedIntel = true;
+          this.hasReportedIntel = true;
+        }
         break;
 
       case 'DESPAWNED':
@@ -447,6 +459,7 @@ export class HeavyEnemy extends EnemyBase {
     this.isLured = false;
     this.targetLureNode = null;
     this.watchTimer = 0;
+    this.hasReportedIntel = false;
     console.log(`Heavy respawned at ${this.currentNode} (${this.currentNode === 'BRIDGE' ? 'left' : 'right'} path)`);
   }
 
@@ -459,11 +472,11 @@ export class HeavyEnemy extends EnemyBase {
   }
 
   /**
-   * Force despawn (used when lured far enough away)
+   * Permanently despawn (custom night) - matches EnemyBase's never-respawn sentinel
    */
   public forceDespawn(): void {
     this.state = 'DESPAWNED';
-    this.respawnTimer = 0;
+    this.respawnTimer = -999999; // Will never reach respawn threshold
     this.isLured = false;
     this.targetLureNode = null;
   }

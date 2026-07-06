@@ -109,11 +109,8 @@ function updateOrientationOverlay(): void {
 // Initial check
 updateOrientationOverlay();
 
-// Listen for orientation changes
+// Listen for orientation changes (also covers window resize internally)
 onOrientationChange(updateOrientationOverlay);
-
-// Also check on window resize (for desktop testing)
-window.addEventListener('resize', updateOrientationOverlay);
 
 // =============================================
 // GAME CONFIGURATION

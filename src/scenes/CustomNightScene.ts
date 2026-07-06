@@ -55,7 +55,7 @@ const ENEMY_ACCENT: Record<CustomNightEnemyId, number> = {
   spy: 0x666677,
   pyro: 0xdd6622,
   medic: 0xff4444,
-  administrator: 0xff0088,
+  administrator: 0x9944cc,  // Same purple as Pauling - they work together canonically
   pauling: 0x9944cc,
   merasmus: 0x8866dd,
 };

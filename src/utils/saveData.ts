@@ -47,10 +47,28 @@ export function loadSave(): SaveData | null {
     
     const data = JSON.parse(saved) as Partial<SaveData>;
     
-    // Merge with defaults to handle missing fields from older saves
+    // Coerce every field - corrupt values (e.g. the string "false") would
+    // otherwise be truthy and unlock the wrong menu state
+    const currentNight = Number(data.currentNight);
+    const nightDestructions: { [night: number]: number } = {};
+    if (data.nightDestructions && typeof data.nightDestructions === 'object') {
+      for (const [night, count] of Object.entries(data.nightDestructions)) {
+        const n = Number(night);
+        const c = Number(count);
+        if (Number.isInteger(n) && Number.isFinite(c) && c >= 0) {
+          nightDestructions[n] = c;
+        }
+      }
+    }
+    
     return {
-      ...DEFAULT_SAVE,
-      ...data,
+      currentNight: Number.isInteger(currentNight)
+        ? Math.min(6, Math.max(1, currentNight))
+        : DEFAULT_SAVE.currentNight,
+      nightDestructions,
+      hasBeatenNight5: data.hasBeatenNight5 === true,
+      goodEndingAchieved: data.goodEndingAchieved === true,
+      badEndingAchieved: data.badEndingAchieved === true,
     };
   } catch (e) {
     console.error('Failed to load save:', e);
@@ -100,7 +118,12 @@ export function hasSave(): boolean {
  * Calculate total destructions from per-night data
  */
 export function calculateTotalDestructions(nightDestructions: { [night: number]: number }): number {
-  return Object.values(nightDestructions).reduce((sum, count) => sum + count, 0);
+  // Number() guards against corrupt string values, which would turn the sum
+  // into string concatenation ("0" + "1" = "01")
+  return Object.values(nightDestructions).reduce((sum: number, count) => {
+    const c = Number(count);
+    return Number.isFinite(c) ? sum + c : sum;
+  }, 0);
 }
 
 /**
