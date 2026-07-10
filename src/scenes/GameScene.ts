@@ -20,6 +20,8 @@ import { buildCameraUI } from '../ui/CameraUI';
 import { RecordingUI } from '../ui/RecordingUI';
 import { HUD } from '../ui/HUD';
 import { MerasmusSystem } from '../systems/MerasmusSystem';
+import { TeleportSystem } from '../systems/TeleportSystem';
+import { LureSystem } from '../systems/LureSystem';
 import { setGameClock } from '../utils/gameClock';
 import { isMobileDevice } from '../utils/mobile';
 import { 
@@ -65,7 +67,10 @@ import {
  * - Win/Lose conditions
  */
 export class GameScene extends Phaser.Scene {
-  private audio: GameAudio = new GameAudio({
+  private teleport: TeleportSystem = new TeleportSystem(this);
+  public lure: LureSystem = new LureSystem(this);
+
+  public audio: GameAudio = new GameAudio({
     getNightNumber: () => this.nightNumber,
     getGameStatus: () => this.gameStatus,
     isPausedNow: () => this.isPaused,
@@ -81,17 +86,17 @@ export class GameScene extends Phaser.Scene {
   // GAME STATE
   // ============================================
   
-  private gameStatus: GameStatus = 'PLAYING';
+  public gameStatus: GameStatus = 'PLAYING';
   
   // Time (in game minutes, 0-360 for 00:00 to 06:00)
   private gameMinutes: number = 0;
   private timeAccumulator: number = 0;
   
   // Metal
-  private metal: number = GAME_CONSTANTS.START_METAL;
+  public metal: number = GAME_CONSTANTS.START_METAL;
   
   // Sentry
-  private sentry: SentryState = {
+  public sentry: SentryState = {
     exists: true,
     level: 1,
     hp: SENTRY_MAX_HP[1],
@@ -101,7 +106,7 @@ export class GameScene extends Phaser.Scene {
   };
   
   // Camera mode
-  private isCameraMode: boolean = false;
+  public isCameraMode: boolean = false;
   private selectedCamera: number = 0;
   private wasWrangledBeforeCamera: boolean = false;  // Remember wrangler state
   
@@ -122,8 +127,8 @@ export class GameScene extends Phaser.Scene {
   private pauseMenu!: PauseMenu;
   
   // Input state for hold-to-aim (using native DOM events for reliability)
-  private keyADown: boolean = false;
-  private keyDDown: boolean = false;
+  public keyADown: boolean = false;
+  public keyDDown: boolean = false;
   private _keyA!: Phaser.Input.Keyboard.Key;
   private _keyD!: Phaser.Input.Keyboard.Key;
   // Stored so cleanup() can remove them - Phaser reuses the scene instance,
@@ -133,15 +138,15 @@ export class GameScene extends Phaser.Scene {
   private domBlurHandler: (() => void) | null = null;
   
   // Enemies
-  private scout!: ScoutEnemy;
-  private soldier!: SoldierEnemy;
-  private demoman!: DemomanEnemy;
-  private heavy!: HeavyEnemy;
-  private sniper!: SniperEnemy;
-  private spy!: SpyEnemy;
-  private pyro!: PyroEnemy;
+  public scout!: ScoutEnemy;
+  public soldier!: SoldierEnemy;
+  public demoman!: DemomanEnemy;
+  public heavy!: HeavyEnemy;
+  public sniper!: SniperEnemy;
+  public spy!: SpyEnemy;
+  public pyro!: PyroEnemy;
   private medic!: MedicEnemy;
-  private administrator!: AdministratorEnemy;
+  public administrator!: AdministratorEnemy;
   private pauling!: PaulingEnemy;
 
   // Pauling vent system (Custom Night)
@@ -163,14 +168,14 @@ export class GameScene extends Phaser.Scene {
   private thermostatBeepTimer: number = 0;
 
   // Hacked teleporter rooms (Administrator - Custom Night)
-  private hackedRooms: Map<NodeId, HackedRoomState> = new Map();
+  public hackedRooms: Map<NodeId, HackedRoomState> = new Map();
 
   // Administrator dual-mode tracking fields
-  private lastTeleportedRoom: NodeId | null = null;   // last room player arrived at via teleport
-  private administratorNoTeleportTimer: number = 0;         // counts up; triggers Mode 2 at ADMINISTRATOR_NO_TELEPORT_THRESHOLD
+  public lastTeleportedRoom: NodeId | null = null;   // last room player arrived at via teleport
+  public administratorNoTeleportTimer: number = 0;         // counts up; triggers Mode 2 at ADMINISTRATOR_NO_TELEPORT_THRESHOLD
   
   // Night number (determines which enemies are active)
-  private nightNumber: number = 1;
+  public nightNumber: number = 1;
   
   // Session tracking for save system
   private sessionDestructions: number = 0;  // Sentry destructions this night
@@ -226,7 +231,7 @@ export class GameScene extends Phaser.Scene {
   });
   /** Stock Phaser pointer mapper; restored on shutdown so DOM mirror + X invert stay in sync */
   // Night 5+ features - Spy sapper
-  private sapperIndicator!: Phaser.GameObjects.Container;
+  public sapperIndicator!: Phaser.GameObjects.Container;
   private sapperRemoveClicks: number = 0;
   private sapperRemoveTimeout: number = 0;
   
@@ -235,18 +240,18 @@ export class GameScene extends Phaser.Scene {
   private cameraStates: Map<number, CameraState> = new Map();
   
   // Teleporter state
-  private isTeleported: boolean = false;
-  private currentRoom: NodeId = 'INTEL';
-  private activeLure: LureData | null = null;
-  private teleportEscapeTimer: number = 0;
-  private enemyApproachingRoom: boolean = false;
-  private approachingEnemyType: string = 'an enemy'; // Track which enemy triggered the approach
+  public isTeleported: boolean = false;
+  public currentRoom: NodeId = 'INTEL';
+  public activeLure: LureData | null = null;
+  public teleportEscapeTimer: number = 0;
+  public enemyApproachingRoom: boolean = false;
+  public approachingEnemyType: string = 'an enemy'; // Track which enemy triggered the approach
   
   // Teleport animation state (for cancellation)
-  private isTeleportAnimating: boolean = false;
-  private teleportAnimationOverlay: Phaser.GameObjects.Container | null = null;
-  private teleportAnimationCallback: Phaser.Time.TimerEvent | null = null;
-  private pendingTeleportDestination: NodeId | null = null;
+  public isTeleportAnimating: boolean = false;
+  public teleportAnimationOverlay: Phaser.GameObjects.Container | null = null;
+  public teleportAnimationCallback: Phaser.Time.TimerEvent | null = null;
+  public pendingTeleportDestination: NodeId | null = null;
   
   // Sniper charge visual
   private sniperChargeOverlay!: Phaser.GameObjects.Rectangle;
@@ -306,12 +311,12 @@ export class GameScene extends Phaser.Scene {
   private dispenserGraphic!: Phaser.GameObjects.Rectangle;
   
   // HUD elements
-  private hud!: HUD;
+  public hud!: HUD;
   
   // Lure duration bar (top right when lure is active)
   
   // Camera UI container (FNAF-style with map + camera feed)
-  private cameraUI!: Phaser.GameObjects.Container;
+  public cameraUI!: Phaser.GameObjects.Container;
   private cameraMapNodes: Map<string, Phaser.GameObjects.Container> = new Map();
   // Map of NodeId -> red X text overlay on the camera map (shown when teleporter is hacked)
   private hackedRoomMapIndicators: Map<string, Phaser.GameObjects.Text> = new Map();
@@ -353,19 +358,19 @@ export class GameScene extends Phaser.Scene {
   
   // Teleporter UI (Night 3+)
   private teleportButton!: Phaser.GameObjects.Container;
-  private teleportButtonBg!: Phaser.GameObjects.Rectangle;
-  private teleportButtonText!: Phaser.GameObjects.Text;
+  public teleportButtonBg!: Phaser.GameObjects.Rectangle;
+  public teleportButtonText!: Phaser.GameObjects.Text;
   // Administrator repair bar embedded in teleport button
-  private teleportRepairBarBg!: Phaser.GameObjects.Rectangle;
-  private teleportRepairBarFill!: Phaser.GameObjects.Rectangle;
-  private cameraLureButton!: Phaser.GameObjects.Container;  // Play lure from camera view
-  private roomViewUI!: Phaser.GameObjects.Container;
-  private roomViewHeader!: Phaser.GameObjects.Text;  // Room name header
-  private lureButton!: Phaser.GameObjects.Container;
+  public teleportRepairBarBg!: Phaser.GameObjects.Rectangle;
+  public teleportRepairBarFill!: Phaser.GameObjects.Rectangle;
+  public cameraLureButton!: Phaser.GameObjects.Container;  // Play lure from camera view
+  public roomViewUI!: Phaser.GameObjects.Container;
+  public roomViewHeader!: Phaser.GameObjects.Text;  // Room name header
+  public lureButton!: Phaser.GameObjects.Container;
   private returnButton!: Phaser.GameObjects.Container;
-  private escapeWarning!: Phaser.GameObjects.Container;
+  public escapeWarning!: Phaser.GameObjects.Container;
   private roomDoorway!: Phaser.GameObjects.Container;
-  private roomDoorwayEyes!: Phaser.GameObjects.Container;
+  public roomDoorwayEyes!: Phaser.GameObjects.Container;
   
   // Pyro Intel mode warning UI (Custom Night only)
   private pyroEscapeWarning!: Phaser.GameObjects.Container;
@@ -407,31 +412,31 @@ export class GameScene extends Phaser.Scene {
   /**
    * Helper methods to check if enemies are enabled (considering custom night)
    */
-  private isScoutEnabled(): boolean {
+  public isScoutEnabled(): boolean {
     return this.customEnemies ? this.customEnemies.scout : true;
   }
   
-  private isSoldierEnabled(): boolean {
+  public isSoldierEnabled(): boolean {
     return this.customEnemies ? this.customEnemies.soldier : true;
   }
   
-  private isDemomanEnabled(): boolean {
+  public isDemomanEnabled(): boolean {
     return this.customEnemies ? this.customEnemies.demoman : (this.nightNumber >= 2);
   }
   
-  private isHeavyEnabled(): boolean {
+  public isHeavyEnabled(): boolean {
     return this.customEnemies ? this.customEnemies.heavy : (this.nightNumber >= 3);
   }
   
-  private isSniperEnabled(): boolean {
+  public isSniperEnabled(): boolean {
     return this.customEnemies ? this.customEnemies.sniper : (this.nightNumber >= 4);
   }
   
-  private isSpyEnabled(): boolean {
+  public isSpyEnabled(): boolean {
     return this.customEnemies ? this.customEnemies.spy : (this.nightNumber >= 4);
   }
   
-  private isPyroEnabled(): boolean {
+  public isPyroEnabled(): boolean {
     return this.customEnemies ? this.customEnemies.pyro : (this.nightNumber >= 5);
   }
   
@@ -440,7 +445,7 @@ export class GameScene extends Phaser.Scene {
     return this.customEnemies ? this.customEnemies.medic : false;
   }
 
-  private isAdministratorEnabled(): boolean {
+  public isAdministratorEnabled(): boolean {
     // Administrator is CUSTOM NIGHT ONLY - never appears in regular nights
     return this.customEnemies ? this.customEnemies.administrator ?? false : false;
   }
@@ -455,7 +460,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Returns true if the currently selected camera's room has a hacked teleporter */
-  private isSelectedCameraHacked(): boolean {
+  public isSelectedCameraHacked(): boolean {
     if (!this.isAdministratorEnabled()) return false;
     const cam = CAMERAS[this.selectedCamera];
     if (!cam) return false;
@@ -1703,7 +1708,7 @@ export class GameScene extends Phaser.Scene {
       onTeleportButtonDown: () => {
         // If teleport animation is in progress, cancel it
         if (this.isTeleportAnimating) {
-          this.cancelTeleport();
+          this.teleport.cancelTeleport();
           return;
         }
         // If room is hacked, start hold-to-repair
@@ -1713,7 +1718,7 @@ export class GameScene extends Phaser.Scene {
           return;
         }
         const cam = CAMERAS[this.selectedCamera];
-        this.teleportToRoom(cam.node);
+        this.teleport.teleportToRoom(cam.node);
       },
       onTeleportButtonUp: () => {
         this.administratorRepairActive = false;
@@ -1722,10 +1727,10 @@ export class GameScene extends Phaser.Scene {
         const bg = this.cameraLureButton.list[0] as Phaser.GameObjects.Rectangle;
         bg.setFillStyle(0x336666);
       },
-      onLureButtonOut: () => this.updateCameraLureButtonStyle(),
-      onLureButtonDown: () => this.handleCameraLureAction(),
-      onReturnToIntel: () => this.returnToIntel(),
-      onToggleLure: () => this.toggleLure(),
+      onLureButtonOut: () => this.lure.updateCameraLureButtonStyle(),
+      onLureButtonDown: () => this.lure.handleCameraLureAction(),
+      onReturnToIntel: () => this.teleport.returnToIntel(),
+      onToggleLure: () => this.lure.toggleLure(),
     });
 
     this.cameraUI = el.cameraUI;
@@ -1780,54 +1785,6 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
-   * Handle camera lure button action (play lure)
-   */
-  private handleCameraLureAction(): void {
-    if (!this.activeLure || !this.activeLure.placed || this.activeLure.playing) return;
-    
-    // Play the lure
-    this.activeLure.playing = true;
-    this.activeLure.playTimeRemaining = GAME_CONSTANTS.LURE_DURATION;
-    this.showAlert('Lure activated!', 0x00ffff);
-    this.audio.playLureSound();
-    console.log('Lure activated from camera view at', this.activeLure.node);
-    
-    this.updateCameraLureButton();
-  }
-  
-  /**
-   * Update camera lure button style based on lure state
-   */
-  private updateCameraLureButtonStyle(): void {
-    if (!this.cameraLureButton || !this.activeLure) return;
-    
-    const btnBg = this.cameraLureButton.list[0] as Phaser.GameObjects.Rectangle;
-    const btnText = this.cameraLureButton.list[1] as Phaser.GameObjects.Text;
-    
-    // Always show play option (button is hidden when lure is playing)
-    btnBg.setFillStyle(0x224444);
-    btnBg.setStrokeStyle(2, 0x44aaaa);
-    btnText.setText('PLAY LURE');
-    btnText.setColor('#66ffff');
-  }
-  
-  /**
-   * Update camera lure button visibility
-   */
-  private updateCameraLureButton(): void {
-    if (!this.cameraLureButton || !this.isCameraMode) return;
-    
-    // Show button only if there's a lure placed but NOT playing yet
-    const hasUnplayedLure = this.activeLure && this.activeLure.placed && !this.activeLure.playing;
-    
-    this.cameraLureButton.setVisible(!!hasUnplayedLure && this.nightNumber >= 3);
-    
-    if (hasUnplayedLure) {
-      this.updateCameraLureButtonStyle();
-    }
-  }
-  
-  /**
    * Show/hide Pyro escape warning (Custom Night - Intel mode)
    */
   private showPyroEscapeWarning(show: boolean): void {
@@ -1854,280 +1811,11 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
-   * Teleport engineer to a room
-   */
-  private teleportToRoom(node: NodeId): void {
-    if (node === 'INTEL') {
-      this.showAlert('Cannot teleport to Intel room!', 0xff0000);
-      return;
-    }
-
-    // Block teleport if Administrator has hacked this room's teleporter
-    if (this.isAdministratorEnabled() && this.hackedRooms.get(node)?.hacked) {
-      this.showAlert('TELEPORTER OFFLINE', 0x9944cc);
-      return;
-    }
-    
-    // Store pending destination (for cancel feature)
-    this.pendingTeleportDestination = node;
-    
-    // Freeze Pyro and Sniper teleportation during player's teleport animation
-    // This prevents the unfair situation where they teleport into the destination
-    // while the animation is playing
-    if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
-      this.pyro.freezeTeleport();
-      this.pyro.setBlockedDestination(node);
-    }
-    if (this.isSniperEnabled() && this.sniper) {
-      this.sniper.freezeTeleport();
-      this.sniper.setBlockedDestination(node);
-    }
-    
-    // Freeze Scout and Soldier movement during player's teleport animation
-    // This prevents them from moving into rooms while player is mid-teleport
-    if (this.isScoutEnabled() && this.scout) {
-      this.scout.freezeMovement();
-    }
-    if (this.isSoldierEnabled() && this.soldier) {
-      this.soldier.freezeMovement();
-    }
-    
-    // Show teleport animation overlay FIRST, then check for enemies after arrival
-    this.showTeleportAnimation(() => {
-      // If game ended during teleport animation (e.g., Pyro timer ran out), don't proceed
-      if (this.gameStatus !== 'PLAYING') {
-        // Still unfreeze enemies to prevent them being stuck
-        if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
-          this.pyro.unfreezeTeleport();
-        }
-        if (this.isSniperEnabled() && this.sniper) {
-          this.sniper.unfreezeTeleport();
-        }
-        if (this.isScoutEnabled() && this.scout) {
-          this.scout.unfreezeMovement();
-        }
-        if (this.isSoldierEnabled() && this.soldier) {
-          this.soldier.unfreezeMovement();
-        }
-        return;
-      }
-      
-      // Check if any enemy BODY is in this room (not just heads)
-      // NOTE: Pyro stays frozen until AFTER this check completes
-      const scoutThere = this.scout.isAtNode(node);
-      const soldierThere = this.soldier.isAtNode(node);
-      // Demoman body doesn't kill on teleport - his threat is at the doors only
-      const heavyThere = this.isHeavyEnabled() && this.heavy.isAtNode(node);
-      const sniperThere = this.isSniperEnabled() && this.sniper.isAtNode(node);
-      // Pyro: in Room mode, teleporting to his room = death (he's invisible but deadly)
-      const pyroThere = this.isPyroEnabled() && this.pyro && 
-                        !this.pyro.isForceDespawned() && 
-                        this.pyro.isAtNode(node);
-      
-      console.log(`Arrived at ${node}. Enemies: Scout=${scoutThere}, Soldier=${soldierThere}, Heavy=${heavyThere}, Sniper=${sniperThere}, Pyro=${pyroThere}`);
-      
-      // Helper to unfreeze enemies before returning
-      const unfreezeAndReturn = () => {
-        if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
-          this.pyro.unfreezeTeleport();
-        }
-        if (this.isSniperEnabled() && this.sniper) {
-          this.sniper.unfreezeTeleport();
-        }
-        if (this.isScoutEnabled() && this.scout) {
-          this.scout.unfreezeMovement();
-        }
-        if (this.isSoldierEnabled() && this.soldier) {
-          this.soldier.unfreezeMovement();
-        }
-      };
-      
-      // Check each enemy type and show appropriate jumpscare AFTER teleport animation
-      if (scoutThere) {
-        unfreezeAndReturn();
-        this.gameOver('Scout caught you!');
-        return;
-      }
-      if (soldierThere) {
-        unfreezeAndReturn();
-        this.gameOver('Soldier got you!');
-        return;
-      }
-      if (heavyThere) {
-        unfreezeAndReturn();
-        this.gameOver('Heavy crushed you!');
-        return;
-      }
-      if (sniperThere) {
-        unfreezeAndReturn();
-        this.gameOver('Sniped at close range!');
-        return;
-      }
-      if (pyroThere) {
-        unfreezeAndReturn();
-        this.gameOver('Pyro burned you alive!');
-        return;
-      }
-      
-      // No enemy - safe to teleport
-      this.isTeleported = true;
-      this.currentRoom = node;
-      this.teleportEscapeTimer = 0;
-      this.enemyApproachingRoom = false;
-      this.approachingEnemyType = 'an enemy';
-
-      // Track last teleported room for Administrator Mode 1; reset no-teleport timer for Mode 2
-      this.lastTeleportedRoom = node;
-      this.administratorNoTeleportTimer = 0;
-
-      // Scare Administrator if she was targeting this room during TARGETING phase
-      if (this.isAdministratorEnabled() && this.administrator && this.administrator.isActive()) {
-        if (this.administrator.getCurrentTarget() === node && this.administrator.getState() === 'TARGETING') {
-          this.administrator.scareAdministrator();
-        }
-      }
-      
-      // Stop dispenser hum when leaving Intel room
-      this.audio.stopDispenserHum();
-      this.audio.stopIntelRoomAmbience();
-      
-      // Reset aim states (important for mobile touch zones)
-      this.keyADown = false;
-      this.keyDDown = false;
-      this.sentry.aimedDoor = 'NONE';
-      
-      // Immediately check for approaching enemies and identify which one
-      const adjacent = ROOM_ADJACENCY[this.currentRoom] || [];
-      
-      let approachingEnemy = '';
-      if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned() && this.pyro.getMode() === 'ROOM' && adjacent.includes(this.pyro.currentNode)) {
-        approachingEnemy = 'Pyro';
-      } else if (this.isHeavyEnabled() && this.heavy.isActive() && adjacent.includes(this.heavy.currentNode)) {
-        approachingEnemy = 'Heavy';
-      } else if (this.isSniperEnabled() && this.sniper.isActive() && adjacent.includes(this.sniper.currentNode)) {
-        approachingEnemy = 'Sniper';
-      } else if (this.isScoutEnabled() && this.scout.isActive() && adjacent.includes(this.scout.currentNode)) {
-        approachingEnemy = 'Scout';
-      } else if (this.isSoldierEnabled() && this.soldier.isActive() && adjacent.includes(this.soldier.currentNode)) {
-        approachingEnemy = 'Soldier';
-      }
-      
-      if (approachingEnemy) {
-        this.enemyApproachingRoom = true;
-        this.approachingEnemyType = approachingEnemy;
-        this.teleportEscapeTimer = GAME_CONSTANTS.TELEPORT_ESCAPE_TIME;
-        this.showAlert('A nearby enemy heard you!', 0xff0000);
-        this.escapeWarning.setVisible(true);
-        this.roomDoorwayEyes.setVisible(true);
-        this.audio.playEnemyApproachSound();
-      }
-      
-      // Hide camera UI, show room view
-      this.cameraUI.setVisible(false);
-      this.isCameraMode = false;
-      this.roomViewUI.setVisible(true);
-      
-      // Move metal text below room header when teleported (aligned with header at x=40)
-      this.hud.metalText.setPosition(40, 60);
-      
-      // Move lure bar below metal text when teleported
-      this.hud.lureBarContainer.setPosition(100, 105);
-      
-      // Update room view header
-      this.roomViewHeader.setText(`ROOM: ${node.replace('_', ' ')}`);
-      
-      // Update lure button text if lure is active here
-      this.updateLureButtonText();
-      
-      // Spy may sap the sentry when player leaves Intel!
-      if (this.isSpyEnabled() && this.spy && this.sentry.exists && !this.spy.isSapping()) {
-        const sapPlaced = this.spy.attemptSap();
-        if (sapPlaced) {
-          this.showAlert('⚠ SPY SAPPING SENTRY!', 0xff4444);
-          this.sapperIndicator.setVisible(true);
-          this.audio.playSapperSound();
-          // Flash screen red to make it very noticeable
-          this.cameras.main.flash(300, 255, 100, 100, false);
-        }
-      }
-      
-      // Unfreeze all enemies AFTER all checks complete - prevents race condition
-      if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
-        this.pyro.unfreezeTeleport();
-      }
-      if (this.isSniperEnabled() && this.sniper) {
-        this.sniper.unfreezeTeleport();
-      }
-      if (this.isScoutEnabled() && this.scout) {
-        this.scout.unfreezeMovement();
-      }
-      if (this.isSoldierEnabled() && this.soldier) {
-        this.soldier.unfreezeMovement();
-      }
-      
-      console.log(`Engineer teleported to ${node}`);
-    });
-  }
-  
-  /**
-   * Return engineer to Intel room
-   */
-  private returnToIntel(): void {
-    // Stop any approach sounds
-    this.audio.stopApproachGrowl();
-    
-    // Show teleport animation overlay
-    this.showTeleportAnimation(() => {
-      this.isTeleported = false;
-      this.currentRoom = 'INTEL';
-      this.roomViewUI.setVisible(false);
-      this.escapeWarning.setVisible(false);
-      this.roomDoorwayEyes.setVisible(false);
-      this.enemyApproachingRoom = false;
-      this.approachingEnemyType = 'an enemy';
-      this.teleportEscapeTimer = 0;
-      
-      // Restore metal text to original position
-      this.hud.metalText.setPosition(20, 20);
-      
-      // Restore lure bar to original position (right of metal count, with spacing)
-      this.hud.lureBarContainer.setPosition(300, 28);
-      
-      // Resume dispenser hum when back in Intel room
-      this.audio.startDispenserHum();
-      this.audio.startIntelRoomAmbience();
-      
-      console.log('Engineer returned to Intel room');
-      
-      // Check if any enemy is waiting in Intel room (reached while player was away)
-      if (this.isHeavyEnabled() && this.heavy.currentNode === 'INTEL') {
-        this.gameOver('Heavy was waiting for you!');
-        return;
-      }
-      if (this.isScoutEnabled() && this.scout.state === 'ATTACKING') {
-        this.gameOver('Scout was waiting for you!');
-        return;
-      }
-      if (this.isSoldierEnabled() && this.soldier.state === 'ATTACKING') {
-        this.gameOver('Soldier was waiting for you!');
-        return;
-      }
-      if (this.isDemomanEnabled() && this.demoman.state === 'ATTACKING') {
-        this.gameOver('Demoman was waiting for you!');
-        return;
-      }
-
-      // Administrator Mode 1: auto-hack last teleported room on return to Intel
-      this.handleAdministratorMode1();
-    });
-  }
-
-  /**
    * Administrator Mode 1 — instant auto-hack triggered when player returns to Intel.
    * Hacks the last room the player teleported to (if not already hacked).
    * Every return trip triggers this — no cooldown cap.
    */
-  private handleAdministratorMode1(): void {
+  public handleAdministratorMode1(): void {
     if (!this.isAdministratorEnabled() || !this.administrator?.isActive()) return;
     if (!this.lastTeleportedRoom) return; // no teleport yet this night
 
@@ -2156,337 +1844,9 @@ export class GameScene extends Phaser.Scene {
 
     this.showAlert(`⚠ ADMINISTRATOR: ${target.replace('_', ' ')} TELEPORTER HACKED`, 0x9944cc);
     this.updateHackedRoomMapIndicators();
-    this.updateTeleportButtonAppearance();
+    this.teleport.updateTeleportButtonAppearance();
     this.audio.playAdministratorHackSound();
     console.log(`📋 Administrator (Mode 1) instantly hacked ${target}.`);
-  }
-  
-  /**
-   * Show teleport animation with particle effects (1 second duration)
-   */
-  private showTeleportAnimation(onComplete: () => void): void {
-    // Mark animation as in progress
-    this.isTeleportAnimating = true;
-    
-    // Update button to show cancel option
-    this.updateTeleportButtonAppearance();
-    
-    // Play teleport sound
-    this.audio.playTeleportSound();
-    
-    // Create teleport overlay
-    const overlay = this.add.container(640, 360);
-    overlay.setDepth(200);
-    
-    // Store reference for cancellation
-    this.teleportAnimationOverlay = overlay;
-    
-    // Dark flash background
-    const flash = this.add.rectangle(0, 0, 1280, 720, 0x000000, 0);
-    overlay.add(flash);
-    
-    // Red glow circle expanding from center (RED team teleporter)
-    const glowCircle = this.add.circle(0, 0, 10, 0xff4444, 0.8);
-    overlay.add(glowCircle);
-    
-    // Inner bright core
-    const core = this.add.circle(0, 0, 5, 0xffffff, 1);
-    overlay.add(core);
-    
-    // "TELEPORTING..." text
-    const teleportText = this.add.text(0, 150, 'TELEPORTING...', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#ff6666',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    teleportText.setAlpha(0);
-    overlay.add(teleportText);
-    
-    // Create swirling particles
-    const particles: Phaser.GameObjects.Arc[] = [];
-    for (let i = 0; i < 20; i++) {
-      const angle = (i / 20) * Math.PI * 2;
-      const particle = this.add.circle(
-        Math.cos(angle) * 50,
-        Math.sin(angle) * 50,
-        4,
-        0xff4444  // RED team teleporter particles
-      );
-      particle.setAlpha(0);
-      particles.push(particle);
-      overlay.add(particle);
-    }
-    
-    // Animation sequence
-    // 1. Flash in and expand glow
-    this.tweens.add({
-      targets: flash,
-      alpha: 0.7,
-      duration: 150,
-      yoyo: true,
-    });
-    
-    this.tweens.add({
-      targets: glowCircle,
-      scale: 30,
-      alpha: 0,
-      duration: 800,
-      ease: 'Power2',
-    });
-    
-    this.tweens.add({
-      targets: core,
-      scale: 5,
-      alpha: 0,
-      duration: 600,
-      ease: 'Power2',
-    });
-    
-    // Text fade in
-    this.tweens.add({
-      targets: teleportText,
-      alpha: 1,
-      duration: 200,
-      delay: 100,
-    });
-    
-    // Swirling particles
-    particles.forEach((particle, i) => {
-      const delay = i * 30;
-      const angle = (i / 20) * Math.PI * 2;
-      
-      this.tweens.add({
-        targets: particle,
-        alpha: 1,
-        duration: 100,
-        delay: delay,
-      });
-      
-      this.tweens.add({
-        targets: particle,
-        x: Math.cos(angle) * 200,
-        y: Math.sin(angle) * 200,
-        alpha: 0,
-        scale: 0.5,
-        duration: 600,
-        delay: delay + 100,
-        ease: 'Power1',
-      });
-    });
-    
-    // Complete after 1 second
-    this.teleportAnimationCallback = this.time.delayedCall(1000, () => {
-      this.isTeleportAnimating = false;
-      this.teleportAnimationOverlay = null;
-      this.teleportAnimationCallback = null;
-      this.pendingTeleportDestination = null;
-      this.updateTeleportButtonAppearance();
-      overlay.destroy();
-      onComplete();
-    });
-  }
-  
-  /**
-   * Cancel an in-progress teleport animation
-   */
-  private cancelTeleport(): void {
-    if (!this.isTeleportAnimating) return;
-    
-    console.log('Teleport cancelled!');
-    
-    // Cancel the delayed callback
-    if (this.teleportAnimationCallback) {
-      this.teleportAnimationCallback.remove();
-      this.teleportAnimationCallback = null;
-    }
-    
-    // Destroy the overlay (kill child tweens first so orphaned tweens
-    // don't keep running against destroyed targets)
-    if (this.teleportAnimationOverlay) {
-      this.teleportAnimationOverlay.each((child: Phaser.GameObjects.GameObject) => {
-        this.tweens.killTweensOf(child);
-      });
-      this.tweens.killTweensOf(this.teleportAnimationOverlay);
-      this.teleportAnimationOverlay.destroy();
-      this.teleportAnimationOverlay = null;
-    }
-    
-    // Unfreeze all enemies
-    if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
-      this.pyro.unfreezeTeleport();
-    }
-    if (this.isSniperEnabled() && this.sniper) {
-      this.sniper.unfreezeTeleport();
-    }
-    if (this.isScoutEnabled() && this.scout) {
-      this.scout.unfreezeMovement();
-    }
-    if (this.isSoldierEnabled() && this.soldier) {
-      this.soldier.unfreezeMovement();
-    }
-    
-    // Reset state
-    this.isTeleportAnimating = false;
-    this.pendingTeleportDestination = null;
-    
-    // Update button appearance back to normal
-    this.updateTeleportButtonAppearance();
-    
-    // Show cancel feedback
-    this.showAlert('Teleport cancelled!', 0xffaa00);
-  }
-  
-  /**
-   * Update teleport button appearance based on animation state
-   */
-  private updateTeleportButtonAppearance(): void {
-    if (!this.teleportButtonBg?.active || !this.teleportButtonText?.active) return;
-
-    const hacked = this.isSelectedCameraHacked();
-
-    if (hacked) {
-      // Hacked state — grayed out, shows repair bar
-      this.teleportButtonBg.setFillStyle(0x1a1a1a);
-      this.teleportButtonBg.setStrokeStyle(2, 0xbb66ee);
-      this.teleportButtonText.setText('✕ HACKED');
-      this.teleportButtonText.setColor('#bb66ee');
-      this.teleportRepairBarBg?.setVisible(true);
-      this.teleportRepairBarFill?.setVisible(true);
-    } else if (this.isTeleportAnimating) {
-      // Cancel mode - orange/warning colors
-      this.teleportButtonBg.setFillStyle(0x553311);
-      this.teleportButtonBg.setStrokeStyle(2, 0xffaa44);
-      this.teleportButtonText.setText('✕ CANCEL');
-      this.teleportButtonText.setColor('#ffaa44');
-      this.teleportRepairBarBg?.setVisible(false);
-      this.teleportRepairBarFill?.setVisible(false);
-    } else {
-      // Normal mode - red colors (RED team)
-      this.teleportButtonBg.setFillStyle(0x442222);
-      this.teleportButtonBg.setStrokeStyle(2, 0xcc4444);
-      this.teleportButtonText.setText('TELEPORT HERE');
-      this.teleportButtonText.setColor('#ff8888');
-      this.teleportRepairBarBg?.setVisible(false);
-      this.teleportRepairBarFill?.setVisible(false);
-    }
-  }
-  
-  /**
-   * Handle lure button - place lure or play existing lure
-   */
-  private toggleLure(): void {
-    console.log(`toggleLure called. isTeleported=${this.isTeleported}, currentRoom=${this.currentRoom}`);
-    
-    // If lure exists and we're at the lure location, play it
-    if (this.activeLure && this.activeLure.node === this.currentRoom && this.activeLure.placed) {
-      if (!this.activeLure.playing) {
-        // Play the lure (activate Medic voice)
-        this.activeLure.playing = true;
-        this.activeLure.playTimeRemaining = GAME_CONSTANTS.LURE_DURATION;
-        this.showAlert('Lure activated!', 0x00ffff);
-        this.audio.playLureSound();
-        console.log('Lure activated at', this.currentRoom);
-      } else {
-        this.showAlert('Lure already playing!', 0xffff00);
-      }
-      this.updateLureButtonText();
-      return;
-    }
-    
-    // If lure exists elsewhere, can't do anything here
-    if (this.activeLure && this.activeLure.placed) {
-      this.showAlert(`Lure already at ${this.activeLure.node.replace('_', ' ')}!`, 0xffff00);
-      return;
-    }
-    
-    if (!this.isTeleported) {
-      this.showAlert('Must be teleported to place lure!', 0xff6600);
-      return;
-    }
-    
-    if (this.currentRoom === 'INTEL') {
-      this.showAlert('Cannot place lure in Intel room!', 0xff0000);
-      return;
-    }
-    
-    // Place new lure
-    if (this.metal < GAME_CONSTANTS.LURE_COST) {
-      this.showAlert('Not enough metal! (50 required)', 0xff0000);
-      return;
-    }
-    
-    this.metal -= GAME_CONSTANTS.LURE_COST;
-    this.activeLure = { 
-      node: this.currentRoom, 
-      placed: true, 
-      playing: false, 
-      playTimeRemaining: 0 
-    };
-    console.log(`Lure placed at ${this.currentRoom}`);
-    this.audio.playLurePlacedSound();
-    this.showAlert(`Lure placed! Play from cameras.`, 0x00ffff);
-    this.updateHUD();
-    this.updateLureButtonText();
-  }
-  
-  /**
-   * Pick up lure from current room
-   */
-  private _pickupLure(): void {
-    if (this.activeLure && this.activeLure.node === this.currentRoom) {
-      this.activeLure = null;
-      this.showAlert('Lure picked up', 0xffff00);
-      this.updateLureButtonText();
-    }
-  }
-  
-  /**
-   * Update lure button text based on state
-   */
-  private updateLureButtonText(): void {
-    if (!this.lureButton) return;
-    
-    const btnText = this.lureButton.list[1] as Phaser.GameObjects.Text;
-    const btnBg = this.lureButton.list[0] as Phaser.GameObjects.Rectangle;
-    
-    if (this.activeLure && this.activeLure.placed) {
-      if (this.activeLure.node === this.currentRoom) {
-        // At the lure location
-        if (this.activeLure.playing) {
-          btnText.setText('🔊 LURE PLAYING...');
-          btnBg.setFillStyle(0x224444);
-          btnBg.setStrokeStyle(2, 0x00ffff);
-          btnText.setColor('#66ffff');
-        } else {
-          btnText.setText('PLAY LURE');
-          btnBg.setFillStyle(0x442244);
-          btnBg.setStrokeStyle(2, 0xaa44aa);
-          btnText.setColor('#cc88ff');
-        }
-      } else {
-        // Lure is placed elsewhere - show info (can't place another)
-        const lureRoom = this.activeLure.node.replace('_', ' ');
-        btnText.setText(`LURE AT ${lureRoom}`);
-        btnBg.setFillStyle(0x222222);
-        btnBg.setStrokeStyle(2, 0x555555);
-        btnText.setColor('#888888');
-      }
-    } else {
-      // No lure placed - check if enough metal
-      const canAfford = this.metal >= GAME_CONSTANTS.LURE_COST;
-      btnText.setText('PLACE LURE (50 metal)');
-      if (canAfford) {
-        btnBg.setFillStyle(0x224444);
-        btnBg.setStrokeStyle(2, 0x44aaaa);
-        btnText.setColor('#66ffff');
-      } else {
-        // Greyed out - not enough metal
-        btnBg.setFillStyle(0x1a1a1a);
-        btnBg.setStrokeStyle(2, 0x333333);
-        btnText.setColor('#555555');
-      }
-    }
   }
   
   /**
@@ -2575,7 +1935,7 @@ export class GameScene extends Phaser.Scene {
 
     // Stop repair if switching cameras mid-hold
     this.administratorRepairActive = false;
-    this.updateTeleportButtonAppearance();
+    this.teleport.updateTeleportButtonAppearance();
     
     // Don't do anything else if clicking the camera we're already on
     if (this.selectedCamera === index) {
@@ -2673,7 +2033,7 @@ export class GameScene extends Phaser.Scene {
     }
     
     // Update camera lure button visibility
-    this.updateCameraLureButton();
+    this.lure.updateCameraLureButton();
   }
   
   // Growl sound state for enemy approach
@@ -4395,7 +3755,7 @@ export class GameScene extends Phaser.Scene {
     this.updateMapNodeColors(selectedCam.node);
     
     // Update camera lure button visibility (ensures button shows after placing lure)
-    this.updateCameraLureButton();
+    this.lure.updateCameraLureButton();
   }
   
   /**
@@ -4698,16 +4058,16 @@ export class GameScene extends Phaser.Scene {
   // GAME STATE
   // ============================================
   
-  private showAlert(message: string, color: number): void {
+  public showAlert(message: string, color: number): void {
     this.hud.showAlert(message, color);
   }
 
-  private updateHUD(): void {
+  public updateHUD(): void {
     this.hud.update();
 
     // Update lure button state (grey out if not enough metal) - Night 3+
     if (this.nightNumber >= 3 && this.isTeleported) {
-      this.updateLureButtonText();
+      this.lure.updateLureButtonText();
     }
 
     // Update mobile UI if on mobile
@@ -4716,7 +4076,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private gameOver(reason: string): void {
+  public gameOver(reason: string): void {
     if (this.gameStatus !== 'PLAYING') return;
 
     this.merasmus.reset();
@@ -5776,7 +5136,7 @@ export class GameScene extends Phaser.Scene {
         this.cameraBootOverlay.setVisible(false);
         
         // Update lure button visibility now that boot is complete
-        this.updateCameraLureButton();
+        this.lure.updateCameraLureButton();
       }
     }
     
@@ -6052,7 +5412,7 @@ export class GameScene extends Phaser.Scene {
           this.showAlert(`⚠ ADMINISTRATOR: ${administratorResult.targetNode.replace('_', ' ')} TELEPORTER HACKED`, 0x9944cc);
           this.updateHackedRoomMapIndicators();
           this.audio.playAdministratorHackSound();
-          if (this.isCameraMode) this.updateTeleportButtonAppearance();
+          if (this.isCameraMode) this.teleport.updateTeleportButtonAppearance();
         }
       }
 
@@ -6076,7 +5436,7 @@ export class GameScene extends Phaser.Scene {
             this.showAlert('Teleporter restored!', 0x00ff88);
             this.audio.playAdministratorRepairCompleteSound();
             this.updateHackedRoomMapIndicators();
-            this.updateTeleportButtonAppearance();
+            this.teleport.updateTeleportButtonAppearance();
           }
         } else {
           // Room no longer hacked (race condition guard)
@@ -6100,7 +5460,7 @@ export class GameScene extends Phaser.Scene {
       }
 
       // Keep teleport button appearance in sync each frame
-      if (this.isCameraMode) this.updateTeleportButtonAppearance();
+      if (this.isCameraMode) this.teleport.updateTeleportButtonAppearance();
     }
 
     // Update Pauling vent system and thermostat (Custom Night only)
@@ -6108,7 +5468,7 @@ export class GameScene extends Phaser.Scene {
     this.ventUI.update();
 
     // Update teleport danger check (always runs, regardless of which enemies are enabled)
-    this.updateTeleportDanger(delta);
+    this.teleport.updateTeleportDanger(delta);
   }
   
   /**
@@ -6195,8 +5555,8 @@ export class GameScene extends Phaser.Scene {
         // Remove the lure entirely
         this.activeLure = null;
         this.hud.lureBarContainer.setVisible(false);
-        this.updateLureButtonText();
-        this.updateCameraLureButton();
+        this.lure.updateLureButtonText();
+        this.lure.updateCameraLureButton();
       }
     } else {
       // Hide lure bar if no active lure playing
@@ -6411,113 +5771,6 @@ export class GameScene extends Phaser.Scene {
         state.destroyedBy = null;
       }
     });
-  }
-  
-  /**
-   * Update teleport danger check - runs every frame regardless of which enemies are enabled
-   */
-  private updateTeleportDanger(delta: number): void {
-    // Only run on Night 3+ when teleporting is available (escapeWarning only exists then)
-    if (!this.escapeWarning) return;
-    
-    // Check if enemy is IN the Engineer's room or approaching
-    if (this.isTeleported && this.currentRoom !== 'INTEL') {
-      // Check if any enemy is IN the same room as engineer (very dangerous!)
-      const scoutInRoom = this.isScoutEnabled() && this.scout.currentNode === this.currentRoom && this.scout.isActive();
-      const soldierInRoom = this.isSoldierEnabled() && this.soldier.currentNode === this.currentRoom && this.soldier.isActive();
-      const heavyInRoom = this.isHeavyEnabled() && this.heavy.currentNode === this.currentRoom && this.heavy.isActive();
-      const sniperInRoom = this.isSniperEnabled() && this.sniper.currentNode === this.currentRoom && this.sniper.isActive();
-      const demomanInRoom = this.isDemomanEnabled() && this.demoman.isCharging() && this.demoman.currentNode === this.currentRoom;
-      const pyroInRoom = this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned() && this.pyro.isAtNode(this.currentRoom);
-      
-      const enemyInRoom = scoutInRoom || soldierInRoom || heavyInRoom || sniperInRoom || demomanInRoom || pyroInRoom;
-      
-      const adjacent = ROOM_ADJACENCY[this.currentRoom] || [];
-      
-      // Identify which enemy is approaching (prioritize in-room over adjacent)
-      let newApproachingEnemy = '';
-      if (pyroInRoom) newApproachingEnemy = 'Pyro';
-      else if (scoutInRoom) newApproachingEnemy = 'Scout';
-      else if (soldierInRoom) newApproachingEnemy = 'Soldier';
-      else if (heavyInRoom) newApproachingEnemy = 'Heavy';
-      else if (sniperInRoom) newApproachingEnemy = 'Sniper';
-      else if (demomanInRoom) newApproachingEnemy = 'Demoman';
-      else if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned() && this.pyro.getMode() === 'ROOM' && adjacent.includes(this.pyro.currentNode)) {
-        newApproachingEnemy = 'Pyro';
-      } else if (this.isHeavyEnabled() && this.heavy.isActive() && adjacent.includes(this.heavy.currentNode)) {
-        newApproachingEnemy = 'Heavy';
-      } else if (this.isSniperEnabled() && this.sniper.isActive() && adjacent.includes(this.sniper.currentNode)) {
-        newApproachingEnemy = 'Sniper';
-      } else if (this.isScoutEnabled() && this.scout.isActive() && adjacent.includes(this.scout.currentNode)) {
-        newApproachingEnemy = 'Scout';
-      } else if (this.isSoldierEnabled() && this.soldier.isActive() && adjacent.includes(this.soldier.currentNode)) {
-        newApproachingEnemy = 'Soldier';
-      }
-      
-      // Enemy in room OR adjacent triggers warning
-      const enemyApproaching = enemyInRoom || !!newApproachingEnemy;
-      
-      if (enemyApproaching && !this.enemyApproachingRoom) {
-        // Enemy just arrived - start the danger timer
-        this.enemyApproachingRoom = true;
-        this.approachingEnemyType = newApproachingEnemy || 'an enemy';
-        this.teleportEscapeTimer = GAME_CONSTANTS.TELEPORT_ESCAPE_TIME;
-        this.showAlert('A nearby enemy heard you!', 0xff0000);
-        this.escapeWarning.setVisible(true);
-        this.roomDoorwayEyes.setVisible(true);
-        this.audio.playEnemyApproachSound();
-      } else if (!enemyApproaching && this.enemyApproachingRoom) {
-        // Enemy left the area - reset the warning so it can trigger again
-        // But DON'T hide the escape warning yet - player still needs to leave
-        // Just allow future enemies to re-trigger the alert
-        console.log('Enemy left area, resetting approach detection');
-        this.enemyApproachingRoom = false;
-        this.escapeWarning.setVisible(false);
-        this.roomDoorwayEyes.setVisible(false);
-        this.audio.stopApproachGrowl();
-      }
-      
-      // Keep the danger active while enemy is nearby
-      if (this.enemyApproachingRoom) {
-        this.teleportEscapeTimer -= delta;
-        
-        // Update progress bar (shrinks from full to empty)
-        const progress = Math.max(0, this.teleportEscapeTimer / GAME_CONSTANTS.TELEPORT_ESCAPE_TIME);
-        const progressBar = this.escapeWarning.list[1] as Phaser.GameObjects.Rectangle;
-        const innerGlow = this.escapeWarning.list[2] as Phaser.GameObjects.Rectangle;
-        
-        // Use displayWidth instead of scale for proper visual shrinking
-        progressBar.displayWidth = 310 * progress;
-        innerGlow.displayWidth = 310 * progress;
-        
-        // Shake effect - gets more intense as time runs out
-        const shakeIntensity = (1 - progress) * 8;
-        this.escapeWarning.setPosition(640 + (Math.random() - 0.5) * shakeIntensity, 580);
-        
-        // Pulse the red eyes
-        const eyesAlpha = 0.6 + Math.sin(Date.now() / 150) * 0.4;
-        this.roomDoorwayEyes.setAlpha(eyesAlpha);
-        
-        // Update growl intensity
-        this.audio.updateApproachGrowl(this.teleportEscapeTimer);
-        
-        if (this.teleportEscapeTimer <= 0) {
-          // Too late - player dies. Use the enemy that triggered the approach.
-          this.audio.stopApproachGrowl();
-          
-          // Use the stored approaching enemy type (the one who triggered the timer)
-          // This ensures proper jumpscare even if the enemy moved away
-          const killer = this.approachingEnemyType || 'an enemy';
-          
-          this.gameOver(`${killer} caught you!`);
-          return;
-        }
-      }
-    } else if (!this.isTeleported && this.escapeWarning.visible) {
-      // Hide warning when back at Intel
-      this.escapeWarning.setVisible(false);
-      this.audio.stopApproachGrowl();
-    }
   }
   
   /**
