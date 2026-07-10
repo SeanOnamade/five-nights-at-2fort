@@ -22,6 +22,8 @@ import { HUD } from '../ui/HUD';
 import { MerasmusSystem } from '../systems/MerasmusSystem';
 import { TeleportSystem } from '../systems/TeleportSystem';
 import { LureSystem } from '../systems/LureSystem';
+import { SentrySystem } from '../systems/SentrySystem';
+import { EndingsSystem } from '../systems/EndingsSystem';
 import { setGameClock } from '../utils/gameClock';
 import { isMobileDevice } from '../utils/mobile';
 import { 
@@ -68,6 +70,8 @@ import {
  */
 export class GameScene extends Phaser.Scene {
   private teleport: TeleportSystem = new TeleportSystem(this);
+  public sentrySystem: SentrySystem = new SentrySystem(this);
+  public endings: EndingsSystem = new EndingsSystem(this);
   public lure: LureSystem = new LureSystem(this);
 
   public audio: GameAudio = new GameAudio({
@@ -89,7 +93,7 @@ export class GameScene extends Phaser.Scene {
   public gameStatus: GameStatus = 'PLAYING';
   
   // Time (in game minutes, 0-360 for 00:00 to 06:00)
-  private gameMinutes: number = 0;
+  public gameMinutes: number = 0;
   private timeAccumulator: number = 0;
   
   // Metal
@@ -117,13 +121,13 @@ export class GameScene extends Phaser.Scene {
   private cameraBootOverlay!: Phaser.GameObjects.Container;
   
   // Wrangler firing cooldown (prevents spam-clicking)
-  private wranglerCooldown: number = 0;
-  private readonly WRANGLER_COOLDOWN: number = 1000; // 1 second cooldown between shots
+  public wranglerCooldown: number = 0;
+  public readonly WRANGLER_COOLDOWN: number = 1000; // 1 second cooldown between shots
   
   // Demoman eye glow sound
   
   // Pause state
-  private isPaused: boolean = false;
+  public isPaused: boolean = false;
   private pauseMenu!: PauseMenu;
   
   // Input state for hold-to-aim (using native DOM events for reliability)
@@ -145,7 +149,7 @@ export class GameScene extends Phaser.Scene {
   public sniper!: SniperEnemy;
   public spy!: SpyEnemy;
   public pyro!: PyroEnemy;
-  private medic!: MedicEnemy;
+  public medic!: MedicEnemy;
   public administrator!: AdministratorEnemy;
   private pauling!: PaulingEnemy;
 
@@ -178,23 +182,23 @@ export class GameScene extends Phaser.Scene {
   public nightNumber: number = 1;
   
   // Session tracking for save system
-  private sessionDestructions: number = 0;  // Sentry destructions this night
-  private isBadEndingNight6: boolean = false;  // True if playing bad ending Night 6
-  private isCustomNightMode: boolean = false;  // True if playing custom night (extras)
-  private isNightmareMode: boolean = false;  // True if playing Nightmare Mode (night 8, starts at 10 AM difficulty)
+  public sessionDestructions: number = 0;  // Sentry destructions this night
+  public isBadEndingNight6: boolean = false;  // True if playing bad ending Night 6
+  public isCustomNightMode: boolean = false;  // True if playing custom night (extras)
+  public isNightmareMode: boolean = false;  // True if playing Nightmare Mode (night 8, starts at 10 AM difficulty)
   
   // Endless Night 6 (bad ending) tracking
-  private endlessDay: number = 7;  // Current day in endless mode (Day 7 when 6 AM first reached)
+  public endlessDay: number = 7;  // Current day in endless mode (Day 7 when 6 AM first reached)
   private hoursAfter6AM: number = 0;  // Hours elapsed after first 6 AM (for difficulty scaling)
-  private hasReached6AM: boolean = false;  // True once first 6 AM is reached
-  private endlessSurvivalMinutes: number = 0;  // Total minutes survived in endless mode
+  public hasReached6AM: boolean = false;  // True once first 6 AM is reached
+  public endlessSurvivalMinutes: number = 0;  // Total minutes survived in endless mode
   
   // Medic ghost apparition (endless mode)
   private medicGhostActive: boolean = false;
   private medicGhostSide: 'LEFT' | 'RIGHT' | null = null;
   private medicGhostTimer: number = 0;
   private medicGhostDuration: number = 3000;  // How long ghost appears (3 sec)
-  private medicGhostCooldown: number = 0;  // Cooldown between ghost appearances
+  public medicGhostCooldown: number = 0;  // Cooldown between ghost appearances
   private medicGhostVisual!: Phaser.GameObjects.Container;  // Visual for ghost in doorway
   
   // Custom night enemy configuration (null if not custom night)
@@ -216,7 +220,7 @@ export class GameScene extends Phaser.Scene {
    * Merasmus (Custom Night only when `customEnemies.merasmus` is true).
    * Fade-in threat in Intel; Q toggles full-screen mirror to repel at 8× speed.
    */
-  private merasmus: MerasmusSystem = new MerasmusSystem(this, this.audio, {
+  public merasmus: MerasmusSystem = new MerasmusSystem(this, this.audio, {
     isMerasmusEnabled: () => this.isMerasmusEnabled(),
     getGameStatus: () => this.gameStatus,
     isPausedNow: () => this.isPaused,
@@ -226,7 +230,7 @@ export class GameScene extends Phaser.Scene {
       this.keyADown = false;
       this.keyDDown = false;
     },
-    gameOver: (reason) => this.gameOver(reason),
+    gameOver: (reason) => this.endings.gameOver(reason),
     onFlipStateChanged: () => this.mobileControls?.updateMerasmusFlipButton(),
   });
   /** Stock Phaser pointer mapper; restored on shutdown so DOM mirror + X invert stay in sync */
@@ -263,14 +267,14 @@ export class GameScene extends Phaser.Scene {
   
   // Main room
   private _roomBackground!: Phaser.GameObjects.Rectangle;
-  private leftDoor!: Phaser.GameObjects.Rectangle;
-  private rightDoor!: Phaser.GameObjects.Rectangle;
+  public leftDoor!: Phaser.GameObjects.Rectangle;
+  public rightDoor!: Phaser.GameObjects.Rectangle;
   private _leftDoorFrame!: Phaser.GameObjects.Rectangle;
   private _rightDoorFrame!: Phaser.GameObjects.Rectangle;
   
   // Enemy visuals in doorways (shown when light/wrangler aimed at door)
-  private scoutInDoorway!: Phaser.GameObjects.Container;
-  private soldierInDoorway!: Phaser.GameObjects.Container;
+  public scoutInDoorway!: Phaser.GameObjects.Container;
+  public soldierInDoorway!: Phaser.GameObjects.Container;
   private demomanInDoorway!: Phaser.GameObjects.Container;
   private demomanApproachGlow!: Phaser.GameObjects.Graphics; // Green glow when approaching
   private heavyInDoorway!: Phaser.GameObjects.Container;
@@ -302,10 +306,10 @@ export class GameScene extends Phaser.Scene {
   private demomanHeadEyeGlow!: Phaser.GameObjects.Graphics; // Eye glow effect
   
   // Sentry visual
-  private sentryGraphic!: Phaser.GameObjects.Container;
-  private sentryBody!: Phaser.GameObjects.Rectangle;
+  public sentryGraphic!: Phaser.GameObjects.Container;
+  public sentryBody!: Phaser.GameObjects.Rectangle;
   private sentryGun!: Phaser.GameObjects.Rectangle;
-  private aimBeam!: Phaser.GameObjects.Graphics;
+  public aimBeam!: Phaser.GameObjects.Graphics;
   
   // Dispenser visual
   private dispenserGraphic!: Phaser.GameObjects.Rectangle;
@@ -390,13 +394,13 @@ export class GameScene extends Phaser.Scene {
   // 2Fort Intel room ambience (loops while in Intel; not tied to wrangler aim focus mute)
   
   // End screen
-  private endScreen!: Phaser.GameObjects.Container;
+  public endScreen!: Phaser.GameObjects.Container;
   
   // ============================================
   // ENGINEER RECORDINGS (Phone calls)
   // ============================================
   
-  private recordings!: RecordingUI;
+  public recordings!: RecordingUI;
   
   // ============================================
   // MOBILE CONTROLS
@@ -440,7 +444,7 @@ export class GameScene extends Phaser.Scene {
     return this.customEnemies ? this.customEnemies.pyro : (this.nightNumber >= 5);
   }
   
-  private isMedicEnabled(): boolean {
+  public isMedicEnabled(): boolean {
     // Medic is CUSTOM NIGHT ONLY - never appears in regular nights
     return this.customEnemies ? this.customEnemies.medic : false;
   }
@@ -666,7 +670,7 @@ export class GameScene extends Phaser.Scene {
    * Return to title: stop gameplay HTMLAudio (intel room loop) and Web Audio before switching scenes,
    * so ambience cannot keep playing over BootScene.
    */
-  private goToMainMenu(): void {
+  public goToMainMenu(): void {
     this.isPaused = false;
     this.pauseMenu?.setVisible(false);
     this.physics?.resume();
@@ -715,9 +719,9 @@ export class GameScene extends Phaser.Scene {
       
       // Show the requested ending
       if (data.previewEnding === 'good') {
-        this.showGoodEnding();
+        this.endings.showGoodEnding();
       } else if (data.previewEnding === 'badIntro') {
-        this.showBadEndingIntro();
+        this.endings.showBadEndingIntro();
       } else if (data.previewEnding === 'dark') {
         // Set up minimal state for dark ending
         this.isBadEndingNight6 = true;
@@ -727,7 +731,7 @@ export class GameScene extends Phaser.Scene {
         this.endScreen.setVisible(true);
         const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.95);
         this.endScreen.add(overlay);
-        this.showEndlessDarkEnding('Preview mode');
+        this.endings.showEndlessDarkEnding('Preview mode');
       }
       return;  // Skip normal game initialization
     }
@@ -999,7 +1003,7 @@ export class GameScene extends Phaser.Scene {
         this.gameStatus = 'LOST';
         
         // Show Pyro jumpscare first!
-        this.showGiveUpJumpscare();
+        this.endings.showGiveUpJumpscare();
       },
     });
     this.pauseMenu.create(this.isBadEndingNight6);
@@ -1025,7 +1029,7 @@ export class GameScene extends Phaser.Scene {
         isMerasmusViewFlipped: () => this.merasmus.isViewFlipped(),
         setAimLeftActive: (active) => this.setMobileAimLeftActive(active),
         setAimRightActive: (active) => this.setMobileAimRightActive(active),
-        fireWrangler: () => this.fireWrangler(),
+        fireWrangler: () => this.sentrySystem.fireWrangler(),
         togglePause: () => this.togglePause(),
         toggleCameraMode: () => this.toggleCameraMode(),
         toggleMerasmusFlip: () => this.merasmus.toggleFlip(),
@@ -1484,7 +1488,7 @@ export class GameScene extends Phaser.Scene {
       if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isCameraMode) return;
       if (!this.sentry.exists || !this.sentry.isWrangled) return;
       if (this.sentry.aimedDoor === 'NONE') return;
-      this.fireWrangler();
+      this.sentrySystem.fireWrangler();
     });
     
     // Aim beam (for wrangler)
@@ -2182,7 +2186,7 @@ export class GameScene extends Phaser.Scene {
 
     // Thermostat maxed out — Pyro appears
     if (this.thermostat >= GAME_CONSTANTS.THERMOSTAT_MAX) {
-      this.gameOver('The vents overheated! Pyro appeared!');
+      this.endings.gameOver('The vents overheated! Pyro appeared!');
       return;
     }
 
@@ -2202,7 +2206,7 @@ export class GameScene extends Phaser.Scene {
 
     // She dropped in
     if (result.entered) {
-      this.gameOver('Pauling dropped in from the vents!');
+      this.endings.gameOver('Pauling dropped in from the vents!');
     }
   }
 
@@ -2333,7 +2337,7 @@ export class GameScene extends Phaser.Scene {
       if (!this.sentry.isWrangled) return;
       if (this.sentry.aimedDoor === 'NONE') return; // Can't fire at middle
       
-      this.fireWrangler();
+      this.sentrySystem.fireWrangler();
     });
     
     // TAB - Toggle Camera
@@ -2352,13 +2356,13 @@ export class GameScene extends Phaser.Scene {
       
       if (!this.sentry.exists) {
         // No sentry - build one
-        this.buildSentry();
+        this.sentrySystem.buildSentry();
       } else if (this.sentry.hp === this.sentry.maxHp) {
         // Full HP - upgrade
-        this.upgradeSentry();
+        this.sentrySystem.upgradeSentry();
       } else {
         // Damaged - repair
-        this.repairSentry();
+        this.sentrySystem.repairSentry();
       }
     });
     
@@ -2423,11 +2427,11 @@ export class GameScene extends Phaser.Scene {
     
     // Then handle sentry actions
     if (!this.sentry.exists) {
-      this.buildSentry();
+      this.sentrySystem.buildSentry();
     } else if (this.sentry.hp < this.sentry.maxHp) {
-      this.repairSentry();
+      this.sentrySystem.repairSentry();
     } else if (this.sentry.level < 3) {
-      this.upgradeSentry();
+      this.sentrySystem.upgradeSentry();
     }
   }
   
@@ -2535,14 +2539,14 @@ export class GameScene extends Phaser.Scene {
   // WRANGLER MECHANICS
   // ============================================
 
-  private isHeavyAtHallway(hall: 'LEFT' | 'RIGHT'): boolean {
+  public isHeavyAtHallway(hall: 'LEFT' | 'RIGHT'): boolean {
     if (!this.isHeavyEnabled() || !this.hasHeavyStarted()) return false;
     if (!this.heavy.isActive()) return false;
     const node = hall === 'LEFT' ? 'LEFT_HALL' : 'RIGHT_HALL';
     return this.heavy.currentNode === node;
   }
 
-  private hideHeavyDoorwayShadow(): void {
+  public hideHeavyDoorwayShadow(): void {
     this.heavyInDoorway.setVisible(false);
     this.heavyInDoorway.clearMask(false);
     this.stopHeavyDoorwayPulse();
@@ -2588,7 +2592,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
   
-  private updateWranglerVisuals(): void {
+  public updateWranglerVisuals(): void {
     // Hide enemies by default
     this.scoutInDoorway.setVisible(false);
     this.soldierInDoorway.setVisible(false);
@@ -2822,481 +2826,9 @@ export class GameScene extends Phaser.Scene {
     }
   }
   
-  /**
-   * Play looping repair buzz while player holds the repair bar
-   * Called each frame while administratorRepairActive; manages its own throttle via _administratorRepairSoundTimer
-   */
-  private fireWrangler(): void {
-    if (!this.sentry.exists || !this.sentry.isWrangled) return;
-    if (this.sentry.aimedDoor === 'NONE') return; // Can't fire when not aiming at a door
-    
-    // Check cooldown (1 second between shots)
-    if (this.wranglerCooldown > 0) {
-      this.showAlert('COOLING DOWN...', 0xff6600);
-      this.audio.playDeniedSound();
-      return;
-    }
-    
-    // Check if we have enough metal to fire (always costs 50)
-    if (this.metal < 50) {
-      this.showAlert('NOT ENOUGH METAL TO FIRE!', 0xff0000);
-      this.audio.playDeniedSound();
-      return;
-    }
-    
-    // Deduct metal cost for firing
-    this.metal -= 50;
-    
-    // Start cooldown
-    this.wranglerCooldown = this.WRANGLER_COOLDOWN;
-    
-    // Visual feedback
-    this.cameras.main.shake(100, 0.01);
-    this.audio.playSound('fire');
-    
-    // Fire bullet projectile
-    const targetX = this.sentry.aimedDoor === 'LEFT' ? 120 : 1160;
-    const targetY = 310;
-    this.fireBulletProjectile(640, 500, targetX, targetY);
-    
-    // Flash the aim beam
-    this.aimBeam.clear();
-    this.aimBeam.lineStyle(8, 0xffff00, 1);
-    if (this.sentry.aimedDoor === 'LEFT') {
-      this.aimBeam.lineBetween(640, 500, 120, 310);
-    } else {
-      this.aimBeam.lineBetween(640, 500, 1160, 310);
-    }
-    
-    // Reset beam after flash
-    this.time.delayedCall(100, () => {
-      // Don't run after death - updateWranglerVisuals can restart the
-      // detection sound over the jumpscare
-      if (this.gameStatus !== 'PLAYING') return;
-      this.updateWranglerVisuals();
-    });
-    
-    // Check if we hit an enemy
-    let hitEnemy = false;
-    
-    // PYRO REFLECTION CHECK - Pyro reflects sentry fire and destroys sentry!
-    // This check happens BEFORE other enemy checks
-    if (this.isPyroEnabled() && this.pyro && !this.pyro.isForceDespawned()) {
-      const pyroHallway = this.pyro.getHallway();
-      const firingAtPyro = (this.sentry.aimedDoor === 'LEFT' && pyroHallway === 'LEFT') ||
-                           (this.sentry.aimedDoor === 'RIGHT' && pyroHallway === 'RIGHT');
-      if (firingAtPyro) {
-        // Pyro reflects the shot! Sentry is destroyed!
-        console.log('🔥 PYRO REFLECTED YOUR SHOT!');
-        this.showAlert('PYRO REFLECTED! SENTRY DESTROYED!', 0xff4400);
-        this.destroySentry();
-        this.audio.playPyroReflectSound();
-        // Pyro teleports away immediately after reflecting
-        this.pyro.teleportToRandomRoom();
-        return; // Don't process any other hits
-      }
-    }
-    
-    if (this.sentry.aimedDoor === 'LEFT') {
-      // Check Scout at left door (if enabled)
-      if (this.isScoutEnabled() && this.scout.currentNode === 'LEFT_HALL' && 
-          (this.scout.state === 'WAITING' || this.scout.state === 'ATTACKING')) {
-        // Check if Scout is Übered (Medic) - can't be repelled!
-        if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SCOUT')) {
-          this.showAlert('ÜBERED! CANNOT REPEL!', 0xff4444);
-          hitEnemy = true; // Still counts as hitting (spent metal)
-        } else {
-          this.scout.driveAway();
-          this.showAlert('SCOUT REPELLED!', 0x00ff00);
-          this.audio.playEnemyRetreatSound();
-          hitEnemy = true;
-        }
-      }
-      // Check Demoman at left door (if enabled)
-      if (this.isDemomanEnabled() && this.demoman.getChargeDoor() === 'LEFT' &&
-          (this.demoman.currentNode === 'LEFT_HALL')) {
-        // Check if Demoman is Übered (Medic) - can't be repelled!
-        if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN')) {
-          this.showAlert('ÜBERED! CANNOT REPEL!', 0xff4444);
-          hitEnemy = true;
-        } else {
-          // Bonus: +25 metal if hit during body phase (not just glow)
-          if (this.demoman.isInBodyPhase()) {
-            this.metal = Math.min(this.metal + 25, GAME_CONSTANTS.MAX_METAL);
-            this.showAlert('REPELLED LAST SECOND! +25 METAL', 0x00ff00);
-          } else {
-            this.showAlert('DEMOMAN REPELLED!', 0x00ff00);
-          }
-          this.demoman.deter();
-          // Allow Pyro to teleport to this hallway again
-          if (this.isPyroEnabled() && this.pyro) {
-            this.pyro.onDemomanChargeEnd();
-          }
-          this.audio.playEnemyRetreatSound();
-          hitEnemy = true;
-        }
-      }
-      // Check Sniper at left door (Night 4+) - ALWAYS requires 2 shots to repel
-      // Only hit Sniper if he's actually AIMING (not if lured and just passing through)
-      if (this.isSniperEnabled() && this.sniper.currentNode === 'LEFT_HALL' && 
-          this.sniper.isActive() && !this.sniper.isCurrentlyLured()) {
-        const fullyRepelled = this.sniper.wardOff(this.sentry.level);
-        if (fullyRepelled) {
-          this.showAlert('SNIPER DRIVEN AWAY!', 0x00ff00);
-          this.audio.playEnemyRetreatSound();
-        }
-        // No alert for partial hits - the sniper aiming UI already shows shots remaining
-        hitEnemy = true;
-      }
-    } else if (this.sentry.aimedDoor === 'RIGHT') {
-      // Check Soldier at right door (if enabled)
-      if (this.isSoldierEnabled() && this.soldier.currentNode === 'RIGHT_HALL' && 
-          (this.soldier.state === 'WAITING' || this.soldier.state === 'SIEGING')) {
-        // Check if Soldier is Übered (Medic) - can't be repelled!
-        if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('SOLDIER')) {
-          this.showAlert('ÜBERED! CANNOT REPEL!', 0xff4444);
-          hitEnemy = true;
-        } else {
-          this.soldier.driveAway();
-          this.showAlert('SOLDIER REPELLED!', 0x00ff00);
-          this.audio.playEnemyRetreatSound();
-          hitEnemy = true;
-        }
-      }
-      // Check Demoman at right door (if enabled)
-      if (this.isDemomanEnabled() && this.demoman.getChargeDoor() === 'RIGHT' &&
-          (this.demoman.currentNode === 'RIGHT_HALL')) {
-        // Check if Demoman is Übered (Medic) - can't be repelled!
-        if (this.isMedicEnabled() && this.medic && this.medic.isEnemyUbered('DEMOMAN')) {
-          this.showAlert('ÜBERED! CANNOT REPEL!', 0xff4444);
-          hitEnemy = true;
-        } else {
-          // Bonus: +25 metal if hit during body phase (not just glow)
-          if (this.demoman.isInBodyPhase()) {
-            this.metal = Math.min(this.metal + 25, GAME_CONSTANTS.MAX_METAL);
-            this.showAlert('REPELLED LAST SECOND! +25 METAL', 0x00ff00);
-          } else {
-            this.showAlert('DEMOMAN REPELLED!', 0x00ff00);
-          }
-          this.demoman.deter();
-          // Allow Pyro to teleport to this hallway again
-          if (this.isPyroEnabled() && this.pyro) {
-            this.pyro.onDemomanChargeEnd();
-          }
-          this.audio.playEnemyRetreatSound();
-          hitEnemy = true;
-        }
-      }
-      // Check Sniper at right door (if enabled) - ALWAYS requires 2 shots to repel
-      // Only hit Sniper if he's actually AIMING (not if lured and just passing through)
-      if (this.isSniperEnabled() && this.sniper.currentNode === 'RIGHT_HALL' && 
-          this.sniper.isActive() && !this.sniper.isCurrentlyLured()) {
-        const fullyRepelled = this.sniper.wardOff(this.sentry.level);
-        if (fullyRepelled) {
-          this.showAlert('SNIPER DRIVEN AWAY!', 0x00ff00);
-          this.audio.playEnemyRetreatSound();
-        }
-        // No alert for partial hits - the sniper aiming UI already shows shots remaining
-        hitEnemy = true;
-      }
-    }
-
-    // If we missed, show feedback (Heavy absorbs sentry fire — lure only)
-    if (!hitEnemy) {
-      const heavyBlocking =
-        (this.sentry.aimedDoor === 'LEFT' && this.isHeavyAtHallway('LEFT')) ||
-        (this.sentry.aimedDoor === 'RIGHT' && this.isHeavyAtHallway('RIGHT'));
-      if (heavyBlocking) {
-        this.showAlert('HEAVY IGNORES SENTRY! LURE HIM!', 0xff6600);
-      } else {
-        this.showAlert('FIRED! (-50 metal)', 0xffaa00);
-      }
-    }
-  }
-  
   // ============================================
   // SENTRY MANAGEMENT
   // ============================================
-  
-  private buildSentry(): void {
-    if (this.sentry.exists) {
-      this.showAlert('Sentry already exists!', 0xffff00);
-      return;
-    }
-    
-    // Can't build when cameras are up - must lower cameras first
-    if (this.isCameraMode) {
-      this.showAlert('Lower cameras first! (TAB)', 0xff6600);
-      return;
-    }
-    
-    // Can't build remotely - must be in Intel room
-    if (this.isTeleported) {
-      this.showAlert('Return to Intel to build!', 0xff6600);
-      return;
-    }
-    
-    if (this.metal < GAME_CONSTANTS.BUILD_SENTRY_COST) {
-      this.showAlert('Not enough metal! (100 required)', 0xff0000);
-      return;
-    }
-    
-    this.metal -= GAME_CONSTANTS.BUILD_SENTRY_COST;
-    this.sentry = {
-      exists: true,
-      level: 1,
-      hp: SENTRY_MAX_HP[1],
-      maxHp: SENTRY_MAX_HP[1],
-      isWrangled: false,
-      aimedDoor: 'LEFT',
-    };
-    
-    this.sentryGraphic.setVisible(true);
-    this.updateSentryVisuals();
-    this.updateHUD();
-    this.showAlert('SENTRY BUILT!', 0x00ff00);
-    this.audio.playSentryBuildSound();
-  }
-  
-  private upgradeSentry(): void {
-    if (!this.sentry.exists) {
-      this.showAlert('No sentry to upgrade!', 0xff0000);
-      return;
-    }
-    
-    // Can't upgrade when cameras are up - must lower cameras first
-    if (this.isCameraMode) {
-      this.showAlert('Lower cameras first! (TAB)', 0xff6600);
-      return;
-    }
-    
-    // Can't upgrade remotely - must be in Intel room
-    if (this.isTeleported) {
-      this.showAlert('Return to Intel to upgrade!', 0xff6600);
-      return;
-    }
-    
-    if (this.sentry.level >= 3) {
-      this.showAlert('Sentry already max level!', 0xffff00);
-      return;
-    }
-    
-    if (this.sentry.hp < this.sentry.maxHp) {
-      this.showAlert('Repair sentry to full HP first!', 0xff0000);
-      return;
-    }
-    
-    if (this.metal < GAME_CONSTANTS.UPGRADE_SENTRY_COST) {
-      this.showAlert('Not enough metal! (200 required)', 0xff0000);
-      return;
-    }
-    
-    this.metal -= GAME_CONSTANTS.UPGRADE_SENTRY_COST;
-    this.sentry.level = (this.sentry.level + 1) as SentryLevel;
-    this.sentry.maxHp = SENTRY_MAX_HP[this.sentry.level];
-    this.sentry.hp = this.sentry.maxHp; // Full heal on upgrade
-    
-    this.updateSentryVisuals();
-    this.updateHUD();
-    this.showAlert(`SENTRY UPGRADED TO L${this.sentry.level}!`, 0x00ff00);
-    this.audio.playSentryUpgradeSound();
-  }
-  
-  private repairSentry(): void {
-    if (!this.sentry.exists) {
-      this.showAlert('No sentry to repair!', 0xff0000);
-      return;
-    }
-    
-    // Can't repair when cameras are up - must lower cameras first
-    if (this.isCameraMode) {
-      this.showAlert('Lower cameras first! (TAB)', 0xff6600);
-      return;
-    }
-    
-    // Can't repair remotely - must be in Intel room
-    if (this.isTeleported) {
-      this.showAlert('Return to Intel to repair!', 0xff6600);
-      return;
-    }
-    
-    if (this.sentry.hp >= this.sentry.maxHp) {
-      this.showAlert('Sentry at full health!', 0xffff00);
-      return;
-    }
-    
-    // Calculate how much HP is missing and only charge for what's needed
-    const missingHp = this.sentry.maxHp - this.sentry.hp;
-    const hpToRepair = Math.min(missingHp, GAME_CONSTANTS.REPAIR_SENTRY_AMOUNT);
-    const metalCost = hpToRepair; // 1 metal = 1 HP
-    
-    if (this.metal < 1) {
-      this.showAlert('Not enough metal!', 0xff0000);
-      return;
-    }
-    
-    // Use available metal, up to what's needed
-    const actualCost = Math.min(metalCost, Math.floor(this.metal));
-    const actualRepair = actualCost; // 1:1 ratio
-    
-    this.metal -= actualCost;
-    this.sentry.hp = Math.min(this.sentry.hp + actualRepair, this.sentry.maxHp);
-    
-    this.updateHUD();
-    this.showAlert(`+${Math.floor(actualRepair)} HP (-${Math.floor(actualCost)} metal)`, 0x00ff00);
-    this.audio.playSentryRepairSound();
-  }
-  
-  private damageSentry(amount: number): void {
-    if (!this.sentry.exists) return;
-    
-    this.sentry.hp -= amount;
-    this.cameras.main.shake(200, 0.02);
-    
-    // Play rocket hit sound
-    this.audio.playSound('rocketHit');
-    
-    // Flash sentry red
-    this.sentryBody.setFillStyle(0xff0000);
-    this.time.delayedCall(200, () => {
-      if (this.sentry.exists) {
-        this.sentryBody.setFillStyle(0xBB4444); // Back to RED team color
-      }
-    });
-    
-    if (this.sentry.hp <= 0) {
-      this.destroySentry();
-    }
-    
-    this.updateHUD();
-  }
-  
-  private destroySentry(): void {
-    this.sentry.exists = false;
-    this.sentry.hp = 0;
-    this.sentry.isWrangled = false;
-    this.sentry.aimedDoor = 'NONE';
-    
-    // Track destruction for save system (only during story nights 1-5)
-    if (!this.isCustomNightMode && this.nightNumber <= 5) {
-      this.sessionDestructions++;
-      console.log(`🔧 Sentry destroyed! Session destructions: ${this.sessionDestructions}`);
-    }
-    
-    this.sentryGraphic.setVisible(false);
-    this.aimBeam.setVisible(false);
-    
-    // Hide any enemies shown in doorways (fixes Scout glitch)
-    this.scoutInDoorway.setVisible(false);
-    this.soldierInDoorway.setVisible(false);
-    this.hideHeavyDoorwayShadow();
-    
-    // Stop detection sound
-    this.audio.stopDetectionSound();
-    
-    // Resume dispenser hum if in Intel room (was paused for aiming)
-    if (!this.isTeleported && !this.isPaused) {
-      this.audio.startDispenserHum();
-    }
-    
-    // Reset door colors
-    this.leftDoor.setFillStyle(0x000000);
-    this.rightDoor.setFillStyle(0x000000);
-    
-    // Play sentry destroyed sound
-    this.audio.playSound('sentryDestroyed');
-    
-    this.showAlert('SENTRY DESTROYED!', 0xff0000);
-    
-    // Clear any active sapper (sentry is gone, so sapper is too)
-    if (this.isSpyEnabled() && this.spy.isSapping()) {
-      this.spy.removeSapper();
-      this.sapperIndicator.setVisible(false);
-      this.audio.stopSapperSound();
-      console.log('🕵️ Sapper destroyed with sentry');
-    }
-    
-    // If Soldier was sieging, he starts breach countdown
-    if (this.isSoldierEnabled() && this.soldier.isSieging()) {
-      this.soldier.sentryDestroyed();
-      this.showAlert('⚠ SOLDIER BREACHING IN 3 SECONDS! ⚠', 0xff0000);
-      
-      // Flash the screen red as warning
-      this.cameras.main.flash(500, 255, 0, 0, false);
-    }
-  }
-  
-  private updateSentryVisuals(): void {
-    // Update level badge text
-    const levelText = this.sentryGraphic.list[3] as Phaser.GameObjects.Text;
-    levelText.setText(`L${this.sentry.level}`);
-    
-    // Scale sentry based on level
-    const scale = 0.8 + (this.sentry.level * 0.1);
-    this.sentryGraphic.setScale(scale);
-  }
-  
-  /**
-   * Auto-defense: Unwrangled sentry automatically defends but is destroyed
-   */
-  private triggerAutoDefense(enemyType: string): void {
-    if (!this.sentry.exists) return;
-    
-    // Sentry fires and destroys itself
-    this.showAlert(`SENTRY AUTO-DEFENSE vs ${enemyType}!`, 0xffff00);
-    
-    // Drive away the enemy
-    if (enemyType === 'SCOUT') {
-      this.scout.driveAway();
-    } else if (enemyType === 'DEMOMAN') {
-      this.demoman.deter();
-      // Allow Pyro to teleport to hallways again
-      if (this.isPyroEnabled() && this.pyro) {
-        this.pyro.onDemomanChargeEnd();
-      }
-    } else {
-      this.soldier.driveAway();
-    }
-    
-    // Destroy sentry
-    this.destroySentry();
-  }
-  
-  /**
-   * Handle when player escapes an Übered enemy by teleporting away
-   * The enemy retreats, sentry is destroyed, and Medic picks a new target next hour
-   */
-  private handleUberedEnemyEscaped(enemyType: UberTarget): void {
-    // Drive away the enemy (they can't wait in Intel like normal - Über ran out)
-    if (enemyType === 'SCOUT') {
-      this.scout.driveAway();
-    } else if (enemyType === 'SOLDIER') {
-      this.soldier.driveAway();
-    } else if (enemyType === 'DEMOMAN') {
-      this.demoman.deter();
-      // Allow Pyro to teleport to hallways again
-      if (this.isPyroEnabled() && this.pyro) {
-        this.pyro.onDemomanChargeEnd();
-      }
-    }
-    
-    // Destroy sentry if it exists
-    if (this.sentry.exists) {
-      this.showAlert('SENTRY DESTROYED BY ÜBER!', 0xff4444);
-      this.destroySentry();
-    }
-    
-    // Notify Medic that the attack resolved - will pick new target next hour
-    if (this.medic) {
-      this.medic.onTargetAttackResolved();
-    }
-    
-    // Reset Medic ghost cooldown to prevent immediate spawn after Über ends
-    // Ghost should wait at least 30 seconds after an Über attack resolves
-    this.medicGhostCooldown = Math.max(this.medicGhostCooldown, 30000);
-    
-    console.log(`💉 ${enemyType} Über attack resolved - player escaped!`);
-  }
   
   // ============================================
   // CAMERA SYSTEM
@@ -3807,14 +3339,14 @@ export class GameScene extends Phaser.Scene {
     // Play rocket animation
     this.playRocketAnimation();
     
-    this.damageSentry(GAME_CONSTANTS.ROCKET_DAMAGE);
+    this.sentrySystem.damageSentry(GAME_CONSTANTS.ROCKET_DAMAGE);
     this.showAlert(`ROCKET HIT! -${GAME_CONSTANTS.ROCKET_DAMAGE} HP`, 0xff4400);
   }
   
   /**
    * Fire a bullet projectile from sentry to target
    */
-  private fireBulletProjectile(fromX: number, fromY: number, toX: number, toY: number): void {
+  public fireBulletProjectile(fromX: number, fromY: number, toX: number, toY: number): void {
     // Create bullet container
     const bullet = this.add.container(fromX, fromY);
     bullet.setDepth(50);
@@ -4076,967 +3608,6 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  public gameOver(reason: string): void {
-    if (this.gameStatus !== 'PLAYING') return;
-
-    this.merasmus.reset();
-    
-    this.gameStatus = 'LOST';
-    // Stop ALL sounds immediately
-    this.audio.stopAllGameSounds();
-    this.recordings.stop(); // Stop Engineer recording if playing
-    console.log('GAME OVER:', reason);
-
-    // Determine which enemy killed the player
-    const reasonLower = reason.toLowerCase();
-    const isScout = reasonLower.includes('scout');
-    const isDemoman = reasonLower.includes('demoman');
-    const isHeavy = reasonLower.includes('heavy');
-    const isSoldier = reasonLower.includes('soldier') || reasonLower.includes('breached');
-    const isSniper = reasonLower.includes('snipe') || reasonLower.includes('sniper');
-    const isPyro = reasonLower.includes('pyro') || reasonLower.includes('burned') || reasonLower.includes('overheated');
-    // Note: don't match bare 'vent' - the Pyro thermostat death reason mentions vents too
-    const isPauling = reasonLower.includes('pauling');
-    const isMerasmus = reasonLower.includes('merasmus');
-    
-    // Create jumpscare container
-    this.endScreen.removeAll(true);
-    this.endScreen.setVisible(true);  // IMPORTANT: Make visible!
-    
-    // Dark flash
-    const flash = this.add.rectangle(640, 360, 1280, 720, 0x000000, 1);
-    this.endScreen.add(flash);
-    
-    // Create enemy jumpscare graphic (zooms in from center)
-    const jumpscareContainer = this.add.container(640, 360);
-    this.endScreen.add(jumpscareContainer);
-    
-    // Draw proper character model for jumpscare
-    const enemyGraphics = this.add.graphics();
-    if (isPauling) {
-      drawPaulingJumpscarePortrait(enemyGraphics);
-    } else if (isMerasmus) {
-      drawCharacterSilhouette(enemyGraphics, 0, 0, 'MERASMUS', 0x8866dd);
-    } else {
-      drawJumpscareSilhouette(enemyGraphics, isScout, isSoldier, isDemoman, isHeavy, isSniper, isPyro);
-    }
-    jumpscareContainer.add(enemyGraphics);
-    
-    // The standard kill: jumpscare sound + shake + fast zoom-in
-    const startKillSequence = () => {
-      flash.setAlpha(1);  // Full blackout behind the jumpscare (linger keeps room visible until now)
-      this.tweens.killTweensOf(enemyGraphics);  // Stop the linger walk bob
-      enemyGraphics.setPosition(0, 0);
-      this.audio.playJumpscareSound();
-      this.cameras.main.shake(300, 0.03);
-
-      // Jumpscare zoom animation
-      this.tweens.add({
-        targets: jumpscareContainer,
-        scale: 2.5,
-        alpha: 1,
-        duration: 200,
-        ease: 'Power2',
-        onComplete: () => {
-          // Shake while zoomed
-          this.tweens.add({
-            targets: jumpscareContainer,
-            x: 640 + Phaser.Math.Between(-20, 20),
-            y: 360 + Phaser.Math.Between(-20, 20),
-            duration: 50,
-            repeat: 5,
-            yoyo: true,
-            onComplete: () => {
-              // Fade to game over screen
-              this.tweens.add({
-                targets: jumpscareContainer,
-                alpha: 0,
-                duration: 300,
-                onComplete: () => {
-                  this.showGameOverScreen(reason);
-                }
-              });
-            }
-          });
-        }
-      });
-    };
-
-    // Easter egg: 2-in-5 Scout kills, he bursts through the left door and
-    // sprints at the player before the actual jumpscare
-    const scoutLinger = isScout && Math.random() < 0.4;
-
-    if (scoutLinger) {
-      console.log('👀 Scout linger easter egg triggered!');
-
-      // Reveal the Intel room - Scout rushes in THROUGH the door, not over black
-      this.cameraUI?.setVisible(false);
-      this.roomViewUI?.setVisible(false);
-      this.isCameraMode = false;
-
-      // Lights dim instead of full blackout so the room stays visible behind him
-      flash.setAlpha(0.4);
-
-      // Scout bursts through the left doorway (his attack path) and sprints at the player
-      jumpscareContainer.setPosition(120, 330);
-      jumpscareContainer.setScale(0.55);
-      jumpscareContainer.setAlpha(0);
-      this.audio.playScoutLingerApproach();
-
-      this.tweens.add({
-        targets: jumpscareContainer,
-        alpha: 1,
-        duration: 80,
-        ease: 'Power2',
-      });
-
-      // The sprint: door to your face in half a second
-      this.tweens.add({
-        targets: jumpscareContainer,
-        scale: 1.35,
-        x: 640,
-        y: 385,
-        duration: 500,
-        ease: 'Quad.easeIn',
-        onComplete: startKillSequence,
-      });
-
-      // Rapid sprint bob on the inner graphics - fast footfalls with a hard tilt
-      this.tweens.add({
-        targets: enemyGraphics,
-        y: 8,
-        angle: 3.5,
-        duration: 70,
-        ease: 'Sine.easeInOut',
-        yoyo: true,
-        repeat: 6,
-      });
-    } else {
-      // Start small and zoom in fast
-      jumpscareContainer.setScale(0.1);
-      jumpscareContainer.setAlpha(0);
-      startKillSequence();
-    }
-  }
-
-  /**
-   * Show Pyro jumpscare for Give Up, then transition to dark ending
-   */
-  private showGiveUpJumpscare(): void {
-    // Play jumpscare sound
-    this.audio.playJumpscareSound();
-    
-    // Screen shake for impact
-    this.cameras.main.shake(300, 0.03);
-    
-    // Create jumpscare container
-    this.endScreen.removeAll(true);
-    this.endScreen.setVisible(true);
-    
-    // Dark flash
-    const flash = this.add.rectangle(640, 360, 1280, 720, 0x000000, 1);
-    this.endScreen.add(flash);
-    
-    // Create Pyro jumpscare graphic
-    const jumpscareContainer = this.add.container(640, 360);
-    this.endScreen.add(jumpscareContainer);
-    
-    // Draw Pyro for the jumpscare (isPyro = true)
-    const enemyGraphics = this.add.graphics();
-    drawJumpscareSilhouette(enemyGraphics, false, false, false, false, false, true);
-    jumpscareContainer.add(enemyGraphics);
-    
-    // Start small and zoom in fast
-    jumpscareContainer.setScale(0.1);
-    jumpscareContainer.setAlpha(0);
-    
-    // Jumpscare zoom animation
-    this.tweens.add({
-      targets: jumpscareContainer,
-      scale: 2.5,
-      alpha: 1,
-      duration: 200,
-      ease: 'Power2',
-      onComplete: () => {
-        // Shake while zoomed
-        this.tweens.add({
-          targets: jumpscareContainer,
-          x: 640 + Phaser.Math.Between(-20, 20),
-          y: 360 + Phaser.Math.Between(-20, 20),
-          duration: 50,
-          repeat: 5,
-          yoyo: true,
-          onComplete: () => {
-            // Fade to dark ending
-            this.tweens.add({
-              targets: jumpscareContainer,
-              alpha: 0,
-              duration: 300,
-              onComplete: () => {
-                // Show dark ending with sad chime on menu return
-                const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.95);
-                this.endScreen.add(overlay);
-                this.showEndlessDarkEnding('You gave up...', false, true);  // playSadChimeOnReturn = true
-              }
-            });
-          }
-        });
-      }
-    });
-  }
-
-  private showGameOverScreen(reason: string): void {
-    const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.95);
-    this.endScreen.add(overlay);
-    
-    // For endless Night 6, show the dark ending with survival stats
-    if (this.isBadEndingNight6) {
-      this.showEndlessDarkEnding(reason);
-      return;
-    }
-    
-    // Show time of death (12-hour format)
-    const hours24 = Math.floor(this.gameMinutes / 60);
-    const mins = this.gameMinutes % 60;
-    const displayHours = hours24 === 0 ? 12 : hours24;  // 00:XX becomes 12:XX
-    const timeStr = `${displayHours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')} AM`;
-    
-    const timeText = this.add.text(640, 220, timeStr, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '36px',
-      color: '#ff4444',
-    }).setOrigin(0.5);
-    this.endScreen.add(timeText);
-    
-    const title = this.add.text(640, 290, 'GAME OVER', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '64px',
-      color: '#ff0000',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.endScreen.add(title);
-    
-    const subtitle = this.add.text(640, 370, reason, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#ff6666',
-    }).setOrigin(0.5);
-    this.endScreen.add(subtitle);
-    
-    const menuPrompt = this.add.text(640, 460, 'SPACE or CLICK to return to menu', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '20px',
-      color: '#888888',
-    }).setOrigin(0.5);
-    this.endScreen.add(menuPrompt);
-    
-    this.tweens.add({
-      targets: menuPrompt,
-      alpha: 0.3,
-      duration: 800,
-      yoyo: true,
-      repeat: -1,
-    });
-    
-    this.endScreen.setVisible(true);
-    
-    // Return to menu on space or click
-    this.input.keyboard?.once('keydown-SPACE', () => {
-      this.goToMainMenu();
-    });
-    this.input.once('pointerdown', () => {
-      this.goToMainMenu();
-    });
-  }
-  
-  /**
-   * Show the dark ending for endless Night 6 with survival stats
-   * This is the "bad ending" - player was trapped in an endless night and eventually fell
-   * @param skipSound - If true, don't play the dark ending sound (e.g., when give up sound already played)
-   * @param playSadChimeOnReturn - If true, play the give up sound when returning to menu
-   */
-  private showEndlessDarkEnding(reason: string, skipSound: boolean = false, playSadChimeOnReturn: boolean = false): void {
-    if (!skipSound) {
-      this.audio.playDarkEndingSound();  // Melancholic melody
-    }
-    
-    // Store flag for menu return
-    const shouldPlaySadChime = playSadChimeOnReturn;
-    
-    // Update save - mark game completed (unlocks everything)
-    updateSaveOnNight6Complete();
-    
-    // Calculate survival stats
-    const totalMinutes = this.endlessSurvivalMinutes;
-    // Days survived = endlessDay - 6 (Night 6 starts, Day 7 = 1 day survived, etc.)
-    const survivalDays = this.hasReached6AM ? (this.endlessDay - 6) : 0;
-    const survivalHours = Math.floor(totalMinutes / 60);
-    const survivalMins = totalMinutes % 60;
-    
-    // Format survival time (with proper singular/plural)
-    const hourWord = survivalHours === 1 ? 'hour' : 'hours';
-    const minWord = survivalMins === 1 ? 'minute' : 'minutes';
-    const dayWord = survivalDays === 1 ? 'day' : 'days';
-    const hoursInDay = survivalHours % 24;
-    const hoursInDayWord = hoursInDay === 1 ? 'hour' : 'hours';
-    const minsInHour = survivalMins;
-    const minsInHourWord = minsInHour === 1 ? 'minute' : 'minutes';
-    
-    let survivalStr = '';
-    if (survivalDays > 0) {
-      // Multiple days - show days, hours, and minutes
-      survivalStr = `${survivalDays} ${dayWord}, ${hoursInDay} ${hoursInDayWord}, ${minsInHour} ${minsInHourWord}`;
-    } else if (survivalHours > 0) {
-      survivalStr = `${survivalHours} ${hourWord}, ${survivalMins} ${minWord}`;
-    } else {
-      survivalStr = `${survivalMins} ${minWord}`;
-    }
-    
-    // Dark, somber ending screen
-    const title = this.add.text(640, 100, 'THE END', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '64px',
-      color: '#553333',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.endScreen.add(title);
-    
-    const subtitle = this.add.text(640, 170, 'You survived...', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '28px',
-      color: '#666666',
-    }).setOrigin(0.5);
-    this.endScreen.add(subtitle);
-    
-    // Survival time - the "badge of honor"
-    const survivalText = this.add.text(640, 230, survivalStr, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '42px',
-      color: '#aa8800',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.endScreen.add(survivalText);
-    
-    const cost = this.add.text(640, 290, 'but at what cost?', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#555555',
-    }).setOrigin(0.5);
-    this.endScreen.add(cost);
-    
-    // Lonely Engineer silhouette - sitting alone, defeated
-    const graphics = this.add.graphics();
-    
-    // Dark room backdrop with subtle gradient
-    graphics.fillStyle(0x080810, 0.95);
-    graphics.fillRect(340, 305, 600, 230);
-    
-    // Atmospheric spotlight from above - warm but dim
-    graphics.fillStyle(0x443322, 0.08);
-    graphics.fillCircle(640, 300, 150);
-    graphics.fillStyle(0x554433, 0.12);
-    graphics.fillCircle(640, 340, 100);
-    graphics.fillStyle(0x665544, 0.18);
-    graphics.fillCircle(640, 370, 60);
-    graphics.fillStyle(0x776655, 0.25);
-    graphics.fillCircle(640, 390, 35);
-    
-    const engX = 640;
-    const engY = 430;
-    
-    // Shadow beneath (drawn first)
-    graphics.fillStyle(0x000000, 0.5);
-    graphics.fillEllipse(engX, engY + 75, 100, 18);
-    
-    // LEGS - Engineer's work pants, sitting on crate/ground
-    graphics.fillStyle(0x2a2a3a, 1);
-    // Left leg bent
-    graphics.beginPath();
-    graphics.moveTo(engX - 40, engY + 30);
-    graphics.lineTo(engX - 15, engY + 30);
-    graphics.lineTo(engX - 20, engY + 65);
-    graphics.lineTo(engX - 50, engY + 65);
-    graphics.closePath();
-    graphics.fillPath();
-    // Right leg extended slightly
-    graphics.beginPath();
-    graphics.moveTo(engX + 5, engY + 30);
-    graphics.lineTo(engX + 35, engY + 30);
-    graphics.lineTo(engX + 55, engY + 65);
-    graphics.lineTo(engX + 20, engY + 65);
-    graphics.closePath();
-    graphics.fillPath();
-    
-    // Work boots
-    graphics.fillStyle(0x222230, 1);
-    graphics.fillRoundedRect(engX - 55, engY + 60, 25, 12, 3);
-    graphics.fillRoundedRect(engX + 35, engY + 60, 28, 12, 3);
-    
-    // TORSO - RED team shirt (but dim in shadow)
-    graphics.fillStyle(0x3a2a2a, 1);
-    graphics.beginPath();
-    graphics.moveTo(engX - 35, engY - 35);
-    graphics.lineTo(engX + 30, engY - 35);
-    graphics.lineTo(engX + 35, engY + 35);
-    graphics.lineTo(engX - 40, engY + 35);
-    graphics.closePath();
-    graphics.fillPath();
-    
-    // Overalls straps
-    graphics.fillStyle(0x252535, 1);
-    graphics.fillRect(engX - 25, engY - 30, 8, 50);
-    graphics.fillRect(engX + 12, engY - 30, 8, 50);
-    
-    // LEFT ARM - resting on knee, holding wrench
-    graphics.fillStyle(0x3a2a2a, 1);
-    graphics.beginPath();
-    graphics.moveTo(engX - 35, engY - 25);
-    graphics.lineTo(engX - 45, engY - 15);
-    graphics.lineTo(engX - 55, engY + 15);
-    graphics.lineTo(engX - 45, engY + 20);
-    graphics.closePath();
-    graphics.fillPath();
-    // Gloved hand
-    graphics.fillStyle(0x3a3a4a, 1);
-    graphics.fillCircle(engX - 52, engY + 18, 10);
-    // Wrench (iconic!)
-    graphics.fillStyle(0x444450, 1);
-    graphics.fillRect(engX - 75, engY + 10, 30, 6);
-    graphics.fillStyle(0x3a3a45, 1);
-    graphics.fillRect(engX - 78, engY + 5, 8, 16);
-    
-    // RIGHT ARM - up to face, defeated pose
-    graphics.fillStyle(0x3a2a2a, 1);
-    graphics.beginPath();
-    graphics.moveTo(engX + 25, engY - 25);
-    graphics.lineTo(engX + 35, engY - 35);
-    graphics.lineTo(engX + 25, engY - 55);
-    graphics.lineTo(engX + 15, engY - 45);
-    graphics.closePath();
-    graphics.fillPath();
-    // Gunslinger (robotic hand) touching face
-    graphics.fillStyle(0x4a4a55, 1);
-    graphics.fillCircle(engX + 22, engY - 58, 9);
-    graphics.fillStyle(0x555560, 1);
-    graphics.fillCircle(engX + 22, engY - 58, 6);
-    
-    // HEAD - slightly tilted down in despair
-    graphics.fillStyle(0x4a4a5a, 1);
-    graphics.fillCircle(engX + 5, engY - 65, 24);
-    
-    // Neck
-    graphics.fillStyle(0x4a4a5a, 1);
-    graphics.fillRect(engX - 5, engY - 45, 15, 12);
-    
-    // HARDHAT - Engineer's iconic yellow hardhat (dimmed)
-    // Brim first
-    graphics.fillStyle(0x4a4535, 1);
-    graphics.fillEllipse(engX + 5, engY - 80, 35, 8);
-    // Dome
-    graphics.fillStyle(0x555540, 1);
-    graphics.beginPath();
-    graphics.arc(engX + 5, engY - 82, 26, Math.PI, 0, false);
-    graphics.closePath();
-    graphics.fillPath();
-    // Highlight on dome
-    graphics.fillStyle(0x666650, 0.5);
-    graphics.beginPath();
-    graphics.arc(engX + 5, engY - 85, 18, Math.PI * 1.2, Math.PI * 1.8, false);
-    graphics.closePath();
-    graphics.fillPath();
-    // Hardhat light (dim, not powered)
-    graphics.fillStyle(0x444438, 1);
-    graphics.fillCircle(engX + 5, engY - 100, 7);
-    graphics.fillStyle(0x333330, 1);
-    graphics.fillCircle(engX + 5, engY - 100, 4);
-    
-    // GOGGLES - pushed up on forehead (iconic Engineer look)
-    graphics.fillStyle(0x333340, 1);
-    graphics.fillRoundedRect(engX - 18, engY - 82, 42, 10, 3);
-    // Goggle lenses
-    graphics.fillStyle(0x222235, 1);
-    graphics.fillCircle(engX - 8, engY - 77, 7);
-    graphics.fillCircle(engX + 14, engY - 77, 7);
-    // Lens reflection (very subtle)
-    graphics.fillStyle(0x334455, 0.3);
-    graphics.fillCircle(engX - 10, engY - 79, 3);
-    graphics.fillCircle(engX + 12, engY - 79, 3);
-    
-    // Face details (in shadow but visible)
-    // Brow/eye area (shadowed)
-    graphics.fillStyle(0x3a3a4a, 1);
-    graphics.fillRect(engX - 12, engY - 70, 30, 8);
-    
-    // Slight stubble/jaw
-    graphics.fillStyle(0x404050, 1);
-    graphics.fillEllipse(engX + 5, engY - 50, 18, 12);
-    
-    this.endScreen.add(graphics);
-    
-    // Death reason (smaller, at bottom)
-    const deathReason = this.add.text(640, 560, reason, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#664444',
-    }).setOrigin(0.5);
-    this.endScreen.add(deathReason);
-    
-    const prompt = this.add.text(640, 620, 'SPACE or CLICK to return to menu', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#444444',
-    }).setOrigin(0.5);
-    this.endScreen.add(prompt);
-    
-    this.tweens.add({
-      targets: prompt,
-      alpha: 0.3,
-      duration: 1000,
-      yoyo: true,
-      repeat: -1,
-    });
-    
-    this.endScreen.setVisible(true);
-    
-    console.log(`🌙 Endless Night 6 ended. Survived ${survivalStr} (${survivalDays} days)`);
-    
-    // Return to menu on space or click
-    this.input.keyboard?.once('keydown-SPACE', () => {
-      if (shouldPlaySadChime) {
-        this.audio.playGiveUpSound();
-      }
-      this.goToMainMenu();
-    });
-    this.input.once('pointerdown', () => {
-      if (shouldPlaySadChime) {
-        this.audio.playGiveUpSound();
-      }
-      this.goToMainMenu();
-    });
-  }
-  
-  private victory(): void {
-    if (this.gameStatus !== 'PLAYING') return;
-
-    this.merasmus.reset();
-    
-    this.gameStatus = 'WON';
-    this.audio.stopAllGameSounds(); // Stop ALL sounds
-    this.recordings.stop(); // Stop Engineer recording if playing
-    this.audio.playVictoryChime(); // Play triumphant sound
-    console.log('VICTORY!');
-    
-    // Update HUD to show 06 AM (consistent with gameplay display)
-    this.hud.timeText.setText('06 AM');
-    
-    // Handle different victory scenarios
-    if (this.isCustomNightMode) {
-      // Custom Night - just show standard victory, no save updates
-      this.showStandardVictoryScreen();
-    } else if (this.isBadEndingNight6) {
-      // Survived Night 6 (bad ending path) - show dark ending
-      updateSaveOnNight6Complete();
-      this.showDarkEnding();
-    } else if (this.isNightmareMode) {
-      // Nightmare Mode - fixed difficulty finite night, show standard victory
-      this.showStandardVictoryScreen();
-    } else {
-      // Story nights 1-5 - save progress and check for endings
-      const { triggeredBadEnding, triggeredGoodEnding } = updateSaveOnVictory(
-        this.nightNumber, 
-        this.sessionDestructions
-      );
-      
-      if (triggeredGoodEnding) {
-        // Night 5 complete with <5 destructions - Good ending!
-        this.showGoodEnding();
-      } else if (triggeredBadEnding) {
-        // Night 5 complete with 5+ destructions - Bad ending path
-        this.showBadEndingIntro();
-      } else {
-        // Nights 1-4: standard victory screen
-        this.showStandardVictoryScreen();
-      }
-    }
-  }
-  
-  /**
-   * Show standard night complete victory screen
-   */
-  private showStandardVictoryScreen(): void {
-    this.endScreen.removeAll(true);
-    
-    const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.9);
-    this.endScreen.add(overlay);
-    
-    const time = this.add.text(640, 200, '6:00 AM', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '72px',
-      color: '#ffcc00',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.endScreen.add(time);
-    
-    const displayNight = this.nightNumber === 7 ? 'CUSTOM' : this.nightNumber === 8 ? 'NIGHTMARE' : this.nightNumber;
-    const title = this.add.text(640, 300, `NIGHT ${displayNight} COMPLETE!`, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '48px',
-      color: '#00ff00',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.endScreen.add(title);
-    
-    const subtitle = this.add.text(640, 370, 'You survived the night!', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#88ff88',
-    }).setOrigin(0.5);
-    this.endScreen.add(subtitle);
-    
-    // Star rating based on sentry level
-    const starLevel = this.sentry.exists ? this.sentry.level : 0;
-    const stars = '★'.repeat(starLevel) + '☆'.repeat(3 - starLevel);
-    const starColor = starLevel === 3 ? '#ffd700' : starLevel === 2 ? '#c0c0c0' : '#cd7f32';
-    
-    const ratingLabel = this.add.text(640, 430, 'SENTRY RATING', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#888888',
-    }).setOrigin(0.5);
-    this.endScreen.add(ratingLabel);
-    
-    const starRating = this.add.text(640, 470, stars, {
-      fontFamily: 'Arial',
-      fontSize: '48px',
-      color: starColor,
-    }).setOrigin(0.5);
-    this.endScreen.add(starRating);
-    
-    const levelText = this.add.text(640, 510, starLevel > 0 ? `Level ${starLevel} Sentry` : 'No Sentry', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#aaaaaa',
-    }).setOrigin(0.5);
-    this.endScreen.add(levelText);
-    
-    const menuPrompt = this.add.text(640, 580, 'SPACE or CLICK to continue', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '20px',
-      color: '#888888',
-    }).setOrigin(0.5);
-    this.endScreen.add(menuPrompt);
-    
-    this.tweens.add({
-      targets: menuPrompt,
-      alpha: 0.3,
-      duration: 800,
-      yoyo: true,
-      repeat: -1,
-    });
-    
-    this.endScreen.setVisible(true);
-    
-    // Return to menu on space or click
-    this.input.keyboard?.once('keydown-SPACE', () => {
-      this.goToMainMenu();
-    });
-    this.input.once('pointerdown', () => {
-      this.goToMainMenu();
-    });
-  }
-  
-  /**
-   * Show good ending - peaceful scene with all mercs celebrating
-   */
-  private showGoodEnding(): void {
-    this.audio.playGoodEndingSound();  // Triumphant fanfare
-    
-    this.endScreen.removeAll(true);
-    
-    const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.95);
-    this.endScreen.add(overlay);
-    
-    // Peaceful blue/warm gradient feel
-    const gradientOverlay = this.add.rectangle(640, 360, 1280, 720, 0x1a2a4a, 0.3);
-    this.endScreen.add(gradientOverlay);
-    
-    const time = this.add.text(640, 80, '6:00 AM', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '48px',
-      color: '#ffcc00',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.endScreen.add(time);
-    
-    const title = this.add.text(640, 140, 'The nightmare is over.', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '32px',
-      color: '#88ff88',
-    }).setOrigin(0.5);
-    this.endScreen.add(title);
-    
-    const subtitle = this.add.text(640, 180, 'You held the line, Engineer.', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#66cc66',
-    }).setOrigin(0.5);
-    this.endScreen.add(subtitle);
-    
-    // Draw all 9 mercs celebrating (simplified silhouettes)
-    const celebrationGraphics = this.add.graphics();
-    drawCelebratingMercs(celebrationGraphics);
-    this.endScreen.add(celebrationGraphics);
-    
-    const theEnd = this.add.text(640, 520, 'THE END', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '56px',
-      color: '#ffffff',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.endScreen.add(theEnd);
-    
-    // Credits
-    const credits = this.add.text(640, 590, '- Thank you for playing -', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#888888',
-    }).setOrigin(0.5);
-    this.endScreen.add(credits);
-    
-    const prompt = this.add.text(640, 650, 'SPACE or CLICK to return to menu', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#555555',
-    }).setOrigin(0.5);
-    this.endScreen.add(prompt);
-    
-    this.tweens.add({
-      targets: prompt,
-      alpha: 0.3,
-      duration: 1000,
-      yoyo: true,
-      repeat: -1,
-    });
-    
-    this.endScreen.setVisible(true);
-    
-    this.input.keyboard?.once('keydown-SPACE', () => {
-      this.goToMainMenu();
-    });
-    this.input.once('pointerdown', () => {
-      this.goToMainMenu();
-    });
-  }
-  
-  /**
-   * Show bad ending intro - Medic gone mad screen before Night 6
-   */
-  private showBadEndingIntro(): void {
-    this.audio.playBadEndingIntroSound();  // Ominous drone
-    
-    this.endScreen.removeAll(true);
-    
-    const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.98);
-    this.endScreen.add(overlay);
-    
-    // Red tint for ominous feel
-    const redOverlay = this.add.rectangle(640, 360, 1280, 720, 0x330000, 0.3);
-    this.endScreen.add(redOverlay);
-    
-    // Story text - appearing line by line
-    const lines = [
-      'The constant gunfire...',
-      'The explosions...',
-      '',
-      'The sentry\'s destruction echoed through',
-      'the base, night after night.',
-      '',
-      'Medic couldn\'t take it anymore.',
-      '',
-      'He\'s thrown himself to the monsters.',
-      'He\'s become one of them.',
-    ];
-    
-    let y = 180;
-    lines.forEach((line, i) => {
-      if (line === '') {
-        y += 20;
-        return;
-      }
-      
-      const text = this.add.text(640, y, line, {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '24px',
-        color: i >= 6 ? '#ff4444' : '#aaaaaa',
-      }).setOrigin(0.5).setAlpha(0);
-      this.endScreen.add(text);
-      
-      // Fade in each line
-      this.tweens.add({
-        targets: text,
-        alpha: 1,
-        duration: 500,
-        delay: i * 400,
-      });
-      
-      y += 35;
-    });
-    
-    // Night 6 announcement
-    const night6 = this.add.text(640, 550, 'NIGHT 6', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '64px',
-      color: '#ff0000',
-      fontStyle: 'bold',
-    }).setOrigin(0.5).setAlpha(0);
-    this.endScreen.add(night6);
-    
-    this.tweens.add({
-      targets: night6,
-      alpha: 1,
-      duration: 1000,
-      delay: 4500,
-    });
-    
-    const prompt = this.add.text(640, 620, 'SPACE or CLICK to begin', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#666666',
-    }).setOrigin(0.5).setAlpha(0);
-    this.endScreen.add(prompt);
-    
-    this.tweens.add({
-      targets: prompt,
-      alpha: 1,
-      duration: 500,
-      delay: 5500,
-      onComplete: () => {
-        this.tweens.add({
-          targets: prompt,
-          alpha: 0.3,
-          duration: 800,
-          yoyo: true,
-          repeat: -1,
-        });
-      }
-    });
-    
-    this.endScreen.setVisible(true);
-    
-    // Start Night 6 on input (after delay)
-    this.time.delayedCall(5500, () => {
-      const startNight6 = () => {
-        this.cameras.main.fadeOut(800, 0, 0, 0);
-        this.time.delayedCall(800, () => {
-          this.scene.start('GameScene', { 
-            night: 6,
-            isBadEndingNight6: true,
-            customEnemies: {
-              scout: true,
-              soldier: true,
-              demoman: true,
-              heavy: true,
-              sniper: true,
-              spy: true,
-              pyro: true,
-              medic: true
-            }
-          });
-        });
-      };
-      
-      this.input.keyboard?.once('keydown-SPACE', startNight6);
-      this.input.once('pointerdown', startNight6);
-    });
-  }
-  
-  /**
-   * Show dark ending after surviving Night 6
-   */
-  private showDarkEnding(): void {
-    this.endScreen.removeAll(true);
-    
-    const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.98);
-    this.endScreen.add(overlay);
-    
-    const time = this.add.text(640, 150, '6:00 AM', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '56px',
-      color: '#aa8800',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.endScreen.add(time);
-    
-    const survived = this.add.text(640, 230, 'You survived...', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '32px',
-      color: '#888888',
-    }).setOrigin(0.5);
-    this.endScreen.add(survived);
-    
-    const cost = this.add.text(640, 280, 'but at what cost?', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '28px',
-      color: '#666666',
-    }).setOrigin(0.5);
-    this.endScreen.add(cost);
-    
-    // Lonely Engineer silhouette
-    const graphics = this.add.graphics();
-    
-    // Dark room with single figure
-    graphics.fillStyle(0x111122, 0.8);
-    graphics.fillRect(440, 320, 400, 200);
-    
-    // Engineer silhouette - alone, hunched
-    graphics.fillStyle(0x333344, 1);
-    graphics.fillCircle(640, 380, 30); // Head
-    graphics.fillRoundedRect(610, 400, 60, 80, 10); // Body
-    // Hardhat
-    graphics.fillStyle(0x444455, 1);
-    graphics.fillEllipse(640, 360, 40, 15);
-    
-    // Single dim light above
-    graphics.fillStyle(0x554422, 0.3);
-    graphics.fillCircle(640, 320, 80);
-    graphics.fillStyle(0x665533, 0.5);
-    graphics.fillCircle(640, 340, 40);
-    
-    this.endScreen.add(graphics);
-    
-    const theEnd = this.add.text(640, 550, 'THE END', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '48px',
-      color: '#553333',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.endScreen.add(theEnd);
-    
-    const prompt = this.add.text(640, 650, 'SPACE or CLICK to return to menu', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#444444',
-    }).setOrigin(0.5);
-    this.endScreen.add(prompt);
-    
-    this.tweens.add({
-      targets: prompt,
-      alpha: 0.3,
-      duration: 1000,
-      yoyo: true,
-      repeat: -1,
-    });
-    
-    this.endScreen.setVisible(true);
-    
-    this.input.keyboard?.once('keydown-SPACE', () => {
-      this.goToMainMenu();
-    });
-    this.input.once('pointerdown', () => {
-      this.goToMainMenu();
-    });
-  }
-  
   // ============================================
   // MAIN UPDATE LOOP
   // ============================================
@@ -5091,7 +3662,7 @@ export class GameScene extends Phaser.Scene {
           }
         } else {
           // Normal night or Nightmare Mode - victory!
-          this.victory();
+          this.endings.victory();
           return;
         }
       }
@@ -5181,10 +3752,10 @@ export class GameScene extends Phaser.Scene {
           if (this.isTeleported) {
             // Player escaped via teleporter - Scout retreats, sentry destroyed
             console.log('💉 Übered Scout reached Intel but player escaped!');
-            this.handleUberedEnemyEscaped('SCOUT');
+            this.sentrySystem.handleUberedEnemyEscaped('SCOUT');
           } else {
             // Player is in Intel - Übered Scout kills!
-            this.gameOver('Übered Scout broke in! You should have teleported!');
+            this.endings.gameOver('Übered Scout broke in! You should have teleported!');
             return;
           }
         } else if (!this.sentry.exists) {
@@ -5194,7 +3765,7 @@ export class GameScene extends Phaser.Scene {
             console.log('Scout reached Intel but player was teleported!');
             // Scout will be at Intel - player dies when they return (handled in returnToIntel)
           } else {
-            this.gameOver('Scout broke in with no sentry!');
+            this.endings.gameOver('Scout broke in with no sentry!');
             return;
           }
         } else {
@@ -5203,12 +3774,12 @@ export class GameScene extends Phaser.Scene {
           if (this.sentry.isWrangled) {
             // Player was wrangling but didn't fire in time - Scout kills!
             if (!this.isTeleported) {
-              this.gameOver('Scout attacked while sentry was wrangled!');
+              this.endings.gameOver('Scout attacked while sentry was wrangled!');
               return;
             }
           } else {
             // Sentry is UNWRANGLED - trigger auto-defense (sentry destroyed, scout repelled)
-            this.triggerAutoDefense('SCOUT');
+            this.sentrySystem.triggerAutoDefense('SCOUT');
           }
         }
       }
@@ -5229,10 +3800,10 @@ export class GameScene extends Phaser.Scene {
           if (this.isTeleported) {
             // Player escaped via teleporter - Soldier retreats, sentry destroyed
             console.log('💉 Übered Soldier reached Intel but player escaped!');
-            this.handleUberedEnemyEscaped('SOLDIER');
+            this.sentrySystem.handleUberedEnemyEscaped('SOLDIER');
           } else {
             // Player is in Intel - Übered Soldier kills!
-            this.gameOver('Übered Soldier breached! You should have teleported!');
+            this.endings.gameOver('Übered Soldier breached! You should have teleported!');
             return;
           }
         } else if (!this.sentry.exists) {
@@ -5241,7 +3812,7 @@ export class GameScene extends Phaser.Scene {
             // Soldier waits in Intel - player dies when they return
             console.log('Soldier reached Intel but player was teleported!');
           } else {
-            this.gameOver('Soldier breached with no sentry!');
+            this.endings.gameOver('Soldier breached with no sentry!');
             return;
           }
         } else {
@@ -5309,10 +3880,10 @@ export class GameScene extends Phaser.Scene {
           if (this.isTeleported) {
             // Player escaped via teleporter - Demoman retreats, sentry destroyed
             console.log('💉 Übered Demoman reached Intel but player escaped!');
-            this.handleUberedEnemyEscaped('DEMOMAN');
+            this.sentrySystem.handleUberedEnemyEscaped('DEMOMAN');
           } else {
             // Player is in Intel - Übered Demoman kills!
-            this.gameOver(`Übered Demoman charged from ${doorName}! You should have teleported!`);
+            this.endings.gameOver(`Übered Demoman charged from ${doorName}! You should have teleported!`);
             return;
           }
         } else if (!this.sentry.exists) {
@@ -5321,18 +3892,18 @@ export class GameScene extends Phaser.Scene {
             // Demoman waits in Intel - player dies when they return
             console.log('Demoman reached Intel but player was teleported!');
           } else {
-            this.gameOver(`Demoman charged from ${doorName}!`);
+            this.endings.gameOver(`Demoman charged from ${doorName}!`);
             return;
           }
         } else if (this.sentry.isWrangled) {
           // Player had wrangler on but didn't stop him
           if (!this.isTeleported) {
-            this.gameOver(`Demoman charged from ${doorName}!`);
+            this.endings.gameOver(`Demoman charged from ${doorName}!`);
             return;
           }
         } else {
           // Sentry is UNWRANGLED - auto-defense (sentry destroyed, demoman deterred)
-          this.triggerAutoDefense('DEMOMAN');
+          this.sentrySystem.triggerAutoDefense('DEMOMAN');
         }
       }
     }
@@ -5345,7 +3916,7 @@ export class GameScene extends Phaser.Scene {
           this.scout.currentNode === 'LEFT_HALL' && 
           (this.scout.state === 'WAITING')) {
         console.log('💉 Übered Scout leaving - player teleported away');
-        this.handleUberedEnemyEscaped('SCOUT');
+        this.sentrySystem.handleUberedEnemyEscaped('SCOUT');
       }
       
       // Soldier waiting/sieging at door while Übered
@@ -5353,7 +3924,7 @@ export class GameScene extends Phaser.Scene {
           this.soldier.currentNode === 'RIGHT_HALL' && 
           (this.soldier.state === 'WAITING' || this.soldier.state === 'SIEGING')) {
         console.log('💉 Übered Soldier leaving - player teleported away');
-        this.handleUberedEnemyEscaped('SOLDIER');
+        this.sentrySystem.handleUberedEnemyEscaped('SOLDIER');
       }
       
       // Demoman charging or waiting while Übered
@@ -5361,7 +3932,7 @@ export class GameScene extends Phaser.Scene {
       if (this.isDemomanEnabled() && this.medic.isEnemyUbered('DEMOMAN') && 
           (this.demoman.state === 'CHARGING' || this.demoman.state === 'WAITING')) {
         console.log('💉 Übered Demoman leaving - player teleported away');
-        this.handleUberedEnemyEscaped('DEMOMAN');
+        this.sentrySystem.handleUberedEnemyEscaped('DEMOMAN');
       }
     }
     
@@ -5590,7 +4161,7 @@ export class GameScene extends Phaser.Scene {
       if (heavyResult.reachedIntel) {
         // Heavy reached Intel - only kills if player is there!
         if (!this.isTeleported) {
-          this.gameOver('Heavy smashed through!');
+          this.endings.gameOver('Heavy smashed through!');
           return;
         } else {
           // Player escaped by teleporting! Heavy waits in Intel
@@ -5619,7 +4190,7 @@ export class GameScene extends Phaser.Scene {
       
       if (sniperResult.headshotThroughCamera) {
         // Sniper headshot the player through the camera!
-        this.gameOver('Sniped through the camera!');
+        this.endings.gameOver('Sniped through the camera!');
         return;
       }
       
@@ -5627,12 +4198,12 @@ export class GameScene extends Phaser.Scene {
         // Sniper has charged a headshot - only kills if player is in Intel room!
         if (!this.isTeleported) {
           const door = this.sniper.getAimingDoor();
-          this.gameOver(`Sniped from ${door} hall!`);
+          this.endings.gameOver(`Sniped from ${door} hall!`);
           return;
         } else {
           // Player dodged by teleporting! Sniper destroys sentry and teleports away
           console.log('Sniper headshot missed player but destroyed sentry!');
-          this.destroySentry();
+          this.sentrySystem.destroySentry();
           this.showAlert('SNIPER DESTROYED YOUR SENTRY!', 0xff0000);
           // Sniper teleports to a random room (not halls)
           this.sniper.forceDespawn();
@@ -5749,7 +4320,7 @@ export class GameScene extends Phaser.Scene {
       
       // Handle player burned (didn't escape in time)
       if (pyroResult.playerBurned && playerInIntel) {
-        this.gameOver('Pyro burned you alive!');
+        this.endings.gameOver('Pyro burned you alive!');
       }
       
       // If player teleported away while match was lit, notify Pyro
@@ -5821,7 +4392,7 @@ export class GameScene extends Phaser.Scene {
     }
     
     if (this.sentry.hp <= 0) {
-      this.destroySentry();
+      this.sentrySystem.destroySentry();
       this.showAlert('SPY SAPPED YOUR SENTRY!', 0xff0000);
       if (this.spy) this.spy.removeSapper();
       this.sapperIndicator.setVisible(false);
@@ -5836,7 +4407,7 @@ export class GameScene extends Phaser.Scene {
    */
   private onSniperHeadshot(): void {
     // This is triggered when sniper's charge completes
-    this.gameOver('Sniped!');
+    this.endings.gameOver('Sniped!');
   }
   
   /**

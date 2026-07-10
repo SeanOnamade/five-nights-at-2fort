@@ -103,27 +103,27 @@ export class TeleportSystem {
       // Check each enemy type and show appropriate jumpscare AFTER teleport animation
       if (scoutThere) {
         unfreezeAndReturn();
-        this.scene.gameOver('Scout caught you!');
+        this.scene.endings.gameOver('Scout caught you!');
         return;
       }
       if (soldierThere) {
         unfreezeAndReturn();
-        this.scene.gameOver('Soldier got you!');
+        this.scene.endings.gameOver('Soldier got you!');
         return;
       }
       if (heavyThere) {
         unfreezeAndReturn();
-        this.scene.gameOver('Heavy crushed you!');
+        this.scene.endings.gameOver('Heavy crushed you!');
         return;
       }
       if (sniperThere) {
         unfreezeAndReturn();
-        this.scene.gameOver('Sniped at close range!');
+        this.scene.endings.gameOver('Sniped at close range!');
         return;
       }
       if (pyroThere) {
         unfreezeAndReturn();
-        this.scene.gameOver('Pyro burned you alive!');
+        this.scene.endings.gameOver('Pyro burned you alive!');
         return;
       }
       
@@ -259,19 +259,19 @@ export class TeleportSystem {
       
       // Check if any enemy is waiting in Intel room (reached while player was away)
       if (this.scene.isHeavyEnabled() && this.scene.heavy.currentNode === 'INTEL') {
-        this.scene.gameOver('Heavy was waiting for you!');
+        this.scene.endings.gameOver('Heavy was waiting for you!');
         return;
       }
       if (this.scene.isScoutEnabled() && this.scene.scout.state === 'ATTACKING') {
-        this.scene.gameOver('Scout was waiting for you!');
+        this.scene.endings.gameOver('Scout was waiting for you!');
         return;
       }
       if (this.scene.isSoldierEnabled() && this.scene.soldier.state === 'ATTACKING') {
-        this.scene.gameOver('Soldier was waiting for you!');
+        this.scene.endings.gameOver('Soldier was waiting for you!');
         return;
       }
       if (this.scene.isDemomanEnabled() && this.scene.demoman.state === 'ATTACKING') {
-        this.scene.gameOver('Demoman was waiting for you!');
+        this.scene.endings.gameOver('Demoman was waiting for you!');
         return;
       }
 
@@ -587,7 +587,7 @@ export class TeleportSystem {
           // This ensures proper jumpscare even if the enemy moved away
           const killer = this.scene.approachingEnemyType || 'an enemy';
           
-          this.scene.gameOver(`${killer} caught you!`);
+          this.scene.endings.gameOver(`${killer} caught you!`);
           return;
         }
       }
