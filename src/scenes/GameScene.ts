@@ -17,6 +17,8 @@ import { MobileControls } from '../ui/MobileControls';
 import { PauseMenu } from '../ui/PauseMenu';
 import { VentUI } from '../ui/VentUI';
 import { buildCameraUI } from '../ui/CameraUI';
+import { RecordingUI } from '../ui/RecordingUI';
+import { HUD } from '../ui/HUD';
 import { setGameClock } from '../utils/gameClock';
 import { isMobileDevice } from '../utils/mobile';
 import { 
@@ -297,19 +299,9 @@ export class GameScene extends Phaser.Scene {
   private dispenserGraphic!: Phaser.GameObjects.Rectangle;
   
   // HUD elements
-  private timeText!: Phaser.GameObjects.Text;
-  private metalText!: Phaser.GameObjects.Text;
-  private sentryText!: Phaser.GameObjects.Text;
-  private wranglerText!: Phaser.GameObjects.Text;
-  private _controlsText!: Phaser.GameObjects.Text;
-  private alertText!: Phaser.GameObjects.Text;
-  private alertContainer!: Phaser.GameObjects.Container;
-  private alertBg!: Phaser.GameObjects.Rectangle;
+  private hud!: HUD;
   
   // Lure duration bar (top right when lure is active)
-  private lureBarContainer!: Phaser.GameObjects.Container;
-  private lureBarFill!: Phaser.GameObjects.Rectangle;
-  private lureBarText!: Phaser.GameObjects.Text;
   
   // Camera UI container (FNAF-style with map + camera feed)
   private cameraUI!: Phaser.GameObjects.Container;
@@ -392,14 +384,7 @@ export class GameScene extends Phaser.Scene {
   // ENGINEER RECORDINGS (Phone calls)
   // ============================================
   
-  private recordingAudio: HTMLAudioElement | null = null;
-  private isRecordingPlaying: boolean = false;
-  private recordingSkipButton!: Phaser.GameObjects.Container;
-  private recordingIndicator!: Phaser.GameObjects.Container;
-  private recordingStartDelay: number = 5000; // 5 seconds into night
-  private recordingStartTimer: number = 0;
-  private hasPlayedRecording: boolean = false;
-  private audioLogsEnabled: boolean = true; // Main menu toggle; when false, no recording each night
+  private recordings!: RecordingUI;
   
   // ============================================
   // MOBILE CONTROLS
@@ -791,17 +776,8 @@ export class GameScene extends Phaser.Scene {
     this.audio.stopPyroHallwayHiss(true);
     this.audio.disposeIntelRoomAmbience();
     
-    // Reset Engineer recording state
-    this.recordingStartTimer = 0;
-    this.hasPlayedRecording = false;
-    this.isRecordingPlaying = false;
-    if (this.recordingAudio) {
-      this.recordingAudio.pause();
-      this.recordingAudio = null;
-    }
-    // Respect main menu "Audio logs" toggle (default on)
-    this.audioLogsEnabled = localStorage.getItem('audioLogsEnabled') !== 'false';
-    if (!this.audioLogsEnabled) this.hasPlayedRecording = true; // Skip recording this night
+    // Reset Engineer recording state (respects main menu Audio logs toggle)
+    this.recordings?.reset();
     
     // Reset sapper state for Night 5
     this.sapperRemoveClicks = 0;
@@ -827,7 +803,7 @@ export class GameScene extends Phaser.Scene {
   private cleanup(): void {
     this.uninstallMerasmusPointerMirrorFix();
     this.clearMerasmusMirrorDomAndFlags();
-    this.stopRecording();
+    this.recordings.stop();
     // Stops every Web Audio sound (incl. Pyro crackling timeouts and the Medic
     // ghost scream's separate AudioContext) and closes the shared context
     this.audio.stopAllGameSounds();
@@ -865,7 +841,7 @@ export class GameScene extends Phaser.Scene {
     this.isPaused = false;
     this.pauseMenu?.setVisible(false);
     this.physics?.resume();
-    this.stopRecording();
+    this.recordings.stop();
     this.audio.stopAllGameSounds();
     this.scene.start('BootScene');
   }
@@ -1146,7 +1122,17 @@ export class GameScene extends Phaser.Scene {
     this.createRoom();
     this.createSentry();
     this.createDispenser();
-    this.createHUD();
+    this.hud = new HUD(this, {
+      getGameMinutes: () => this.gameMinutes,
+      getMetal: () => this.metal,
+      getSentry: () => this.sentry,
+      isCameraModeNow: () => this.isCameraMode,
+      isBadEndingNight6Now: () => this.isBadEndingNight6,
+      hasReached6AMNow: () => this.hasReached6AM,
+      getEndlessDay: () => this.endlessDay,
+      isMerasmusEnabled: () => this.isMerasmusEnabled(),
+    });
+    this.hud.create();
     this.buildCameraSystemUI();
     this.ventUI = new VentUI(this, {
       isPaulingEnabled: () => this.isPaulingEnabled(),
@@ -1162,7 +1148,13 @@ export class GameScene extends Phaser.Scene {
     });
     this.ventUI.create(this.cameraUI);
     this.createEndScreen();
-    this.createRecordingUI();
+    this.recordings = new RecordingUI(this, {
+      getGameStatus: () => this.gameStatus,
+      getNightNumber: () => this.nightNumber,
+      isBadEndingNight6Now: () => this.isBadEndingNight6,
+      playCassetteStopSound: () => this.audio.playCassetteStopSound(),
+    });
+    this.recordings.create();
     this.pauseMenu = new PauseMenu(this, {
       onResume: () => this.togglePause(),
       onRestart: () => {
@@ -1849,89 +1841,6 @@ export class GameScene extends Phaser.Scene {
     // Screen is now static (no flashing)
   }
   
-  private createHUD(): void {
-    const padding = 20;
-    
-    // Time display (top center) - RED team color
-    this.timeText = this.add.text(640, padding, '00:00', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '48px',
-      color: '#ff4444',
-      fontStyle: 'bold',
-    }).setOrigin(0.5, 0);
-    
-    // Metal display (top left) - always visible on top
-    this.metalText = this.add.text(padding, padding, 'METAL: 0/200', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#aabbcc',
-    });
-    this.metalText.setDepth(200); // Always on top, even in camera/teleport views
-    
-    // Sentry status (top left, below metal)
-    this.sentryText = this.add.text(padding, padding + 35, 'SENTRY: L3 | HP: 216/216', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#88ff88',
-    });
-    
-    // Wrangler status (top left, below sentry)
-    this.wranglerText = this.add.text(padding, padding + 60, 'WRANGLER: OFF | AIM: LEFT', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#ff8888',
-    });
-    
-    // Controls hint (bottom)
-    const controlsLine = this.isMerasmusEnabled()
-      ? 'F: Wrangler | A/D: Aim | SPACE: Fire | TAB: Cameras | R: Build/Repair | Q: Flip View'
-      : 'F: Wrangler | HOLD A/D: Aim Left/Right | SPACE: Fire | TAB: Cameras | R: Build/Repair/Upgrade';
-    this._controlsText = this.add.text(640, 700, controlsLine, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#666666',
-    }).setOrigin(0.5, 1);
-    
-    // Alert container (center, for warnings) - with background for visibility
-    this.alertContainer = this.add.container(640, 120);
-    this.alertContainer.setDepth(200); // Above everything including room view UI
-    this.alertContainer.setVisible(false);
-    
-    // Dark background with colored border
-    this.alertBg = this.add.rectangle(0, 0, 500, 50, 0x000000, 0.85);
-    this.alertBg.setStrokeStyle(3, 0xff0000);
-    this.alertContainer.add(this.alertBg);
-    
-    // Alert text
-    this.alertText = this.add.text(0, 0, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#ff0000',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.alertContainer.add(this.alertText);
-    
-    // Lure duration bar (to the right of metal count, top left area)
-    this.lureBarContainer = this.add.container(280, 32);
-    this.lureBarContainer.setDepth(200); // Same depth as HUD
-    
-    const lureBarBg = this.add.rectangle(0, 0, 120, 24, 0x222222, 0.9);
-    lureBarBg.setStrokeStyle(2, 0xffaa00);
-    
-    this.lureBarFill = this.add.rectangle(-60 + 1, 0, 118, 20, 0xff8800);
-    this.lureBarFill.setOrigin(0, 0.5);
-    
-    this.lureBarText = this.add.text(0, 0, 'LURE', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#ffffff',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    
-    this.lureBarContainer.add([lureBarBg, this.lureBarFill, this.lureBarText]);
-    this.lureBarContainer.setVisible(false);
-  }
-  
   /**
    * Build the camera system UI (construction lives in src/ui/CameraUI.ts) and
    * adopt the created objects as scene fields. Interaction logic stays here.
@@ -2295,10 +2204,10 @@ export class GameScene extends Phaser.Scene {
       this.roomViewUI.setVisible(true);
       
       // Move metal text below room header when teleported (aligned with header at x=40)
-      this.metalText.setPosition(40, 60);
+      this.hud.metalText.setPosition(40, 60);
       
       // Move lure bar below metal text when teleported
-      this.lureBarContainer.setPosition(100, 105);
+      this.hud.lureBarContainer.setPosition(100, 105);
       
       // Update room view header
       this.roomViewHeader.setText(`ROOM: ${node.replace('_', ' ')}`);
@@ -2355,10 +2264,10 @@ export class GameScene extends Phaser.Scene {
       this.teleportEscapeTimer = 0;
       
       // Restore metal text to original position
-      this.metalText.setPosition(20, 20);
+      this.hud.metalText.setPosition(20, 20);
       
       // Restore lure bar to original position (right of metal count, with spacing)
-      this.lureBarContainer.setPosition(300, 28);
+      this.hud.lureBarContainer.setPosition(300, 28);
       
       // Resume dispenser hum when back in Intel room
       this.audio.startDispenserHum();
@@ -3127,139 +3036,6 @@ export class GameScene extends Phaser.Scene {
   // ENGINEER RECORDINGS UI
   // ============================================
   
-  /**
-   * Create the recording UI - skip button and playing indicator
-   */
-  private createRecordingUI(): void {
-    // Skip button - bottom right corner
-    this.recordingSkipButton = this.add.container(1200, 680);
-    this.recordingSkipButton.setDepth(210);  // Above pause menu (200)
-    this.recordingSkipButton.setVisible(false);
-    
-    const skipBg = this.add.rectangle(0, 0, 80, 30, 0x333333, 0.9);
-    skipBg.setStrokeStyle(2, 0x666666);
-    skipBg.setInteractive({ useHandCursor: true });
-    
-    const skipText = this.add.text(0, 0, 'SKIP', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#aaaaaa',
-    }).setOrigin(0.5);
-    
-    skipBg.on('pointerover', () => {
-      skipBg.setFillStyle(0x555555);
-      skipText.setColor('#ffffff');
-    });
-    
-    skipBg.on('pointerout', () => {
-      skipBg.setFillStyle(0x333333);
-      skipText.setColor('#aaaaaa');
-    });
-    
-    skipBg.on('pointerdown', () => {
-      this.audio.playCassetteStopSound();
-      this.stopRecording();
-    });
-    
-    this.recordingSkipButton.add([skipBg, skipText]);
-    
-    // Recording indicator - tape recorder icon with waveform
-    this.recordingIndicator = this.add.container(1100, 680);
-    this.recordingIndicator.setDepth(210);  // Above pause menu (200)
-    this.recordingIndicator.setVisible(false);
-    
-    const indicatorBg = this.add.rectangle(0, 0, 100, 30, 0x1a1a1a, 0.9);
-    indicatorBg.setStrokeStyle(1, 0x444444);
-    
-    const tapeIcon = this.add.text(-35, 0, '(●)', {
-      fontSize: '12px',
-      color: '#ff4444',
-    }).setOrigin(0.5);
-    
-    const playingText = this.add.text(15, 0, 'PLAYING', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#00ff00',
-    }).setOrigin(0.5);
-    
-    // Blink the playing text
-    this.tweens.add({
-      targets: playingText,
-      alpha: 0.3,
-      duration: 500,
-      yoyo: true,
-      repeat: -1,
-    });
-    
-    this.recordingIndicator.add([indicatorBg, tapeIcon, playingText]);
-  }
-  
-  /**
-   * Start playing the Engineer recording for the current night
-   */
-  private startRecording(): void {
-    // Don't play if already played, already loading, or game not playing
-    if (this.hasPlayedRecording || this.gameStatus !== 'PLAYING') return;
-    
-    // Mark as played IMMEDIATELY to prevent multiple calls
-    this.hasPlayedRecording = true;
-    
-    // Determine which recording to play based on night number
-    let recordingFile = `night${this.nightNumber}.mp3`;
-    
-    // Special case for Night 6 bad ending
-    if (this.nightNumber === 6 && this.isBadEndingNight6) {
-      recordingFile = 'night6.mp3';
-    }
-    
-    // Try to load and play the audio
-    try {
-      this.recordingAudio = new Audio(`./audio/recordings/${recordingFile}`);
-      this.recordingAudio.volume = 0.7;
-      
-      this.recordingAudio.addEventListener('canplaythrough', () => {
-        if (this.recordingAudio && this.gameStatus === 'PLAYING') {
-          this.recordingAudio.play();
-          this.isRecordingPlaying = true;
-          this.recordingSkipButton.setVisible(true);
-          this.recordingIndicator.setVisible(true);
-          console.log(`🎙️ Playing Engineer recording: ${recordingFile}`);
-        }
-      });
-      
-      this.recordingAudio.addEventListener('ended', () => {
-        this.stopRecording();
-      });
-      
-      this.recordingAudio.addEventListener('error', () => {
-        console.log(`🎙️ No recording found for: ${recordingFile}`);
-        this.hasPlayedRecording = true; // Mark as played so we don't retry
-      });
-      
-      this.recordingAudio.load();
-    } catch (e) {
-      console.log('🎙️ Audio playback not supported');
-      this.hasPlayedRecording = true;
-    }
-  }
-  
-  /**
-   * Stop the current recording
-   */
-  private stopRecording(): void {
-    if (this.recordingAudio) {
-      this.recordingAudio.pause();
-      this.recordingAudio.currentTime = 0;
-      this.recordingAudio = null;
-    }
-    
-    this.isRecordingPlaying = false;
-    this.hasPlayedRecording = true;
-    this.recordingSkipButton?.setVisible(false);
-    this.recordingIndicator?.setVisible(false);
-    console.log('🎙️ Recording stopped');
-  }
-  
   // ============================================
   // INPUT HANDLING
   // ============================================
@@ -3500,9 +3276,7 @@ export class GameScene extends Phaser.Scene {
       this.physics?.pause();
       
       // Pause Engineer recording if playing
-      if (this.recordingAudio && this.isRecordingPlaying) {
-        this.recordingAudio.pause();
-      }
+      this.recordings.pauseAudio();
       
       // Show a random hint
       this.pauseMenu.showRandomHint();
@@ -3516,9 +3290,7 @@ export class GameScene extends Phaser.Scene {
         this.audio.startIntelRoomAmbience();
       }
       // Resume Engineer recording if it was playing
-      if (this.recordingAudio && this.isRecordingPlaying) {
-        this.recordingAudio.play();
-      }
+      this.recordings.resumeAudio();
       // Resume Pyro crackling if match is still lit (must restart fully, not just schedule)
       if (this.isPyroEnabled() && this.pyro && this.pyro.isMatchLit()) {
         this.audio.startPyroCracklingAmbient();
@@ -5103,87 +4875,23 @@ export class GameScene extends Phaser.Scene {
   // ============================================
   
   private showAlert(message: string, color: number): void {
-    const colorHex = `#${color.toString(16).padStart(6, '0')}`;
-    
-    // Update text and colors
-    this.alertText.setText(message);
-    this.alertText.setColor(colorHex);
-    this.alertBg.setStrokeStyle(3, color);
-    
-    // Resize background to fit text
-    const textWidth = this.alertText.width + 40;
-    this.alertBg.setSize(Math.max(300, textWidth), 50);
-    
-    // Show and reset alpha
-    this.alertContainer.setVisible(true);
-    this.alertContainer.setAlpha(1);
-    
-    // Fade out
-    this.tweens.add({
-      targets: this.alertContainer,
-      alpha: 0,
-      duration: 2500,
-      delay: 500, // Stay visible for 0.5s before fading
-      onComplete: () => {
-        this.alertContainer.setVisible(false);
-      },
-    });
+    this.hud.showAlert(message, color);
   }
-  
+
   private updateHUD(): void {
-    // Time (12-hour format: 12:00 AM to 5:59 AM)
-    // Only show hour (not minutes) to prevent predicting Scout/Soldier arrival
-    const hours24 = Math.floor(this.gameMinutes / 60);
-    const displayHours = hours24 === 0 ? 12 : hours24;  // 00:XX becomes 12:XX
-    
-    // For endless Night 6, show day tracking after first 6 AM
-    if (this.isBadEndingNight6 && this.hasReached6AM) {
-      this.timeText.setText(`DAY ${this.endlessDay} - ${displayHours} AM`);
-    } else {
-      this.timeText.setText(`${displayHours} AM`); // No padding - "1 AM" not "01 AM"
-    }
-    
-    // Metal
-    this.metalText.setText(`METAL: ${Math.floor(this.metal)}/${GAME_CONSTANTS.MAX_METAL}`);
-    
-    // Sentry
-    if (this.sentry.exists) {
-      this.sentryText.setText(`SENTRY: L${this.sentry.level} | HP: ${Math.floor(this.sentry.hp)}/${this.sentry.maxHp}`);
-      this.sentryText.setColor('#88ff88');
-    } else {
-      this.sentryText.setText('SENTRY: DESTROYED (R to rebuild)');
-      this.sentryText.setColor('#ff4444');
-    }
-    
-    // Wrangler
-    if (this.isCameraMode) {
-      this.wranglerText.setText('WRANGLER: DISABLED (Camera Mode)');
-      this.wranglerText.setColor('#888888');
-    } else if (!this.sentry.exists) {
-      this.wranglerText.setText('WRANGLER: N/A');
-      this.wranglerText.setColor('#888888');
-    } else if (!this.sentry.isWrangled) {
-      this.wranglerText.setText('WRANGLER: OFF (Auto-defense mode)');
-      this.wranglerText.setColor('#ff8888');
-    } else {
-      // Wrangler is ON
-      const aimText = this.sentry.aimedDoor === 'NONE' ? 'MIDDLE (hold A/D)' : this.sentry.aimedDoor;
-      const aimColor = this.sentry.aimedDoor === 'NONE' ? '#ffff88' : '#88ff88';
-      this.wranglerText.setText(`WRANGLER: ON | AIM: ${aimText}`);
-      this.wranglerText.setColor(aimColor);
-    }
-    
+    this.hud.update();
+
     // Update lure button state (grey out if not enough metal) - Night 3+
     if (this.nightNumber >= 3 && this.isTeleported) {
       this.updateLureButtonText();
     }
-    
+
     // Update mobile UI if on mobile
     if (this.isMobile) {
       this.mobileControls?.updateUI();
     }
   }
-  
+
   private gameOver(reason: string): void {
     if (this.gameStatus !== 'PLAYING') return;
 
@@ -5192,7 +4900,7 @@ export class GameScene extends Phaser.Scene {
     this.gameStatus = 'LOST';
     // Stop ALL sounds immediately
     this.audio.stopAllGameSounds();
-    this.stopRecording(); // Stop Engineer recording if playing
+    this.recordings.stop(); // Stop Engineer recording if playing
     console.log('GAME OVER:', reason);
 
     // Determine which enemy killed the player
@@ -5730,12 +5438,12 @@ export class GameScene extends Phaser.Scene {
     
     this.gameStatus = 'WON';
     this.audio.stopAllGameSounds(); // Stop ALL sounds
-    this.stopRecording(); // Stop Engineer recording if playing
+    this.recordings.stop(); // Stop Engineer recording if playing
     this.audio.playVictoryChime(); // Play triumphant sound
     console.log('VICTORY!');
     
     // Update HUD to show 06 AM (consistent with gameplay display)
-    this.timeText.setText('06 AM');
+    this.hud.timeText.setText('06 AM');
     
     // Handle different victory scenarios
     if (this.isCustomNightMode) {
@@ -6154,12 +5862,7 @@ export class GameScene extends Phaser.Scene {
     if (this.isPaused) return;
     
     // ---- ENGINEER RECORDING TIMER ----
-    if (!this.hasPlayedRecording && !this.isRecordingPlaying) {
-      this.recordingStartTimer += delta;
-      if (this.recordingStartTimer >= this.recordingStartDelay) {
-        this.startRecording();
-      }
-    }
+    this.recordings.update(delta);
     
     // ---- UPDATE WRANGLER COOLDOWN ----
     if (this.wranglerCooldown > 0) {
@@ -6648,9 +6351,9 @@ export class GameScene extends Phaser.Scene {
       // Update lure bar
       const progress = this.activeLure.playTimeRemaining / GAME_CONSTANTS.LURE_DURATION;
       const fillWidth = Math.max(0, 118 * progress);
-      this.lureBarFill.setSize(fillWidth, 20);
-      this.lureBarText.setText(`LURE ${Math.ceil(this.activeLure.playTimeRemaining / 1000)}s`);
-      this.lureBarContainer.setVisible(true);
+      this.hud.lureBarFill.setSize(fillWidth, 20);
+      this.hud.lureBarText.setText(`LURE ${Math.ceil(this.activeLure.playTimeRemaining / 1000)}s`);
+      this.hud.lureBarContainer.setVisible(true);
       
       if (this.activeLure.playTimeRemaining <= 0) {
         // Lure is consumed (auto-removed after playing)
@@ -6667,13 +6370,13 @@ export class GameScene extends Phaser.Scene {
         }
         // Remove the lure entirely
         this.activeLure = null;
-        this.lureBarContainer.setVisible(false);
+        this.hud.lureBarContainer.setVisible(false);
         this.updateLureButtonText();
         this.updateCameraLureButton();
       }
     } else {
       // Hide lure bar if no active lure playing
-      this.lureBarContainer.setVisible(false);
+      this.hud.lureBarContainer.setVisible(false);
     }
     
     // Check if Heavy should be lured by PLAYING lure
