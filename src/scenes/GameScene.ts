@@ -19,6 +19,7 @@ import { VentUI } from '../ui/VentUI';
 import { buildCameraUI } from '../ui/CameraUI';
 import { RecordingUI } from '../ui/RecordingUI';
 import { HUD } from '../ui/HUD';
+import { MerasmusSystem } from '../systems/MerasmusSystem';
 import { setGameClock } from '../utils/gameClock';
 import { isMobileDevice } from '../utils/mobile';
 import { 
@@ -210,14 +211,20 @@ export class GameScene extends Phaser.Scene {
    * Merasmus (Custom Night only when `customEnemies.merasmus` is true).
    * Fade-in threat in Intel; Q toggles full-screen mirror to repel at 8× speed.
    */
-  private merasmusViewFlipped = false;
-  private merasmusLinearProgress = 0;
-  private merasmusRespiteUnflippedMs = 0;
-  private merasmusInRespite = false;
+  private merasmus: MerasmusSystem = new MerasmusSystem(this, this.audio, {
+    isMerasmusEnabled: () => this.isMerasmusEnabled(),
+    getGameStatus: () => this.gameStatus,
+    isPausedNow: () => this.isPaused,
+    isTeleportedNow: () => this.isTeleported,
+    isCameraModeNow: () => this.isCameraMode,
+    clearAimKeys: () => {
+      this.keyADown = false;
+      this.keyDDown = false;
+    },
+    gameOver: (reason) => this.gameOver(reason),
+    onFlipStateChanged: () => this.mobileControls?.updateMerasmusFlipButton(),
+  });
   /** Stock Phaser pointer mapper; restored on shutdown so DOM mirror + X invert stay in sync */
-  private merasmusStockTransformPointer: Phaser.Input.InputManager['transformPointer'] | null = null;
-  private merasmusVignette!: Phaser.GameObjects.Container;
-  private merasmusFigureContainer!: Phaser.GameObjects.Container;
   // Night 5+ features - Spy sapper
   private sapperIndicator!: Phaser.GameObjects.Container;
   private sapperRemoveClicks: number = 0;
@@ -447,189 +454,6 @@ export class GameScene extends Phaser.Scene {
     return this.customEnemies ? this.customEnemies.merasmus ?? false : false;
   }
 
-  private resetMerasmusState(): void {
-    this.merasmusLinearProgress = 0;
-    this.merasmusRespiteUnflippedMs = 0;
-    this.merasmusInRespite = false;
-    this.setMerasmusDomMirror(false);
-    this.audio.stopMerasmusHum();
-    if (this.merasmusVignette) {
-      this.merasmusVignette.setVisible(false);
-      this.merasmusVignette.setAlpha(0);
-    }
-    if (this.merasmusFigureContainer) {
-      this.merasmusFigureContainer.setVisible(false);
-      this.merasmusFigureContainer.setAlpha(0);
-    }
-  }
-
-  private clearMerasmusMirrorDomAndFlags(): void {
-    this.resetMerasmusState();
-  }
-
-  private getMerasmusDisplayAlpha(): number {
-    const p = Phaser.Math.Clamp(this.merasmusLinearProgress, 0, 1);
-    return Math.pow(p, GAME_CONSTANTS.MERASMUS_EASE_POWER);
-  }
-
-  private setMerasmusDomMirror(mirrored: boolean): void {
-    if (mirrored && !this.isMerasmusEnabled()) return;
-    this.merasmusViewFlipped = mirrored;
-    const canvas = this.game?.canvas;
-    if (!canvas) return;
-    if (mirrored) {
-      canvas.style.transform = 'scaleX(-1)';
-      canvas.style.transformOrigin = '50% 50%';
-    } else {
-      canvas.style.transform = '';
-      canvas.style.transformOrigin = '';
-    }
-    this.mobileControls?.updateMerasmusFlipButton();
-  }
-
-  /**
-   * CSS scaleX(-1) on the canvas does not mirror DOM coordinates Phaser receives, so hit tests miss.
-   * Wrap InputManager.transformPointer to invert X in game space whenever the Merasmus mirror is active.
-   */
-  private installMerasmusPointerMirrorFix(): void {
-    if (this.merasmusStockTransformPointer !== null) return;
-    const im = this.input.manager;
-    const scene = this;
-    this.merasmusStockTransformPointer = im.transformPointer.bind(im);
-    im.transformPointer = (pointer, pageX, pageY, wasMove) => {
-      this.merasmusStockTransformPointer!.call(im, pointer, pageX, pageY, wasMove);
-      if (scene.merasmusViewFlipped && scene.isMerasmusEnabled()) {
-        const w = scene.scale.width;
-        pointer.position.x = w - pointer.position.x;
-      }
-    };
-  }
-
-  private uninstallMerasmusPointerMirrorFix(): void {
-    if (this.merasmusStockTransformPointer === null) return;
-    this.input.manager.transformPointer = this.merasmusStockTransformPointer;
-    this.merasmusStockTransformPointer = null;
-  }
-
-  private createMerasmusOverlays(): void {
-    const width = 1280;
-    const height = 720;
-
-    this.merasmusVignette = this.add.container(0, 0);
-    this.merasmusVignette.setDepth(140);
-    const vignetteGfx = this.add.graphics();
-    const fadeDepth = 360;
-    const green = 0x44ff66;
-    const edgeAlpha = 0.14;
-
-    // Screen-edge vignette only — soft linear fades, no corner rings
-    vignetteGfx.fillGradientStyle(green, green, green, green, edgeAlpha, edgeAlpha, 0, 0);
-    vignetteGfx.fillRect(0, 0, width, fadeDepth);
-    vignetteGfx.fillGradientStyle(green, green, green, green, 0, 0, edgeAlpha, edgeAlpha);
-    vignetteGfx.fillRect(0, height - fadeDepth, width, fadeDepth);
-    vignetteGfx.fillGradientStyle(green, green, green, green, edgeAlpha, 0, edgeAlpha, 0);
-    vignetteGfx.fillRect(0, 0, fadeDepth, height);
-    vignetteGfx.fillGradientStyle(green, green, green, green, 0, edgeAlpha, 0, edgeAlpha);
-    vignetteGfx.fillRect(width - fadeDepth, 0, fadeDepth, height);
-
-    this.merasmusVignette.add(vignetteGfx);
-    this.merasmusVignette.setVisible(false);
-    this.merasmusVignette.setAlpha(0);
-
-    // Door frame is 260px tall — scale Merasmus to match wizard height
-    const doorCenterY = height / 2 - 50;
-    this.merasmusFigureContainer = this.add.container(640, doorCenterY + 8);
-    this.merasmusFigureContainer.setDepth(141);
-    const figure = this.add.graphics();
-    drawCharacterSilhouette(figure, 0, 0, 'MERASMUS', 0x8866dd);
-    this.merasmusFigureContainer.add(figure);
-    this.merasmusFigureContainer.setScale(2.05);
-    this.merasmusFigureContainer.setVisible(false);
-    this.merasmusFigureContainer.setAlpha(0);
-  }
-
-  private toggleMerasmusFlip(): void {
-    if (!this.isMerasmusEnabled()) return;
-    if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isTeleported) return;
-    // Clear edge holds so swapped zone→key mapping doesn't leave stale aim
-    this.keyADown = false;
-    this.keyDDown = false;
-    this.setMerasmusDomMirror(!this.merasmusViewFlipped);
-    this.audio.playMerasmusFlipSound(this.merasmusViewFlipped);
-  }
-
-  private updateMerasmus(delta: number): void {
-    if (!this.isMerasmusEnabled()) return;
-
-    if (this.isTeleported) {
-      if (this.merasmusVignette) {
-        this.merasmusVignette.setVisible(false);
-      }
-      if (this.merasmusFigureContainer) {
-        this.merasmusFigureContainer.setVisible(false);
-      }
-      this.audio.updateMerasmusHumVolume(0);
-      return;
-    }
-
-    const buildTime = GAME_CONSTANTS.MERASMUS_BUILD_TIME_MS;
-    const repelMult = GAME_CONSTANTS.MERASMUS_REPEL_MULTIPLIER;
-    const respiteMs = GAME_CONSTANTS.MERASMUS_RESPITE_UNFLIPPED_MS;
-
-    if (this.merasmusLinearProgress >= 1) {
-      this.audio.playMerasmusCackle();
-      this.gameOver('Merasmus got you!');
-      return;
-    }
-
-    if (this.merasmusInRespite) {
-      if (this.merasmusViewFlipped) {
-        this.merasmusRespiteUnflippedMs = 0;
-      } else {
-        this.merasmusRespiteUnflippedMs += delta;
-        if (this.merasmusRespiteUnflippedMs >= respiteMs) {
-          this.merasmusInRespite = false;
-          this.merasmusRespiteUnflippedMs = 0;
-        }
-      }
-    } else if (this.merasmusViewFlipped && this.merasmusLinearProgress > 0) {
-      this.merasmusLinearProgress -= (repelMult * delta) / buildTime;
-      if (this.merasmusLinearProgress <= 0) {
-        this.merasmusLinearProgress = 0;
-        this.merasmusInRespite = true;
-        this.merasmusRespiteUnflippedMs = 0;
-        this.playMerasmusRespiteFlash();
-      }
-    } else if (!this.merasmusViewFlipped) {
-      this.merasmusLinearProgress += delta / buildTime;
-      if (this.merasmusLinearProgress >= 1) {
-        this.merasmusLinearProgress = 1;
-      }
-    }
-
-    const displayAlpha = this.getMerasmusDisplayAlpha();
-
-    if (this.merasmusVignette) {
-      const showVignette = displayAlpha > 0.001;
-      this.merasmusVignette.setVisible(showVignette);
-      this.merasmusVignette.setAlpha(displayAlpha * 0.18);
-    }
-
-    if (this.merasmusFigureContainer) {
-      const showFigure = displayAlpha > 0.001 && !this.isCameraMode;
-      this.merasmusFigureContainer.setVisible(showFigure);
-      this.merasmusFigureContainer.setAlpha(displayAlpha);
-      this.merasmusFigureContainer.setScale(2.05 + displayAlpha * 0.2);
-    }
-
-    this.audio.updateMerasmusHumVolume(displayAlpha);
-  }
-
-  /** Brief green flash when repel completes — signals safe to unflip */
-  private playMerasmusRespiteFlash(): void {
-    this.cameras.main.flash(320, 48, 200, 72, false);
-  }
-
   /** Returns true if the currently selected camera's room has a hacked teleporter */
   private isSelectedCameraHacked(): boolean {
     if (!this.isAdministratorEnabled()) return false;
@@ -794,15 +618,15 @@ export class GameScene extends Phaser.Scene {
     this.medicGhostTimer = 0;
     this.medicGhostCooldown = 0;
 
-    this.clearMerasmusMirrorDomAndFlags();
+    this.merasmus.reset();
   }
   
   /**
    * Cleanup when scene shuts down
    */
   private cleanup(): void {
-    this.uninstallMerasmusPointerMirrorFix();
-    this.clearMerasmusMirrorDomAndFlags();
+    this.merasmus.uninstallPointerMirrorFix();
+    this.merasmus.reset();
     this.recordings.stop();
     // Stops every Web Audio sound (incl. Pyro crackling timeouts and the Medic
     // ghost scream's separate AudioContext) and closes the shared context
@@ -1178,8 +1002,8 @@ export class GameScene extends Phaser.Scene {
     // Set up input
     this.setupInput();
     if (this.isMerasmusEnabled()) {
-      this.installMerasmusPointerMirrorFix();
-      this.createMerasmusOverlays();
+      this.merasmus.installPointerMirrorFix();
+      this.merasmus.createOverlays();
     }
     
     // Create mobile touch controls if on mobile
@@ -1193,13 +1017,13 @@ export class GameScene extends Phaser.Scene {
         getMetal: () => this.metal,
         isSpySapping: () => !!(this.isSpyEnabled() && this.spy && this.spy.isSapping()),
         isMerasmusEnabled: () => this.isMerasmusEnabled(),
-        isMerasmusViewFlipped: () => this.merasmusViewFlipped,
+        isMerasmusViewFlipped: () => this.merasmus.isViewFlipped(),
         setAimLeftActive: (active) => this.setMobileAimLeftActive(active),
         setAimRightActive: (active) => this.setMobileAimRightActive(active),
         fireWrangler: () => this.fireWrangler(),
         togglePause: () => this.togglePause(),
         toggleCameraMode: () => this.toggleCameraMode(),
-        toggleMerasmusFlip: () => this.toggleMerasmusFlip(),
+        toggleMerasmusFlip: () => this.merasmus.toggleFlip(),
         handleMobileAction: () => this.handleMobileAction(),
         onWranglerPressed: () => {
           this.sentry.isWrangled = !this.sentry.isWrangled;
@@ -3094,7 +2918,7 @@ export class GameScene extends Phaser.Scene {
     
     // Q - Toggle Merasmus view flip (Custom Night)
     keyboard.on('keydown-Q', () => {
-      this.toggleMerasmusFlip();
+      this.merasmus.toggleFlip();
     });
 
     // F - Toggle Wrangler
@@ -3197,7 +3021,7 @@ export class GameScene extends Phaser.Scene {
    * Swap which key each zone drives while flipped so screen-side aim stays intuitive.
    */
   private setMobileAimLeftActive(active: boolean): void {
-    const mirrored = this.isMerasmusEnabled() && this.merasmusViewFlipped;
+    const mirrored = this.isMerasmusEnabled() && this.merasmus.isViewFlipped();
     if (mirrored) {
       this.keyDDown = active;
     } else {
@@ -3206,7 +3030,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private setMobileAimRightActive(active: boolean): void {
-    const mirrored = this.isMerasmusEnabled() && this.merasmusViewFlipped;
+    const mirrored = this.isMerasmusEnabled() && this.merasmus.isViewFlipped();
     if (mirrored) {
       this.keyADown = active;
     } else {
@@ -3315,7 +3139,7 @@ export class GameScene extends Phaser.Scene {
     // Use native DOM key states (more reliable than Phaser with browser extensions)
     const rawA = this.keyADown;
     const rawD = this.keyDDown;
-    const mirrorAim = this.isMerasmusEnabled() && this.merasmusViewFlipped;
+    const mirrorAim = this.isMerasmusEnabled() && this.merasmus.isViewFlipped();
     const aDown = mirrorAim ? rawD : rawA;
     const dDown = mirrorAim ? rawA : rawD;
     
@@ -4895,7 +4719,7 @@ export class GameScene extends Phaser.Scene {
   private gameOver(reason: string): void {
     if (this.gameStatus !== 'PLAYING') return;
 
-    this.clearMerasmusMirrorDomAndFlags();
+    this.merasmus.reset();
     
     this.gameStatus = 'LOST';
     // Stop ALL sounds immediately
@@ -5434,7 +5258,7 @@ export class GameScene extends Phaser.Scene {
   private victory(): void {
     if (this.gameStatus !== 'PLAYING') return;
 
-    this.clearMerasmusMirrorDomAndFlags();
+    this.merasmus.reset();
     
     this.gameStatus = 'WON';
     this.audio.stopAllGameSounds(); // Stop ALL sounds
@@ -5928,7 +5752,7 @@ export class GameScene extends Phaser.Scene {
     this.updateAiming();
 
     // ---- MERASMUS FADE THREAT (Custom Night) ----
-    this.updateMerasmus(delta);
+    this.merasmus.update(delta);
     
     // ---- UPDATE ENEMIES ----
     this.updateEnemies(delta);
