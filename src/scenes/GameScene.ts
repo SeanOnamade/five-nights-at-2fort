@@ -400,7 +400,12 @@ export class GameScene extends Phaser.Scene {
   // ENGINEER RECORDINGS (Phone calls)
   // ============================================
   
-  public recordings!: RecordingUI;
+  public recordings: RecordingUI = new RecordingUI(this, {
+    getGameStatus: () => this.gameStatus,
+    getNightNumber: () => this.nightNumber,
+    isBadEndingNight6Now: () => this.isBadEndingNight6,
+    playCassetteStopSound: () => this.audio.playCassetteStopSound(),
+  });
   
   // ============================================
   // MOBILE CONTROLS
@@ -981,12 +986,6 @@ export class GameScene extends Phaser.Scene {
     });
     this.ventUI.create(this.cameraUI);
     this.createEndScreen();
-    this.recordings = new RecordingUI(this, {
-      getGameStatus: () => this.gameStatus,
-      getNightNumber: () => this.nightNumber,
-      isBadEndingNight6Now: () => this.isBadEndingNight6,
-      playCassetteStopSound: () => this.audio.playCassetteStopSound(),
-    });
     this.recordings.create();
     this.pauseMenu = new PauseMenu(this, {
       onResume: () => this.togglePause(),
