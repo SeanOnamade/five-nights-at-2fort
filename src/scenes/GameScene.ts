@@ -13,6 +13,8 @@ import {
   ROOM_ADJACENCY,
 } from '../types';
 import { GameAudio } from '../audio/GameAudio';
+import { MobileControls } from '../ui/MobileControls';
+import { PauseMenu } from '../ui/PauseMenu';
 import { setGameClock } from '../utils/gameClock';
 import { isMobileDevice } from '../utils/mobile';
 import { 
@@ -112,36 +114,7 @@ export class GameScene extends Phaser.Scene {
   
   // Pause state
   private isPaused: boolean = false;
-  private pauseMenu!: Phaser.GameObjects.Container;
-  private pauseHintText!: Phaser.GameObjects.Text;
-  
-  // Hints for pause menu
-  private readonly pauseHints: string[] = [
-    // User-provided hints
-    "Demoman can be stalled by watching his head!",
-    "Only Scout, Soldier, Pyro, Sniper, and Demoman's body show up in the Wrangler light.",
-    "Scout is the fastest of the mercs.",
-    "Sniper moves at random!",
-    "Spy can disguise as any enemy except Pyro! When disguised, he won't attempt to sap your sentry!",
-    "Deterring Demoman's charge at the last second provides bonus metal! Test your luck!",
-    "Heavy's footsteps get louder the closer he is to Intel!",
-    "Press Space twice to remove a Sapper!",
-    "Spy and Demoman's head will not attack you when teleported.",
-    "If you don't have the metal to ward off an enemy, unwrangle your Sentry before they attack to save yourself!",
-    "Spy switches mode every hour.",
-    "You can cancel a teleport by clicking the button again.",
-    "When teleporting, if an enemy is in an adjacent room, they will hear you and approach.",
-    "Demo will never begin his attack while you're watching him.",
-    // Additional hints
-    "One sentry attack can affect multiple enemies.",
-    "Heavy will destroy your camera if you stare too long. Sniper will headshot you through it!",
-    "Lures can distract certain enemies, buying you precious time!",
-    "Metal regenerates over time -- manage it wisely!",
-    "Sniper requires 2 shots to repel.",
-    "When Heavy reaches the intel room, you have very little time to react!",
-    "Pyro blocks doorways until you shine the Wrangler light on him!",
-    "Pyro reflects sentry shots! Use the Wrangler light to drive him away.",
-  ];
+  private pauseMenu!: PauseMenu;
   
   // Input state for hold-to-aim (using native DOM events for reliability)
   private keyADown: boolean = false;
@@ -445,19 +418,7 @@ export class GameScene extends Phaser.Scene {
   // ============================================
   
   private isMobile: boolean = false;
-  private mobileUI!: Phaser.GameObjects.Container;
-  private mobileCameraButton!: Phaser.GameObjects.Container;
-  private mobileWranglerButton!: Phaser.GameObjects.Container;
-  private mobileActionButton!: Phaser.GameObjects.Container;
-  private mobileActionText!: Phaser.GameObjects.Text;
-  private mobileActionCostText!: Phaser.GameObjects.Text;
-  private mobileFireButton!: Phaser.GameObjects.Container;
-  private mobilePauseButton!: Phaser.GameObjects.Container;
-  private mobileMerasmusFlipButton!: Phaser.GameObjects.Container;
-  private mobileLeftZone!: Phaser.GameObjects.Rectangle;
-  private mobileRightZone!: Phaser.GameObjects.Rectangle;
-  private mobileLeftHint!: Phaser.GameObjects.Graphics;
-  private mobileRightHint!: Phaser.GameObjects.Graphics;
+  private mobileControls: MobileControls | null = null;
   
   constructor() {
     super({ key: 'GameScene' });
@@ -550,7 +511,7 @@ export class GameScene extends Phaser.Scene {
       canvas.style.transform = '';
       canvas.style.transformOrigin = '';
     }
-    this.updateMobileMerasmusFlipButton();
+    this.mobileControls?.updateMerasmusFlipButton();
   }
 
   /**
@@ -1203,7 +1164,25 @@ export class GameScene extends Phaser.Scene {
     this.createThermostatUI();
     this.createEndScreen();
     this.createRecordingUI();
-    this.createPauseMenu(); // Uses this.isMobile for layout
+    this.pauseMenu = new PauseMenu(this, {
+      onResume: () => this.togglePause(),
+      onRestart: () => {
+        this.audio.stopDetectionSound();
+        this.scene.restart();
+      },
+      onMainMenu: () => this.goToMainMenu(),
+      onGiveUp: () => {
+        // Player gives up - Pyro jumpscare, then dark ending
+        this.isPaused = false;
+        this.pauseMenu.setVisible(false);
+        this.audio.stopAllGameSounds();
+        this.gameStatus = 'LOST';
+        
+        // Show Pyro jumpscare first!
+        this.showGiveUpJumpscare();
+      },
+    });
+    this.pauseMenu.create(this.isBadEndingNight6);
     
     // Set up input
     this.setupInput();
@@ -1214,7 +1193,39 @@ export class GameScene extends Phaser.Scene {
     
     // Create mobile touch controls if on mobile
     if (this.isMobile) {
-      this.createMobileControls();
+      this.mobileControls = new MobileControls(this, {
+        getGameStatus: () => this.gameStatus,
+        isPausedNow: () => this.isPaused,
+        isCameraModeNow: () => this.isCameraMode,
+        isTeleportedNow: () => this.isTeleported,
+        getSentry: () => this.sentry,
+        getMetal: () => this.metal,
+        isSpySapping: () => !!(this.isSpyEnabled() && this.spy && this.spy.isSapping()),
+        isMerasmusEnabled: () => this.isMerasmusEnabled(),
+        isMerasmusViewFlipped: () => this.merasmusViewFlipped,
+        setAimLeftActive: (active) => this.setMobileAimLeftActive(active),
+        setAimRightActive: (active) => this.setMobileAimRightActive(active),
+        fireWrangler: () => this.fireWrangler(),
+        togglePause: () => this.togglePause(),
+        toggleCameraMode: () => this.toggleCameraMode(),
+        toggleMerasmusFlip: () => this.toggleMerasmusFlip(),
+        handleMobileAction: () => this.handleMobileAction(),
+        onWranglerPressed: () => {
+          this.sentry.isWrangled = !this.sentry.isWrangled;
+          this.audio.playWranglerToggleSound(this.sentry.isWrangled);
+          
+          // Resume dispenser hum if turning wrangler off (no longer aiming)
+          if (!this.sentry.isWrangled && !this.isTeleported) {
+            this.sentry.aimedDoor = 'NONE';
+            this.audio.startDispenserHum();
+          }
+          
+          this.updateWranglerVisuals();
+          this.updateHUD();
+          this.mobileControls?.updateWranglerButton();
+        },
+      });
+      this.mobileControls.create();
     }
     
     // Initial HUD update
@@ -4943,235 +4954,6 @@ export class GameScene extends Phaser.Scene {
   }
   
   /**
-   * Create mobile touch controls (only called on mobile devices)
-   */
-  private createMobileControls(): void {
-    const width = 1280;
-    const height = 720;
-    
-    // Main container for all mobile UI
-    this.mobileUI = this.add.container(0, 0);
-    this.mobileUI.setDepth(150); // Above game, below pause menu
-    
-    // ===== LEFT TOUCH ZONE (A key equivalent) =====
-    this.mobileLeftZone = this.add.rectangle(0, height / 2, 180, height, 0x000000, 0);
-    this.mobileLeftZone.setOrigin(0, 0.5);
-    this.mobileLeftZone.setInteractive();
-    
-    // Left visual hint (subtle edge glow)
-    this.mobileLeftHint = this.add.graphics();
-    this.mobileLeftHint.fillStyle(0x4488ff, 0.15);
-    this.mobileLeftHint.fillRect(0, 50, 15, height - 100);
-    this.mobileLeftHint.setVisible(true);
-    this.mobileUI.add(this.mobileLeftHint);
-    
-    // Left zone touch handlers
-    const resetLeftZone = () => {
-      this.setMobileAimLeftActive(false);
-      this.mobileLeftHint.clear();
-      this.mobileLeftHint.fillStyle(0x4488ff, 0.15);
-      this.mobileLeftHint.fillRect(0, 50, 15, height - 100);
-    };
-    this.mobileLeftZone.on('pointerdown', () => {
-      if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isCameraMode || this.isTeleported) return;
-      this.setMobileAimLeftActive(true);
-      this.mobileLeftHint.clear();
-      this.mobileLeftHint.fillStyle(0x4488ff, 0.4);
-      this.mobileLeftHint.fillRect(0, 50, 30, height - 100);
-    });
-    this.mobileLeftZone.on('pointerup', resetLeftZone);
-    this.mobileLeftZone.on('pointerout', resetLeftZone);
-    this.mobileLeftZone.on('pointercancel', resetLeftZone);
-    
-    // ===== RIGHT TOUCH ZONE (D key equivalent) =====
-    this.mobileRightZone = this.add.rectangle(width, height / 2, 180, height, 0x000000, 0);
-    this.mobileRightZone.setOrigin(1, 0.5);
-    this.mobileRightZone.setInteractive();
-    
-    // Right visual hint
-    this.mobileRightHint = this.add.graphics();
-    this.mobileRightHint.fillStyle(0x4488ff, 0.15);
-    this.mobileRightHint.fillRect(width - 15, 50, 15, height - 100);
-    this.mobileRightHint.setVisible(true);
-    this.mobileUI.add(this.mobileRightHint);
-    
-    // Right zone touch handlers
-    const resetRightZone = () => {
-      this.setMobileAimRightActive(false);
-      this.mobileRightHint.clear();
-      this.mobileRightHint.fillStyle(0x4488ff, 0.15);
-      this.mobileRightHint.fillRect(width - 15, 50, 15, height - 100);
-    };
-    this.mobileRightZone.on('pointerdown', () => {
-      if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isCameraMode || this.isTeleported) return;
-      this.setMobileAimRightActive(true);
-      this.mobileRightHint.clear();
-      this.mobileRightHint.fillStyle(0x4488ff, 0.4);
-      this.mobileRightHint.fillRect(width - 30, 50, 30, height - 100);
-    });
-    this.mobileRightZone.on('pointerup', resetRightZone);
-    this.mobileRightZone.on('pointerout', resetRightZone);
-    this.mobileRightZone.on('pointercancel', resetRightZone);
-    
-    // ===== FIRE BUTTON (appears near sentry when wrangled + aimed) =====
-    this.mobileFireButton = this.add.container(width / 2, height - 320);
-    const fireBg = this.add.rectangle(0, 0, 100, 50, 0x442222);
-    fireBg.setStrokeStyle(3, 0xff4444);
-    fireBg.setInteractive({ useHandCursor: true });
-    const fireText = this.add.text(0, 0, 'FIRE', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#ff6666',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    fireBg.on('pointerdown', () => {
-      if (this.gameStatus !== 'PLAYING' || this.isPaused || this.isCameraMode) return;
-      if (!this.sentry.exists || !this.sentry.isWrangled) return;
-      if (this.sentry.aimedDoor === 'NONE') return;
-      this.fireWrangler();
-    });
-    fireBg.on('pointerover', () => fireBg.setFillStyle(0x663333));
-    fireBg.on('pointerout', () => fireBg.setFillStyle(0x442222));
-    this.mobileFireButton.add([fireBg, fireText]);
-    this.mobileFireButton.setVisible(false);
-    this.mobileUI.add(this.mobileFireButton);
-    
-    // ===== PAUSE BUTTON (top right corner) =====
-    this.mobilePauseButton = this.add.container(width - 50, 50);
-    const pauseBg = this.add.rectangle(0, 0, 80, 40, 0x1a2a3a, 0.9);
-    pauseBg.setStrokeStyle(2, 0x3a5a7a);
-    pauseBg.setInteractive({ useHandCursor: true });
-    // Pause icon: two vertical bars using graphics
-    const pauseIconGfx = this.add.graphics();
-    pauseIconGfx.fillStyle(0x7799bb, 1);
-    pauseIconGfx.fillRect(-12, -10, 8, 20); // Left bar
-    pauseIconGfx.fillRect(4, -10, 8, 20);   // Right bar
-    pauseBg.on('pointerdown', () => {
-      if (this.gameStatus !== 'PLAYING') return;
-      this.togglePause();
-    });
-    pauseBg.on('pointerover', () => {
-      pauseBg.setFillStyle(0x2a3a4a);
-      pauseBg.setStrokeStyle(2, 0x5a8aba);
-    });
-    pauseBg.on('pointerout', () => {
-      pauseBg.setFillStyle(0x1a2a3a, 0.9);
-      pauseBg.setStrokeStyle(2, 0x3a5a7a);
-    });
-    this.mobilePauseButton.add([pauseBg, pauseIconGfx]);
-    this.mobileUI.add(this.mobilePauseButton);
-    
-    // ===== CAMERA BUTTON (to the left of pause, with spacing) =====
-    this.mobileCameraButton = this.createMobileButton(width - 145, 50, 'CAM', () => {
-      if (this.gameStatus !== 'PLAYING' || this.isPaused) return;
-      if (this.isTeleported) return; // Can't use cameras when teleported
-      this.toggleCameraMode();
-    });
-    this.mobileUI.add(this.mobileCameraButton);
-    
-    // ===== WRANGLER BUTTON (below pause/cam row) =====
-    this.mobileWranglerButton = this.createMobileButton(width - 50, 100, 'WRANGLE', () => {
-      if (this.gameStatus !== 'PLAYING' || this.isPaused) return;
-      if (this.isCameraMode) return;
-      if (!this.sentry.exists) return;
-      
-      this.sentry.isWrangled = !this.sentry.isWrangled;
-      this.audio.playWranglerToggleSound(this.sentry.isWrangled);
-      
-      // Resume dispenser hum if turning wrangler off (no longer aiming)
-      if (!this.sentry.isWrangled && !this.isTeleported) {
-        this.sentry.aimedDoor = 'NONE';
-        this.audio.startDispenserHum();
-      }
-      
-      this.updateWranglerVisuals();
-      this.updateHUD();
-      this.updateMobileWranglerButton();
-    });
-    this.mobileUI.add(this.mobileWranglerButton);
-    
-    // ===== ACTION BUTTON (to the left of CAM button, visible in camera mode too) =====
-    // Spacing: Pause width-50, CAM width-145, ACTION width-240, FLIP width-335 (95px apart)
-    this.mobileActionButton = this.add.container(width - 240, 50);
-    
-    const actionBg = this.add.rectangle(0, 0, 80, 40, 0x224422);
-    actionBg.setStrokeStyle(2, 0x44aa44);
-    actionBg.setInteractive({ useHandCursor: true });
-    
-    // Two-line text: action on top, cost below
-    this.mobileActionText = this.add.text(0, -6, 'BUILD', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
-      color: '#88ff88',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    
-    this.mobileActionCostText = this.add.text(0, 8, '(100)', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '9px',
-      color: '#88ff88',
-    }).setOrigin(0.5);
-    
-    actionBg.on('pointerdown', () => {
-      if (this.gameStatus !== 'PLAYING' || this.isPaused) return;
-      if (this.isTeleported) return; // Can't build/repair/upgrade when teleported
-      this.handleMobileAction();
-    });
-    
-    actionBg.on('pointerover', () => actionBg.setFillStyle(0x336633));
-    actionBg.on('pointerout', () => actionBg.setFillStyle(0x224422));
-    
-    this.mobileActionButton.add([actionBg, this.mobileActionText, this.mobileActionCostText]);
-    this.mobileUI.add(this.mobileActionButton);
-
-    // ===== MERASMUS FLIP BUTTON (left of ACTION, Custom Night only) =====
-    this.mobileMerasmusFlipButton = this.createMobileButton(width - 335, 50, 'FLIP', () => {
-      this.toggleMerasmusFlip();
-    });
-    this.mobileMerasmusFlipButton.setVisible(this.isMerasmusEnabled());
-    this.mobileUI.add(this.mobileMerasmusFlipButton);
-    
-    // Initial update
-    this.updateMobileUI();
-  }
-  
-  /**
-   * Create a styled mobile button (text only, no emojis)
-   */
-  private createMobileButton(
-    x: number, 
-    y: number, 
-    label: string, 
-    callback: () => void
-  ): Phaser.GameObjects.Container {
-    const container = this.add.container(x, y);
-    
-    const bg = this.add.rectangle(0, 0, 80, 40, 0x1a2a3a, 0.9);
-    bg.setStrokeStyle(2, 0x3a5a7a);
-    bg.setInteractive({ useHandCursor: true });
-    
-    const labelText = this.add.text(0, 0, label, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#7799bb',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    
-    bg.on('pointerdown', callback);
-    bg.on('pointerover', () => {
-      bg.setFillStyle(0x2a3a4a);
-      bg.setStrokeStyle(2, 0x5a8aba);
-    });
-    bg.on('pointerout', () => {
-      bg.setFillStyle(0x1a2a3a, 0.9);
-      bg.setStrokeStyle(2, 0x3a5a7a);
-    });
-    
-    container.add([bg, labelText]);
-    return container;
-  }
-  
-  /**
    * Handle mobile action button press (context-sensitive)
    */
   private handleMobileAction(): void {
@@ -5202,319 +4984,6 @@ export class GameScene extends Phaser.Scene {
     } else if (this.sentry.level < 3) {
       this.upgradeSentry();
     }
-  }
-  
-  /**
-   * Update mobile UI state
-   */
-  private updateMobileUI(): void {
-    if (!this.isMobile) return;
-    
-    // Update button states
-    this.updateMobileWranglerButton();
-    this.updateMobileActionButton();
-    this.updateMobileCameraButton();
-    this.updateMobileFireButton();
-    
-    // Show/hide zones based on mode
-    const inIntelRoom = !this.isCameraMode && !this.isTeleported;
-    this.mobileLeftHint.setVisible(inIntelRoom);
-    this.mobileRightHint.setVisible(inIntelRoom);
-    
-    // Wrangler button: only in intel room with sentry
-    this.mobileWranglerButton.setVisible(inIntelRoom && this.sentry.exists);
-    
-    // Action button: visible except when teleported (stays visible in camera mode)
-    this.mobileActionButton.setVisible(!this.isTeleported);
-    
-    // Camera button: available except when teleported
-    this.mobileCameraButton.setVisible(!this.isTeleported);
-    
-    // Pause button: always visible
-    this.mobilePauseButton.setVisible(true);
-
-    // Merasmus flip: Custom Night only, not when teleported
-    if (this.mobileMerasmusFlipButton) {
-      this.mobileMerasmusFlipButton.setVisible(this.isMerasmusEnabled() && !this.isTeleported);
-      this.updateMobileMerasmusFlipButton();
-    }
-  }
-
-  /**
-   * Update Merasmus flip button appearance when view is mirrored
-   */
-  private updateMobileMerasmusFlipButton(): void {
-    if (!this.isMobile || !this.mobileMerasmusFlipButton) return;
-    // During scene shutdown/restart this runs via cleanup() -> resetMerasmusState()
-    // after Phaser has destroyed the container (its list is emptied). Touching the
-    // dead children threw and aborted the scene transition - frozen game on mobile.
-    if (!this.mobileMerasmusFlipButton.active) return;
-
-    const bg = this.mobileMerasmusFlipButton.list[0] as Phaser.GameObjects.Rectangle | undefined;
-    const label = this.mobileMerasmusFlipButton.list[1] as Phaser.GameObjects.Text | undefined;
-    if (!bg || !label) return;
-
-    if (this.merasmusViewFlipped) {
-      bg.setFillStyle(0x2a4a2a);
-      bg.setStrokeStyle(2, 0x44ff44);
-      label.setColor('#44ff44');
-      label.setText('FLIPPED');
-    } else {
-      bg.setFillStyle(0x1a2a3a, 0.9);
-      bg.setStrokeStyle(2, 0x3a5a7a);
-      label.setColor('#7799bb');
-      label.setText('FLIP');
-    }
-  }
-  
-  /**
-   * Update fire button visibility (shows when wrangled + aimed at door)
-   */
-  private updateMobileFireButton(): void {
-    if (!this.isMobile || !this.mobileFireButton) return;
-    
-    const inIntelRoom = !this.isCameraMode && !this.isTeleported;
-    const canFire = inIntelRoom && 
-                    this.sentry.exists && 
-                    this.sentry.isWrangled && 
-                    this.sentry.aimedDoor !== 'NONE';
-    
-    this.mobileFireButton.setVisible(canFire);
-  }
-  
-  /**
-   * Update wrangler button appearance based on state
-   */
-  private updateMobileWranglerButton(): void {
-    if (!this.isMobile || !this.mobileWranglerButton) return;
-    
-    const bg = this.mobileWranglerButton.list[0] as Phaser.GameObjects.Rectangle;
-    const label = this.mobileWranglerButton.list[1] as Phaser.GameObjects.Text;
-    
-    if (this.sentry.isWrangled) {
-      bg.setFillStyle(0x2a4a2a);
-      bg.setStrokeStyle(2, 0x44ff44);
-      label.setText('WRANGLED');
-      label.setColor('#44ff44');
-    } else {
-      bg.setFillStyle(0x1a2a3a, 0.9);
-      bg.setStrokeStyle(2, 0x3a5a7a);
-      label.setText('WRANGLE');
-      label.setColor('#7799bb');
-    }
-  }
-  
-  /**
-   * Update action button text based on current state (two-line format)
-   */
-  private updateMobileActionButton(): void {
-    if (!this.isMobile || !this.mobileActionText) return;
-    
-    const bg = this.mobileActionButton.list[0] as Phaser.GameObjects.Rectangle;
-    
-    // Check for sapper - single line, no cost
-    if (this.isSpyEnabled() && this.spy && this.spy.isSapping()) {
-      this.mobileActionText.setText('REMOVE');
-      this.mobileActionText.setY(0); // Center vertically
-      this.mobileActionCostText.setText('SAP');
-      this.mobileActionText.setColor('#ff8888');
-      this.mobileActionCostText.setColor('#ff8888');
-      bg.setFillStyle(0x442222);
-      bg.setStrokeStyle(2, 0xaa4444);
-      this.mobileActionButton.setVisible(true);
-      return;
-    }
-    
-    // Reset Y positions for two-line format
-    this.mobileActionText.setY(-6);
-    
-    // Normal sentry actions
-    if (!this.sentry.exists) {
-      const canBuild = this.metal >= GAME_CONSTANTS.BUILD_SENTRY_COST;
-      this.mobileActionText.setText('BUILD');
-      this.mobileActionCostText.setText(`(${GAME_CONSTANTS.BUILD_SENTRY_COST})`);
-      const color = canBuild ? '#88ff88' : '#888888';
-      this.mobileActionText.setColor(color);
-      this.mobileActionCostText.setColor(color);
-      bg.setFillStyle(canBuild ? 0x224422 : 0x222222);
-      bg.setStrokeStyle(2, canBuild ? 0x44aa44 : 0x444444);
-    } else if (this.sentry.hp < this.sentry.maxHp) {
-      const repairCost = Math.ceil(Math.min(this.sentry.maxHp - this.sentry.hp, GAME_CONSTANTS.REPAIR_SENTRY_AMOUNT));
-      const canRepair = this.metal >= repairCost;
-      this.mobileActionText.setText('REPAIR');
-      this.mobileActionCostText.setText(`(${repairCost})`);
-      const color = canRepair ? '#ffaa44' : '#888888';
-      this.mobileActionText.setColor(color);
-      this.mobileActionCostText.setColor(color);
-      bg.setFillStyle(canRepair ? 0x442a22 : 0x222222);
-      bg.setStrokeStyle(2, canRepair ? 0xaa6644 : 0x444444);
-    } else if (this.sentry.level < 3) {
-      const canUpgrade = this.metal >= GAME_CONSTANTS.UPGRADE_SENTRY_COST;
-      this.mobileActionText.setText('UPGRADE');
-      this.mobileActionCostText.setText(`(${GAME_CONSTANTS.UPGRADE_SENTRY_COST})`);
-      const color = canUpgrade ? '#88aaff' : '#888888';
-      this.mobileActionText.setColor(color);
-      this.mobileActionCostText.setColor(color);
-      bg.setFillStyle(canUpgrade ? 0x222244 : 0x222222);
-      bg.setStrokeStyle(2, canUpgrade ? 0x4466aa : 0x444444);
-    } else {
-      // Max level, no action needed - single line
-      this.mobileActionText.setText('MAX');
-      this.mobileActionText.setY(0);
-      this.mobileActionCostText.setText('');
-      this.mobileActionText.setColor('#44aa44');
-      bg.setFillStyle(0x223322);
-      bg.setStrokeStyle(2, 0x336633);
-    }
-  }
-  
-  /**
-   * Update camera button based on camera mode
-   */
-  private updateMobileCameraButton(): void {
-    if (!this.isMobile || !this.mobileCameraButton) return;
-    
-    const bg = this.mobileCameraButton.list[0] as Phaser.GameObjects.Rectangle;
-    const label = this.mobileCameraButton.list[1] as Phaser.GameObjects.Text;
-    
-    if (this.isCameraMode) {
-      label.setText('CLOSE');
-      bg.setFillStyle(0x4a2a2a);
-      bg.setStrokeStyle(2, 0xaa5555);
-      label.setColor('#ff8888');
-    } else {
-      label.setText('CAM');
-      bg.setFillStyle(0x1a2a3a, 0.9);
-      bg.setStrokeStyle(2, 0x3a5a7a);
-      label.setColor('#7799bb');
-    }
-  }
-  
-  /**
-   * Create the pause menu UI
-   */
-  private createPauseMenu(): void {
-    this.pauseMenu = this.add.container(0, 0);
-    this.pauseMenu.setVisible(false);
-    this.pauseMenu.setDepth(200);
-    
-    // Dark overlay
-    const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.8);
-    this.pauseMenu.add(overlay);
-    
-    // Main pause panel (center) - taller for endless Night 6 to fit Give Up button
-    const panelHeight = this.isBadEndingNight6 ? 420 : 350;
-    const panel = this.add.rectangle(640, 360, 400, panelHeight, 0x1a1a2a);
-    panel.setStrokeStyle(3, 0xff6600);
-    this.pauseMenu.add(panel);
-    
-    // Title
-    const title = this.add.text(640, 220, 'PAUSED', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '48px',
-      color: '#ff6600',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.pauseMenu.add(title);
-    
-    // Buttons Y position
-    const buttonsStartY = 310;
-    
-    // Resume button
-    const resumeBtn = this.add.rectangle(640, buttonsStartY, 250, 45, 0x224422);
-    resumeBtn.setStrokeStyle(2, 0x44aa44);
-    resumeBtn.setInteractive({ useHandCursor: true });
-    resumeBtn.on('pointerover', () => resumeBtn.setFillStyle(0x336633));
-    resumeBtn.on('pointerout', () => resumeBtn.setFillStyle(0x224422));
-    resumeBtn.on('pointerdown', () => this.togglePause());
-    this.pauseMenu.add(resumeBtn);
-    
-    const resumeText = this.add.text(640, buttonsStartY, 'RESUME', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#88ff88',
-    }).setOrigin(0.5);
-    this.pauseMenu.add(resumeText);
-    
-    // Restart button
-    const restartBtn = this.add.rectangle(640, buttonsStartY + 55, 250, 45, 0x442222);
-    restartBtn.setStrokeStyle(2, 0xaa4444);
-    restartBtn.setInteractive({ useHandCursor: true });
-    restartBtn.on('pointerover', () => restartBtn.setFillStyle(0x663333));
-    restartBtn.on('pointerout', () => restartBtn.setFillStyle(0x442222));
-    restartBtn.on('pointerdown', () => {
-      this.audio.stopDetectionSound();
-      this.scene.restart();
-    });
-    this.pauseMenu.add(restartBtn);
-    
-    const restartText = this.add.text(640, buttonsStartY + 55, 'RESTART NIGHT', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#ff8888',
-    }).setOrigin(0.5);
-    this.pauseMenu.add(restartText);
-    
-    // Main menu button
-    const menuBtn = this.add.rectangle(640, buttonsStartY + 110, 250, 45, 0x222244);
-    menuBtn.setStrokeStyle(2, 0x4444aa);
-    menuBtn.setInteractive({ useHandCursor: true });
-    menuBtn.on('pointerover', () => menuBtn.setFillStyle(0x333366));
-    menuBtn.on('pointerout', () => menuBtn.setFillStyle(0x222244));
-    menuBtn.on('pointerdown', () => {
-      this.goToMainMenu();
-    });
-    this.pauseMenu.add(menuBtn);
-    
-    const menuText = this.add.text(640, buttonsStartY + 110, 'MAIN MENU', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#8888ff',
-    }).setOrigin(0.5);
-    this.pauseMenu.add(menuText);
-    
-    // Give Up button (Endless Night 6 only) - Pyro jumpscare then dark ending
-    if (this.isBadEndingNight6) {
-      const giveUpBtn = this.add.rectangle(640, buttonsStartY + 165, 250, 45, 0x442244);
-      giveUpBtn.setStrokeStyle(2, 0xaa44aa);
-      giveUpBtn.setInteractive({ useHandCursor: true });
-      giveUpBtn.on('pointerover', () => giveUpBtn.setFillStyle(0x663366));
-      giveUpBtn.on('pointerout', () => giveUpBtn.setFillStyle(0x442244));
-      giveUpBtn.on('pointerdown', () => {
-        // Player gives up - Pyro jumpscare, then dark ending
-        this.isPaused = false;
-        this.pauseMenu.setVisible(false);
-        this.audio.stopAllGameSounds();
-        this.gameStatus = 'LOST';
-        
-        // Show Pyro jumpscare first!
-        this.showGiveUpJumpscare();
-      });
-      this.pauseMenu.add(giveUpBtn);
-      
-      const giveUpText = this.add.text(640, buttonsStartY + 165, 'GIVE UP', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '16px',
-        color: '#ff88ff',
-      }).setOrigin(0.5);
-      this.pauseMenu.add(giveUpText);
-    }
-    
-    // Hint background (bottom)
-    const hintBg = this.add.rectangle(640, 620, 500, 55, 0x0a0a14, 0.95);
-    hintBg.setStrokeStyle(1, 0x333344);
-    this.pauseMenu.add(hintBg);
-    
-    // Hint text (random hint shown each pause)
-    this.pauseHintText = this.add.text(640, 620, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#cccccc',
-      fontStyle: 'italic',
-      wordWrap: { width: 470 },
-      align: 'center',
-    }).setOrigin(0.5);
-    this.pauseMenu.add(this.pauseHintText);
   }
   
   /**
@@ -5551,8 +5020,7 @@ export class GameScene extends Phaser.Scene {
       }
       
       // Show a random hint
-      const randomHint = this.pauseHints[Math.floor(Math.random() * this.pauseHints.length)];
-      this.pauseHintText.setText(randomHint);
+      this.pauseMenu.showRandomHint();
     } else {
       // Resume
       this.audio.playUnpauseSound();
@@ -7229,7 +6697,7 @@ export class GameScene extends Phaser.Scene {
     
     // Update mobile UI if on mobile
     if (this.isMobile) {
-      this.updateMobileUI();
+      this.mobileControls?.updateUI();
     }
   }
   
