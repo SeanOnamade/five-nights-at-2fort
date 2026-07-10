@@ -15,6 +15,8 @@ import {
 import { GameAudio } from '../audio/GameAudio';
 import { MobileControls } from '../ui/MobileControls';
 import { PauseMenu } from '../ui/PauseMenu';
+import { VentUI } from '../ui/VentUI';
+import { buildCameraUI } from '../ui/CameraUI';
 import { setGameClock } from '../utils/gameClock';
 import { isMobileDevice } from '../utils/mobile';
 import { 
@@ -144,32 +146,18 @@ export class GameScene extends Phaser.Scene {
   private ventSealRight: boolean = false;
   private thermostat: number = 0;
   private isVentCameraMode: boolean = false;
+  private ventUI!: VentUI;
 
   // Camera map panel content (nodes/paths/grid hidden when viewing vents; frame stays)
   private cameraMapContent!: Phaser.GameObjects.Container;
 
   // Vent camera UI elements
-  private ventUI!: Phaser.GameObjects.Container;
-  private ventNodeGraphics: Map<string, Phaser.GameObjects.Container> = new Map();
-  private ventPaulingIcon!: Phaser.GameObjects.Container;
-  private ventSealLeftBtn!: Phaser.GameObjects.Container;
-  private ventSealRightBtn!: Phaser.GameObjects.Container;
-  private ventSealLeftIndicator!: Phaser.GameObjects.Rectangle;
-  private ventSealRightIndicator!: Phaser.GameObjects.Rectangle;
-  private ventCamsToggleBtn!: Phaser.GameObjects.Container;
-  private ventCamsToggleText!: Phaser.GameObjects.Text;
   private mapTitleText!: Phaser.GameObjects.Text;
 
   // Vent-side controls (in right panel when vent view is active)
-  private ventPanelControls!: Phaser.GameObjects.Container;
-  private ventPanelThermoFill!: Phaser.GameObjects.Rectangle;
-  private ventPanelThermoText!: Phaser.GameObjects.Text;
 
   // Thermostat HUD
   private thermostatBeepTimer: number = 0;
-  private thermostatContainer!: Phaser.GameObjects.Container;
-  private thermostatFill!: Phaser.GameObjects.Rectangle;
-  private thermostatText!: Phaser.GameObjects.Text;
 
   // Hacked teleporter rooms (Administrator - Custom Night)
   private hackedRooms: Map<NodeId, HackedRoomState> = new Map();
@@ -1159,9 +1147,20 @@ export class GameScene extends Phaser.Scene {
     this.createSentry();
     this.createDispenser();
     this.createHUD();
-    this.createCameraUI();
-    this.createVentUI();
-    this.createThermostatUI();
+    this.buildCameraSystemUI();
+    this.ventUI = new VentUI(this, {
+      isPaulingEnabled: () => this.isPaulingEnabled(),
+      isCameraModeNow: () => this.isCameraMode,
+      isTeleportedNow: () => this.isTeleported,
+      isVentCameraModeNow: () => this.isVentCameraMode,
+      getPauling: () => this.pauling,
+      isVentSealedLeft: () => this.ventSealLeft,
+      isVentSealedRight: () => this.ventSealRight,
+      getThermostat: () => this.thermostat,
+      toggleVentSeal: (side) => this.toggleVentSeal(side),
+      toggleVentCameraMode: () => this.toggleVentCameraMode(),
+    });
+    this.ventUI.create(this.cameraUI);
     this.createEndScreen();
     this.createRecordingUI();
     this.pauseMenu = new PauseMenu(this, {
@@ -1933,1054 +1932,118 @@ export class GameScene extends Phaser.Scene {
     this.lureBarContainer.setVisible(false);
   }
   
-  private createCameraUI(): void {
-    // Camera UI container (hidden by default)
-    this.cameraUI = this.add.container(0, 0);
-    this.cameraUI.setVisible(false);
-    this.cameraUI.setDepth(100);  // Above game elements
-    
-    // Dark overlay with vignette effect
-    const overlay = this.add.rectangle(640, 360, 1280, 720, 0x000000, 0.9);
-    this.cameraUI.add(overlay);
-    
-    // ========== CAMERA FEED PANEL (LEFT/CENTER) ==========
-    // Outer monitor housing - industrial/military style
-    const monitorOuter = this.add.rectangle(420, 340, 580, 500, 0x1a1a22);
-    monitorOuter.setStrokeStyle(6, 0x2a2a35);
-    this.cameraUI.add(monitorOuter);
-    
-    // Corner bolts for industrial look
-    const boltPositions = [[145, 105], [695, 105], [145, 575], [695, 575]];
-    boltPositions.forEach(([x, y]) => {
-      const boltOuter = this.add.circle(x, y, 10, 0x333340);
-      boltOuter.setStrokeStyle(2, 0x444455);
-      this.cameraUI.add(boltOuter);
-      const boltInner = this.add.circle(x, y, 4, 0x222230);
-      this.cameraUI.add(boltInner);
-    });
-    
-    // Inner bezel with gradient effect
-    const monitorBezel = this.add.rectangle(420, 345, 540, 450, 0x0a0a10);
-    monitorBezel.setStrokeStyle(4, 0x151520);
-    this.cameraUI.add(monitorBezel);
-    
-    // Screen area with green tint (night vision style)
-    this.cameraFeedPanel = this.add.rectangle(420, 350, 510, 410, 0x010804);
-    this.cameraFeedPanel.setStrokeStyle(2, 0x003311);
-    this.cameraUI.add(this.cameraFeedPanel);
-    
-    // CRT screen glow effect (green ambient glow around edges)
-    const crtGlow = this.add.graphics();
-    // Outer glow
-    crtGlow.lineStyle(8, 0x003311, 0.3);
-    crtGlow.strokeRoundedRect(162, 142, 516, 416, 4);
-    crtGlow.lineStyle(4, 0x004422, 0.2);
-    crtGlow.strokeRoundedRect(158, 138, 524, 424, 6);
-    this.cameraUI.add(crtGlow);
-    
-    // CRT corner vignette effect - darker and more pronounced
-    const vignetteGraphics = this.add.graphics();
-    vignetteGraphics.fillStyle(0x000000, 0.7);
-    // Top-left corner
-    vignetteGraphics.fillTriangle(165, 145, 240, 145, 165, 220);
-    // Top-right corner  
-    vignetteGraphics.fillTriangle(675, 145, 600, 145, 675, 220);
-    // Bottom-left corner
-    vignetteGraphics.fillTriangle(165, 555, 240, 555, 165, 480);
-    // Bottom-right corner
-    vignetteGraphics.fillTriangle(675, 555, 600, 555, 675, 480);
-    this.cameraUI.add(vignetteGraphics);
-    
-    // CRT screen curvature simulation (darker edges)
-    const curvature = this.add.graphics();
-    curvature.fillStyle(0x000000, 0.25);
-    // Top edge darkening
-    curvature.fillRect(165, 145, 510, 25);
-    // Bottom edge darkening
-    curvature.fillRect(165, 530, 510, 25);
-    // Left edge darkening
-    curvature.fillRect(165, 145, 25, 410);
-    // Right edge darkening
-    curvature.fillRect(650, 145, 25, 410);
-    curvature.setDepth(102);
-    this.cameraUI.add(curvature);
-    
-    // Scanline overlay effect - VISIBLE scanlines
-    const scanlines = this.add.graphics();
-    scanlines.setDepth(103);
-    for (let y = 145; y < 555; y += 3) {
-      scanlines.lineStyle(1, 0x000000, 0.25);
-      scanlines.lineBetween(165, y, 675, y);
-    }
-    this.cameraUI.add(scanlines);
-    
-    // Green CRT overlay - visible green tint
-    const crtGreenOverlay = this.add.rectangle(420, 350, 510, 410, 0x00ff00, 0.04);
-    crtGreenOverlay.setDepth(101);
-    this.cameraUI.add(crtGreenOverlay);
-    
-    // CRT flicker effect (animated green tint that pulses)
-    const crtFlicker = this.add.rectangle(420, 350, 510, 410, 0x003311, 0.05);
-    crtFlicker.setDepth(104);
-    this.cameraUI.add(crtFlicker);
-    this.tweens.add({
-      targets: crtFlicker,
-      alpha: 0.12,
-      duration: 80,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Stepped',
-      easeParams: [2],
-    });
-    
-    // Camera feed title bar with styled look
-    const titleBarBg = this.add.rectangle(420, 128, 510, 26, 0x001a08);
-    titleBarBg.setStrokeStyle(1, 0x003311);
-    this.cameraUI.add(titleBarBg);
-    
-    this.cameraFeedTitle = this.add.text(420, 128, 'CAM 01 - COURTYARD', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#00dd44',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.cameraUI.add(this.cameraFeedTitle);
-    
-    // Static noise effect for camera feed
-    this.cameraStaticGraphics = this.add.graphics();
-    this.cameraUI.add(this.cameraStaticGraphics);
-    
-    // Room environment in feed - detailed industrial corridor
-    const feedGraphics = this.add.graphics();
-    
-    // Ceiling with lighting fixture
-    feedGraphics.fillStyle(0x080810, 1);
-    feedGraphics.beginPath();
-    feedGraphics.moveTo(165, 145);
-    feedGraphics.lineTo(675, 145);
-    feedGraphics.lineTo(600, 190);
-    feedGraphics.lineTo(240, 190);
-    feedGraphics.closePath();
-    feedGraphics.fill();
-    
-    // Ceiling light fixture (dim green glow)
-    feedGraphics.fillStyle(0x112211, 0.8);
-    feedGraphics.fillRect(395, 160, 50, 8);
-    feedGraphics.fillStyle(0x113311, 0.3);
-    feedGraphics.fillRect(380, 168, 80, 25);
-    
-    // Floor with perspective grid lines
-    feedGraphics.fillStyle(0x0a0a14, 1);
-    feedGraphics.beginPath();
-    feedGraphics.moveTo(165, 555);
-    feedGraphics.lineTo(675, 555);
-    feedGraphics.lineTo(600, 440);
-    feedGraphics.lineTo(240, 440);
-    feedGraphics.closePath();
-    feedGraphics.fill();
-    
-    // Floor perspective lines
-    feedGraphics.lineStyle(1, 0x151520, 0.4);
-    feedGraphics.lineBetween(240, 440, 165, 555);
-    feedGraphics.lineBetween(320, 440, 260, 555);
-    feedGraphics.lineBetween(420, 440, 420, 555);
-    feedGraphics.lineBetween(520, 440, 580, 555);
-    feedGraphics.lineBetween(600, 440, 675, 555);
-    
-    // Back wall with panel texture
-    feedGraphics.fillStyle(0x0c0c16, 1);
-    feedGraphics.fillRect(240, 190, 360, 250);
-    
-    // Wall panel lines
-    feedGraphics.lineStyle(1, 0x141420, 0.5);
-    feedGraphics.lineBetween(300, 190, 300, 440);
-    feedGraphics.lineBetween(420, 190, 420, 440);
-    feedGraphics.lineBetween(540, 190, 540, 440);
-    feedGraphics.lineBetween(240, 280, 600, 280);
-    feedGraphics.lineBetween(240, 370, 600, 370);
-    
-    // Side walls with perspective
-    feedGraphics.fillStyle(0x080810, 1);
-    feedGraphics.beginPath();
-    feedGraphics.moveTo(165, 145);
-    feedGraphics.lineTo(240, 190);
-    feedGraphics.lineTo(240, 440);
-    feedGraphics.lineTo(165, 555);
-    feedGraphics.closePath();
-    feedGraphics.fill();
-    
-    feedGraphics.beginPath();
-    feedGraphics.moveTo(675, 145);
-    feedGraphics.lineTo(600, 190);
-    feedGraphics.lineTo(600, 440);
-    feedGraphics.lineTo(675, 555);
-    feedGraphics.closePath();
-    feedGraphics.fill();
-    
-    // Doorway/corridor entrance - darker void
-    feedGraphics.fillStyle(0x020204, 1);
-    feedGraphics.fillRect(360, 230, 120, 210);
-    
-    // Door frame
-    feedGraphics.lineStyle(2, 0x1a1a28);
-    feedGraphics.strokeRect(360, 230, 120, 210);
-    
-    // Pipes on walls
-    feedGraphics.fillStyle(0x181825, 1);
-    feedGraphics.fillRect(248, 200, 8, 235);
-    feedGraphics.fillRect(584, 200, 8, 235);
-    
-    this.cameraUI.add(feedGraphics);
-    
-    // "No activity" text (hidden - doorways just show darkness)
-    this.cameraFeedEmpty = this.add.text(420, 350, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#1a4422',
-    }).setOrigin(0.5);
-    this.cameraFeedEmpty.setVisible(false);  // Never show "CLEAR" text
-    this.cameraUI.add(this.cameraFeedEmpty);
-    
-    // (Removed clear text pulsing - no longer used)
-    this.tweens.add({
-      targets: this.cameraFeedEmpty,
-      alpha: 0.4,
-      duration: 1500,
-      yoyo: true,
-      repeat: -1,
-    });
-    
-    // Enemy figure in feed (shown when enemy is at selected camera)
-    // Position slightly left to make room for Demo head on right
-    this.cameraFeedEnemy = this.add.container(380, 370);
-    
-    // Create detailed enemy graphics
-    const enemyGraphics = this.add.graphics();
-    
-    // Shadow on ground
-    enemyGraphics.fillStyle(0x000000, 0.6);
-    enemyGraphics.fillEllipse(0, 90, 120, 30);
-    
-    // Default silhouette (will be redrawn based on enemy type)
-    drawEnemySilhouette(enemyGraphics, 'SCOUT');
-    
-    // Piercing glowing eyes (on face level, not above head)
-    this.cameraFeedEnemyEyeGlow = this.add.graphics();
-    this.cameraFeedEnemyEyeGlow.fillStyle(0xff0000, 0.3);
-    this.cameraFeedEnemyEyeGlow.fillCircle(-12, -55, 18);
-    this.cameraFeedEnemyEyeGlow.fillCircle(12, -55, 18);
-    this.cameraFeedEnemyEyeGlow.fillStyle(0xff0000, 1);
-    this.cameraFeedEnemyEyeGlow.fillCircle(-12, -55, 7);
-    this.cameraFeedEnemyEyeGlow.fillCircle(12, -55, 7);
-    this.cameraFeedEnemyEyeGlow.fillStyle(0xffffff, 1);
-    this.cameraFeedEnemyEyeGlow.fillCircle(-10, -57, 2);
-    this.cameraFeedEnemyEyeGlow.fillCircle(14, -57, 2);
-    
-    // Pulsing eye animation
-    this.tweens.add({
-      targets: this.cameraFeedEnemyEyeGlow,
-      alpha: 0.6,
-      duration: 300,
-      yoyo: true,
-      repeat: -1,
-    });
-    
-    const enemyLabel = this.add.text(0, 105, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#ff3333',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    
-    this.cameraFeedEnemy.add([enemyGraphics, this.cameraFeedEnemyEyeGlow, enemyLabel]);
-    this.cameraFeedEnemy.setVisible(false);
-    this.cameraUI.add(this.cameraFeedEnemy);
-    
-    // Slight sway animation for creepiness
-    this.tweens.add({
-      targets: this.cameraFeedEnemy,
-      x: 385,
-      duration: 2000,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-    
-    // SECOND enemy slot (for showing multiple enemies)
-    this.cameraFeedEnemy2 = this.add.container(480, 370);
-    const enemyGraphics2 = this.add.graphics();
-    enemyGraphics2.fillStyle(0x000000, 0.6);
-    enemyGraphics2.fillEllipse(0, 90, 100, 25);
-    const enemyLabel2 = this.add.text(0, 105, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#ff3333',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.cameraFeedEnemy2.add([enemyGraphics2, enemyLabel2]);
-    this.cameraFeedEnemy2.setVisible(false);
-    this.cameraFeedEnemy2.setScale(0.75); // Slightly smaller
-    this.cameraUI.add(this.cameraFeedEnemy2);
-    
-    this.tweens.add({
-      targets: this.cameraFeedEnemy2,
-      x: 485,
-      duration: 2200,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-    
-    // THIRD enemy slot (for showing multiple enemies)
-    this.cameraFeedEnemy3 = this.add.container(570, 380);
-    const enemyGraphics3 = this.add.graphics();
-    enemyGraphics3.fillStyle(0x000000, 0.6);
-    enemyGraphics3.fillEllipse(0, 90, 80, 20);
-    const enemyLabel3 = this.add.text(0, 105, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
-      color: '#ff3333',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.cameraFeedEnemy3.add([enemyGraphics3, enemyLabel3]);
-    this.cameraFeedEnemy3.setVisible(false);
-    this.cameraFeedEnemy3.setScale(0.6); // Smaller, in background
-    this.cameraUI.add(this.cameraFeedEnemy3);
-    
-    // SECONDARY DISPLAY: Demoman's head (can appear alongside other enemies)
-    this.cameraFeedDemoHead = this.add.container(530, 420);
-    const demoHeadGraphics = this.add.graphics();
-    // Will be drawn when visible
-    const demoHeadLabel = this.add.text(0, 55, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
-      color: '#44ff44',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.cameraFeedDemoHead.add([demoHeadGraphics, demoHeadLabel]);
-    this.cameraFeedDemoHead.setVisible(false);
-    this.cameraFeedDemoHead.setScale(0.7); // Smaller, off to the side
-    this.cameraUI.add(this.cameraFeedDemoHead);
-    
-    // LURE INDICATOR - shows when a lure is at this camera (placed or playing)
-    this.cameraLureIndicator = this.add.container(420, 490);
-    const lureBg = this.add.rectangle(0, 0, 180, 28, 0x553300, 0.9);
-    lureBg.setStrokeStyle(2, 0xffaa00);
-    const lureIcon = this.add.text(-70, 0, '♪', { fontSize: '16px', color: '#ffaa00' }).setOrigin(0.5);
-    const lureText = this.add.text(10, 0, 'LURE PLACED', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#ffcc00',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.cameraLureIndicator.add([lureBg, lureIcon, lureText]);
-    this.cameraLureIndicator.setVisible(false);
-    this.cameraUI.add(this.cameraLureIndicator);
-    
-    // Pulse the lure indicator when active
-    this.tweens.add({
-      targets: this.cameraLureIndicator,
-      alpha: 0.6,
-      duration: 500,
-      yoyo: true,
-      repeat: -1,
-    });
-    
-    // Recording indicator container - top left of screen
-    const recContainer = this.add.container(185, 158);
-    const recBg = this.add.rectangle(0, 0, 55, 20, 0x220000, 0.7);
-    recBg.setStrokeStyle(1, 0x440000);
-    const recDot = this.add.circle(-18, 0, 5, 0xff0000);
-    const recText = this.add.text(5, 0, 'REC', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
-      color: '#ff3333',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    recContainer.add([recBg, recDot, recText]);
-    this.cameraUI.add(recContainer);
-    
-    // Timestamp - bottom right of screen with background
-    const timestampBg = this.add.rectangle(625, 538, 85, 20, 0x001a08, 0.7);
-    timestampBg.setStrokeStyle(1, 0x003311);
-    this.cameraUI.add(timestampBg);
-    
-    const timestamp = this.add.text(625, 538, '12:XX AM', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
-      color: '#00aa44',
-    }).setOrigin(0.5);
-    this.cameraUI.add(timestamp);
-    
-    // Update timestamp periodically
-    // Update timestamp - only show hour (not minutes) to prevent predicting enemy arrivals
-    this.time.addEvent({
-      delay: 1000,  // Update every second
-      callback: () => {
-        if (this.isCameraMode) {
-          const hours24 = Math.floor(this.gameMinutes / 60);
-          const displayHours = hours24 === 0 ? 12 : hours24;
-          timestamp.setText(`${displayHours}:XX AM`); // No padding
+  /**
+   * Build the camera system UI (construction lives in src/ui/CameraUI.ts) and
+   * adopt the created objects as scene fields. Interaction logic stays here.
+   */
+  private buildCameraSystemUI(): void {
+    const el = buildCameraUI(this, {
+      isCameraModeNow: () => this.isCameraMode,
+      getGameMinutes: () => this.gameMinutes,
+      selectCamera: (index) => this.selectCamera(index),
+      onRepairCameraClicked: () => this.repairCamera(this.selectedCamera, true),
+      onAdminHackBarClicked: () => {
+        if (this.isAdministratorEnabled() && this.administrator && this.administrator.getState() === 'HACKING') {
+          this.administrator.interruptHack();
+          this.showAlert('Hack interrupted!', 0x00ff88);
         }
       },
-      loop: true,
-    });
-    
-    // Blink recording light
-    this.tweens.add({
-      targets: [recDot, recText],
-      alpha: 0.2,
-      duration: 500,
-      yoyo: true,
-      repeat: -1,
-    });
-    
-    // ========== MAP PANEL (RIGHT SIDE) ==========
-    // Outer frame stays visible even in vent mode; inner content hides
-
-    // Metal frame with industrial look - EXPANDED
-    const mapOuterFrame = this.add.rectangle(1000, 340, 370, 430, 0x1a1a20);
-    mapOuterFrame.setStrokeStyle(3, 0x3a3a44);
-    this.cameraUI.add(mapOuterFrame);
-    
-    // Screws/bolts in corners - adjusted for wider frame
-    const screwPositions = [[828, 138], [1172, 138], [828, 542], [1172, 542]];
-    screwPositions.forEach(([x, y]) => {
-      const screw = this.add.circle(x, y, 5, 0x555566);
-      screw.setStrokeStyle(1, 0x777788);
-      this.cameraUI.add(screw);
-      const screwSlot = this.add.text(x, y, '+', {
-        fontSize: '8px',
-        color: '#333344',
-      }).setOrigin(0.5);
-      this.cameraUI.add(screwSlot);
-    });
-    
-    // Screen bezel - WIDER to fit map
-    const mapFrame = this.add.rectangle(1000, 340, 355, 400, 0x0a0a0f);
-    mapFrame.setStrokeStyle(4, 0x222230);
-    this.cameraUI.add(mapFrame);
-    
-    // Inner screen with slight glow - WIDER
-    const mapScreen = this.add.rectangle(1000, 350, 340, 370, 0x050810);
-    mapScreen.setStrokeStyle(2, 0x1a3050);
-    this.cameraUI.add(mapScreen);
-    
-    // Title bar for map - WIDER
-    const mapTitleBar = this.add.rectangle(1000, 155, 340, 24, 0x0a1525);
-    mapTitleBar.setStrokeStyle(1, 0x1a3a55);
-    this.cameraUI.add(mapTitleBar);
-    
-    this.mapTitleText = this.add.text(1000, 155, '◈ FACILITY OVERVIEW ◈', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#5588cc',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.cameraUI.add(this.mapTitleText);
-
-    // Inner content container (hidden when viewing vents)
-    this.cameraMapContent = this.add.container(0, 0);
-    this.cameraUI.add(this.cameraMapContent);
-    
-    // Blueprint grid effect - WIDER
-    const gridGraphics = this.add.graphics();
-    gridGraphics.lineStyle(1, 0x0a2035, 0.4);
-    for (let x = 830; x <= 1170; x += 15) {
-      gridGraphics.lineBetween(x, 170, x, 530);
-    }
-    for (let y = 170; y <= 530; y += 15) {
-      gridGraphics.lineBetween(830, y, 1170, y);
-    }
-    this.cameraMapContent.add(gridGraphics);
-    
-    // Draw the map layout with paths - ALIGNED LAYOUT
-    const mapGraphics = this.add.graphics();
-    const mapOffsetX = 835;  // Shifted left for wider area
-    const mapOffsetY = 175;
-    const mapScale = 1.0;
-    
-    // Node positions (matching CAMERAS in types/index.ts) - spaced out bottom row
-    const staircaseX = mapOffsetX + 55;
-    const staircaseY = mapOffsetY + 30;
-    const courtyardX = mapOffsetX + 165;  // Above Spiral (adjusted)
-    const courtyardY = mapOffsetY + 30;
-    const leftHallX = mapOffsetX + 55;
-    const leftHallY = mapOffsetY + 105;
-    const rightHallX = mapOffsetX + 105;  // Spaced out
-    const rightHallY = mapOffsetY + 180;
-    const spiralX = mapOffsetX + 165;     // Spaced out
-    const spiralY = mapOffsetY + 180;
-    const grateX = mapOffsetX + 225;      // Spaced out
-    const grateY = mapOffsetY + 180;
-    const bridgeX = mapOffsetX + 285;     // Spaced out
-    const bridgeY = mapOffsetY + 180;
-    const sewerX = mapOffsetX + 225;      // Below Grate (adjusted)
-    const sewerY = mapOffsetY + 255;
-    const intelPathX = mapOffsetX + 55;   // Directly below Left Hall
-    const intelPathY = mapOffsetY + 255;  // Below the bottom row
-    
-    // Staircase to Courtyard (straight line at top)
-    mapGraphics.lineStyle(2, 0x3388cc, 0.6);
-    mapGraphics.lineBetween(staircaseX, staircaseY, courtyardX, courtyardY);
-    
-    // Staircase to Left Hall (vertical)
-    mapGraphics.lineBetween(staircaseX, staircaseY, leftHallX, leftHallY);
-    
-    // Courtyard to Grate (diagonal connection)
-    mapGraphics.lineStyle(2, 0x2266aa, 0.4);
-    mapGraphics.lineBetween(courtyardX, courtyardY, grateX, grateY);
-    
-    // Courtyard to Bridge (diagonal connection)
-    mapGraphics.lineBetween(courtyardX, courtyardY, bridgeX, bridgeY);
-    
-    // Left Hall to Intel (vertical down - directly below)
-    mapGraphics.lineStyle(2, 0xff6600, 0.5);
-    mapGraphics.lineBetween(leftHallX, leftHallY, intelPathX, intelPathY);
-    
-    // Right Hall to Intel (diagonal connection)
-    mapGraphics.lineStyle(2, 0xff6600, 0.4);
-    mapGraphics.lineBetween(rightHallX, rightHallY, intelPathX, intelPathY);
-    
-    // Left Hall to Right Hall (diagonal)
-    mapGraphics.lineStyle(2, 0x2266aa, 0.5);
-    mapGraphics.lineBetween(leftHallX, leftHallY, rightHallX, rightHallY);
-    
-    // Bottom horizontal row: Right Hall - Spiral - Grate - Bridge (more spaced out)
-    mapGraphics.lineStyle(2, 0x3388cc, 0.6);
-    mapGraphics.lineBetween(rightHallX, rightHallY, spiralX, spiralY);
-    mapGraphics.lineBetween(spiralX, spiralY, grateX, grateY);
-    mapGraphics.lineBetween(grateX, grateY, bridgeX, bridgeY);
-    
-    // Grate to Sewer (vertical down)
-    mapGraphics.lineStyle(2, 0x226644, 0.5); // Greenish for sewer
-    mapGraphics.lineBetween(grateX, grateY, sewerX, sewerY);
-    
-    this.cameraMapContent.add(mapGraphics);
-    
-    // Create clickable camera nodes on the map - cleaner design
-    CAMERAS.forEach((cam, index) => {
-      const nodeX = mapOffsetX + cam.mapX * mapScale;
-      const nodeY = mapOffsetY + cam.mapY * mapScale;
-      
-      // Outer selection ring (hidden by default)
-      // Node glow (square)
-      const nodeGlow = this.add.rectangle(nodeX, nodeY, 50, 50, 0x44aaff, 0);
-      
-      // Node background - square button (larger, easier to click)
-      const nodeBg = this.add.rectangle(nodeX, nodeY, 44, 44, 0x0a1830);
-      nodeBg.setStrokeStyle(2, 0x2266aa);
-      nodeBg.setInteractive({ useHandCursor: true });
-      
-      // Click to select camera
-      nodeBg.on('pointerdown', () => {
-        this.selectCamera(index);
-      });
-      nodeBg.on('pointerover', () => {
-        nodeBg.setFillStyle(0x1a3050);
-        nodeBg.setStrokeStyle(2, 0x44aaff);
-      });
-      nodeBg.on('pointerout', () => {
-        nodeBg.setFillStyle(0x0a1830);
-        nodeBg.setStrokeStyle(2, 0x2266aa);
-      });
-      
-      // Camera number - use cam.id to match the feed title
-      const camNum = this.add.text(nodeX, nodeY - 2, `${cam.id}`, {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '16px',
-        color: '#66aaee',
-        fontStyle: 'bold',
-      }).setOrigin(0.5);
-      
-      // Camera name below
-      const nodeLabel = this.add.text(nodeX, nodeY + 32, cam.name, {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '9px',
-        color: '#5588bb',
-      }).setOrigin(0.5);
-      
-      const nodeContainer = this.add.container(0, 0, [nodeGlow, nodeBg, camNum, nodeLabel]);
-      this.cameraMapNodes.set(cam.node, nodeContainer);
-      this.cameraMapContent.add(nodeContainer);
+      onTeleportButtonOver: () => {
+        if (this.isTeleportAnimating) {
+          this.teleportButtonBg.setFillStyle(0x664422);
+        } else if (this.isSelectedCameraHacked()) {
+          this.teleportButtonBg.setFillStyle(0x222222);
+        } else {
+          this.teleportButtonBg.setFillStyle(0x663333);
+        }
+      },
+      onTeleportButtonOut: () => {
+        this.administratorRepairActive = false;
+        if (this.isTeleportAnimating) {
+          this.teleportButtonBg.setFillStyle(0x553311);
+        } else if (this.isSelectedCameraHacked()) {
+          this.teleportButtonBg.setFillStyle(0x1a1a1a);
+        } else {
+          this.teleportButtonBg.setFillStyle(0x442222);
+        }
+      },
+      onTeleportButtonDown: () => {
+        // If teleport animation is in progress, cancel it
+        if (this.isTeleportAnimating) {
+          this.cancelTeleport();
+          return;
+        }
+        // If room is hacked, start hold-to-repair
+        if (this.isSelectedCameraHacked()) {
+          this.administratorRepairActive = true;
+          this.audio._administratorRepairSoundTimer = 0; // fire first tick immediately
+          return;
+        }
+        const cam = CAMERAS[this.selectedCamera];
+        this.teleportToRoom(cam.node);
+      },
+      onTeleportButtonUp: () => {
+        this.administratorRepairActive = false;
+      },
+      onLureButtonOver: () => {
+        const bg = this.cameraLureButton.list[0] as Phaser.GameObjects.Rectangle;
+        bg.setFillStyle(0x336666);
+      },
+      onLureButtonOut: () => this.updateCameraLureButtonStyle(),
+      onLureButtonDown: () => this.handleCameraLureAction(),
+      onReturnToIntel: () => this.returnToIntel(),
+      onToggleLure: () => this.toggleLure(),
     });
 
-    // Create hacked room X indicators on the map (hidden by default, shown when Administrator hacks a room)
-    CAMERAS.forEach((cam) => {
-      const nodeX = mapOffsetX + cam.mapX * mapScale;
-      const nodeY = mapOffsetY + cam.mapY * mapScale;
-      const hackIndicator = this.add.text(nodeX + 14, nodeY - 14, '✕', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '14px',
-        color: '#9944cc',
-        fontStyle: 'bold',
-      }).setOrigin(0.5).setVisible(false).setDepth(106);
-      this.hackedRoomMapIndicators.set(cam.node, hackIndicator);
-      this.cameraMapContent.add(hackIndicator);
-    });
-    
-    // Intel Room marker (your position) - directly below Left Hall
-    const intelMarkerX = mapOffsetX + 55;   // Same X as Left Hall
-    const intelMarkerY = mapOffsetY + 255;  // Below the bottom row, same as Sewer
-    
-    // Pulsing outer ring
-    const intelGlow = this.add.circle(intelMarkerX, intelMarkerY, 26, 0xff6600, 0.15);
-    this.cameraMapContent.add(intelGlow);
-    
-    // Main intel icon
-    this.intelRoomIcon = this.add.circle(intelMarkerX, intelMarkerY, 20, 0x331500);
-    this.intelRoomIcon.setStrokeStyle(3, 0xff6600);
-    this.cameraMapContent.add(this.intelRoomIcon);
-    
-    // Intel briefcase icon
-    const intelIcon = this.add.text(intelMarkerX, intelMarkerY - 2, '◆', {
-      fontSize: '16px',
-      color: '#ff8800',
-    }).setOrigin(0.5);
-    this.cameraMapContent.add(intelIcon);
-    
-    const intelLabel = this.add.text(intelMarkerX, intelMarkerY + 32, 'INTEL', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '9px',
-      color: '#ff9944',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.cameraMapContent.add(intelLabel);
-    
-    // Legend at bottom
-    const legendY = 505;
-    const legendBg = this.add.rectangle(1000, legendY, 250, 30, 0x0a1520, 0.8);
-    legendBg.setStrokeStyle(1, 0x1a3050);
-    this.cameraMapContent.add(legendBg);
-    
-    const legendText = this.add.text(1000, legendY, 'CLICK NODE TO VIEW CAMERA', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#4488aa',
-    }).setOrigin(0.5);
-    this.cameraMapContent.add(legendText);
-    
-    // Pulsing effect on YOUR position
-    this.tweens.add({
-      targets: [this.intelRoomIcon, intelGlow],
-      alpha: 0.4,
-      duration: 600,
-      yoyo: true,
-      repeat: -1,
-    });
-    
-    // Status text at bottom of map
-    const statusText = this.add.text(1000, 520, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#2a6a3a',
-    }).setOrigin(0.5);
-    this.cameraMapContent.add(statusText);
-    
-    // Map icons are NOT added - player must check cameras to find enemies
-    // Store references but keep them invisible (for internal use only)
-    this.scoutMapIcon = this.add.container(0, 0);
-    this.scoutMapIcon.setVisible(false);
-    this.soldierMapIcon = this.add.container(0, 0);
-    this.soldierMapIcon.setVisible(false);
-    
-    // Instructions at bottom
-    const camInstructions = this.add.text(640, 680, 'TAB TO EXIT', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#446644',
-    }).setOrigin(0.5);
-    this.cameraUI.add(camInstructions);
-    
-    // Create camera destroyed overlay (Night 3+)
-    this.createCameraDestroyedOverlay();
+    this.cameraUI = el.cameraUI;
+    this.cameraFeedPanel = el.cameraFeedPanel;
+    this.cameraFeedTitle = el.cameraFeedTitle;
+    this.cameraFeedEmpty = el.cameraFeedEmpty;
+    this.cameraFeedEnemy = el.cameraFeedEnemy;
+    this.cameraFeedEnemy2 = el.cameraFeedEnemy2;
+    this.cameraFeedEnemy3 = el.cameraFeedEnemy3;
+    this.cameraFeedEnemyEyeGlow = el.cameraFeedEnemyEyeGlow;
+    this.cameraFeedDemoHead = el.cameraFeedDemoHead;
+    this.cameraLureIndicator = el.cameraLureIndicator;
+    this.cameraStaticGraphics = el.cameraStaticGraphics;
+    this.cameraStaticBurstOverlay = el.cameraStaticBurstOverlay;
+    this.mapTitleText = el.mapTitleText;
+    this.cameraMapContent = el.cameraMapContent;
+    this.cameraMapNodes = el.cameraMapNodes;
+    this.hackedRoomMapIndicators = el.hackedRoomMapIndicators;
+    this.intelRoomIcon = el.intelRoomIcon;
+    this.scoutMapIcon = el.scoutMapIcon;
+    this.soldierMapIcon = el.soldierMapIcon;
+    this.cameraDestroyedOverlay = el.cameraDestroyedOverlay;
+    this.cameraDestroyedText = el.cameraDestroyedText;
+    this.cameraRepairButton = el.cameraRepairButton;
+    this.cameraWatchWarning = el.cameraWatchWarning;
+    this.cameraWatchBar = el.cameraWatchBar;
+    this.cameraBootOverlay = el.cameraBootOverlay;
+    this.administratorHackBarContainer = el.administratorHackBarContainer;
+    this.administratorHackBarBorder = el.administratorHackBarBorder;
+    this.administratorHackBarFill = el.administratorHackBarFill;
+    this.administratorHackBarCross = el.administratorHackBarCross;
+    this.administratorRepairOverlay = el.administratorRepairOverlay;
+    this.administratorRepairBarFill = el.administratorRepairBarFill;
+    this.teleportButton = el.teleportButton;
+    this.teleportButtonBg = el.teleportButtonBg;
+    this.teleportButtonText = el.teleportButtonText;
+    this.teleportRepairBarBg = el.teleportRepairBarBg;
+    this.teleportRepairBarFill = el.teleportRepairBarFill;
+    this.cameraLureButton = el.cameraLureButton;
+    this.roomViewUI = el.roomViewUI;
+    this.roomViewHeader = el.roomViewHeader;
+    this.lureButton = el.lureButton;
+    this.returnButton = el.returnButton;
+    this.escapeWarning = el.escapeWarning;
+    this.roomDoorway = el.roomDoorway;
+    this.roomDoorwayEyes = el.roomDoorwayEyes;
+    this.pyroEscapeWarning = el.pyroEscapeWarning;
+    this.pyroEscapeTimer = el.pyroEscapeTimer;
 
-    // Create Administrator hack bar overlay (Custom Night)
-    this.createAdministratorHackUI();
-    
-    // Static burst overlay for camera switching (all nights)
-    // Added last in createCameraUI so it renders on top of everything
-    this.cameraStaticBurstOverlay = this.add.graphics();
-    this.cameraStaticBurstOverlay.setVisible(false);
-    this.cameraUI.add(this.cameraStaticBurstOverlay);
-    
-    // Teleporter UI must be created every run: Phaser reuses this scene instance across
-    // scene.start() with different nights; skipping creation on Night 1–2 leaves stale
-    // references to Text/Rectangle objects destroyed at shutdown → camera switch crashes.
-    // Visibility stays off until Night 3+ (see selectCamera / toggleCameraMode).
-    this.createTeleporterUI();
-    
     // Initialize with first camera selected
     this.selectedCamera = 0;
-  }
-  
-  /**
-   * Create camera destroyed overlay (shown when Heavy destroys camera)
-   */
-  private createCameraDestroyedOverlay(): void {
-    this.cameraDestroyedOverlay = this.add.container(420, 360);
-    this.cameraDestroyedOverlay.setVisible(false);
-    this.cameraDestroyedOverlay.setDepth(105);
-    
-    // Static noise background
-    const staticBg = this.add.rectangle(0, 0, 520, 420, 0x111111, 0.95);
-    this.cameraDestroyedOverlay.add(staticBg);
-    
-    // Static noise effect
-    const staticNoise = this.add.graphics();
-    for (let i = 0; i < 100; i++) {
-      const x = Phaser.Math.Between(-250, 250);
-      const y = Phaser.Math.Between(-200, 200);
-      staticNoise.fillStyle(0xffffff, Math.random() * 0.3);
-      staticNoise.fillRect(x, y, 4, 2);
-    }
-    this.cameraDestroyedOverlay.add(staticNoise);
-    
-    // Destroyed text
-    this.cameraDestroyedText = this.add.text(0, -50, '-- CAMERA OFFLINE --', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '28px',
-      color: '#ff3333',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.cameraDestroyedOverlay.add(this.cameraDestroyedText);
-    
-    // Timer text
-    const timerText = this.add.text(0, 0, 'AUTO REPAIR: 30s', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#ff6666',
-    }).setOrigin(0.5);
-    this.cameraDestroyedOverlay.add(timerText);
-    
-    // Repair button
-    this.cameraRepairButton = this.add.container(0, 60);
-    const repairBtnBg = this.add.rectangle(0, 0, 200, 40, 0x224422);
-    repairBtnBg.setStrokeStyle(2, 0x44aa44);
-    repairBtnBg.setInteractive({ useHandCursor: true });
-    
-    const repairBtnText = this.add.text(0, 0, 'REPAIR (50 METAL)', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#66ff66',
-    }).setOrigin(0.5);
-    
-    this.cameraRepairButton.add([repairBtnBg, repairBtnText]);
-    this.cameraDestroyedOverlay.add(this.cameraRepairButton);
-    
-    repairBtnBg.on('pointerover', () => {
-      repairBtnBg.setFillStyle(0x336633);
-    });
-    repairBtnBg.on('pointerout', () => {
-      repairBtnBg.setFillStyle(0x224422);
-    });
-    repairBtnBg.on('pointerdown', () => {
-      this.repairCamera(this.selectedCamera, true);
-    });
-    
-    this.cameraUI.add(this.cameraDestroyedOverlay);
-    
-    // Camera watch warning overlay - shows when Heavy is about to break camera or Sniper is aiming
-    this.cameraWatchWarning = this.add.container(420, 200);
-    this.cameraWatchWarning.setVisible(false);
-    this.cameraWatchWarning.setDepth(104);
-    
-    // Warning bar background
-    const watchBarBg = this.add.rectangle(0, 0, 300, 20, 0x331111);
-    watchBarBg.setStrokeStyle(2, 0xff4444);
-    this.cameraWatchWarning.add(watchBarBg);
-    
-    // Warning bar fill (will be scaled based on progress)
-    this.cameraWatchBar = this.add.rectangle(-147, 0, 294, 14, 0xff4444, 0.8);
-    this.cameraWatchBar.setOrigin(0, 0.5);
-    this.cameraWatchWarning.add(this.cameraWatchBar);
-    
-    // Warning text
-    const watchWarningText = this.add.text(0, -25, 'LOOK AWAY', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#ff6666',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.cameraWatchWarning.add(watchWarningText);
-    
-    // Add scary shake animation to warning text
-    this.tweens.add({
-      targets: watchWarningText,
-      x: -2,
-      duration: 50,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-    this.tweens.add({
-      targets: watchWarningText,
-      y: -27,
-      duration: 60,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
-    
-    this.cameraUI.add(this.cameraWatchWarning);
-    
-    // ========== CAMERA BOOT-UP OVERLAY ==========
-    // Shown during the 1-second camera boot delay
-    // Must cover the entire camera view INCLUDING the title bar at the top
-    // Title bar is at y~128, feed goes from ~145 to ~555
-    // So we need to cover from y~110 to y~560, centered at y~335
-    this.cameraBootOverlay = this.add.container(420, 335);
-    this.cameraBootOverlay.setDepth(110); // Above other camera elements
-    
-    // Dark boot screen - sized to fully cover the camera screen AND title bar
-    // Covers from y=110 to y=560 (height 450) and x=155 to x=685 (width 530)
-    const bootScreenBg = this.add.rectangle(0, 0, 530, 460, 0x000803, 1.0);
-    bootScreenBg.setStrokeStyle(2, 0x003311);
-    this.cameraBootOverlay.add(bootScreenBg);
-    
-    // Boot-up text title (adjusted for new container position)
-    const bootTitle = this.add.text(0, -85, 'CAMERA SYSTEM', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#00aa44',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.cameraBootOverlay.add(bootTitle);
-    
-    // Boot status text (animated)
-    const bootStatus = this.add.text(0, -45, 'INITIALIZING...', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#006622',
-    }).setOrigin(0.5);
-    this.cameraBootOverlay.add(bootStatus);
-    
-    // Progress bar background (adjusted for new container position)
-    const bootBarBg = this.add.rectangle(0, 15, 300, 20, 0x001108);
-    bootBarBg.setStrokeStyle(2, 0x003311);
-    this.cameraBootOverlay.add(bootBarBg);
-    
-    // Progress bar fill (will be animated)
-    const bootBarFill = this.add.rectangle(-147, 15, 0, 14, 0x00aa44, 0.8);
-    bootBarFill.setOrigin(0, 0.5);
-    bootBarFill.setName('bootBarFill');
-    this.cameraBootOverlay.add(bootBarFill);
-    
-    // Boot percentage text
-    const bootPercent = this.add.text(0, 50, '0%', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#00aa44',
-    }).setOrigin(0.5);
-    bootPercent.setName('bootPercent');
-    this.cameraBootOverlay.add(bootPercent);
-    
-    // Scanlines for boot screen (matches camera feed aesthetic)
-    const bootScanlines = this.add.graphics();
-    for (let y = -230; y < 230; y += 4) {
-      bootScanlines.lineStyle(1, 0x000000, 0.3);
-      bootScanlines.lineBetween(-265, y, 265, y);
-    }
-    this.cameraBootOverlay.add(bootScanlines);
-    
-    // Boot log messages (scrolling up effect, adjusted for new container position)
-    const bootLog1 = this.add.text(0, 95, '> Connecting to network...', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#004422',
-    }).setOrigin(0.5);
-    const bootLog2 = this.add.text(0, 115, '> Loading camera feeds...', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#004422',
-    }).setOrigin(0.5);
-    const bootLog3 = this.add.text(0, 135, '> Calibrating night vision...', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#004422',
-    }).setOrigin(0.5);
-    this.cameraBootOverlay.add([bootLog1, bootLog2, bootLog3]);
-    
-    this.cameraBootOverlay.setVisible(false);
-    this.cameraUI.add(this.cameraBootOverlay);
-  }
-
-  /**
-   * Create Administrator hack bar and teleporter repair overlay (Custom Night)
-   */
-  private createAdministratorHackUI(): void {
-    // ---- Hack bar: shown at bottom of camera feed when Administrator is targeting/hacking ----
-    // Camera panel is centered at 420,350 and is 510×410 — bottom edge is at y≈555.
-    // Place bar near the bottom inside the panel: y=510 (45px from bottom edge).
-    this.administratorHackBarContainer = this.add.container(420, 510);
-    this.administratorHackBarContainer.setVisible(false);
-    this.administratorHackBarContainer.setDepth(104);
-
-    // Semi-transparent backing strip — fully transparent so it doesn't obscure camera feed
-    const hackBarBacking = this.add.rectangle(0, 0, 510, 44, 0x000000, 0);
-    this.administratorHackBarContainer.add(hackBarBacking);
-
-    // Bar background
-    this.administratorHackBarBorder = this.add.rectangle(0, 6, 360, 16, 0x111111);
-    this.administratorHackBarBorder.setStrokeStyle(2, 0x555555);
-    this.administratorHackBarContainer.add(this.administratorHackBarBorder);
-
-    // Bar fill (scales 0→1 left-to-right)
-    this.administratorHackBarFill = this.add.rectangle(-178, 6, 356, 10, 0x444444, 0.7);
-    this.administratorHackBarFill.setOrigin(0, 0.5);
-    this.administratorHackBarContainer.add(this.administratorHackBarFill);
-
-    // Diagonal cross — drawn over the bar track when empty (TARGETING phase warning)
-    this.administratorHackBarCross = this.add.graphics();
-    this.administratorHackBarCross.lineStyle(2, 0x553377, 0.8);
-    this.administratorHackBarCross.lineBetween(-178, -2, 178, 14);  // top-left → bottom-right
-    this.administratorHackBarCross.lineBetween(-178, 14, 178, -2);  // bottom-left → top-right
-    this.administratorHackBarContainer.add(this.administratorHackBarCross);
-
-    // Label text (left of bar)
-    const hackLabel = this.add.text(-178, -10, 'TELEPORTER HACK', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#bb66ee',
-      fontStyle: 'bold',
-    }).setOrigin(0, 0.5);
-    this.administratorHackBarContainer.add(hackLabel);
-
-    // Hint text (right of bar)
-    const hackHint = this.add.text(178, -10, 'CLICK TO INTERRUPT', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#7744aa',
-    }).setOrigin(1, 0.5);
-    this.administratorHackBarContainer.add(hackHint);
-
-    // Clickable hit area over the whole strip
-    const hackHitArea = this.add.rectangle(0, 0, 510, 44, 0x000000, 0);
-    hackHitArea.setInteractive({ useHandCursor: true });
-    hackHitArea.on('pointerdown', () => {
-      if (this.isAdministratorEnabled() && this.administrator && this.administrator.getState() === 'HACKING') {
-        this.administrator.interruptHack();
-        this.showAlert('Hack interrupted!', 0x00ff88);
-      }
-    });
-    this.administratorHackBarContainer.add(hackHitArea);
-
-    this.cameraUI.add(this.administratorHackBarContainer);
-
-    // ---- Repair bar: embedded in the teleport button (see createTeleporterUI / updateTeleportButtonAppearance) ----
-    // The repair overlay is no longer a camera overlay — repair is done via the TELEPORT HERE button.
-    // administratorRepairOverlay is kept as a stub so existing references don't crash.
-    this.administratorRepairOverlay = this.add.container(0, 0);
-    this.administratorRepairOverlay.setVisible(false);
-    this.administratorRepairBarFill = this.add.rectangle(0, 0, 0, 0, 0x000000, 0); // invisible stub
-  }
-
-  /**
-   * Create teleporter UI for Night 3+
-   */
-  private createTeleporterUI(): void {
-    // Teleport button on camera map (shows when viewing a camera)
-    this.teleportButton = this.add.container(1000, 570);
-    
-    this.teleportButtonBg = this.add.rectangle(0, 0, 180, 35, 0x442222);
-    this.teleportButtonBg.setStrokeStyle(2, 0xcc4444);
-    this.teleportButtonBg.setInteractive({ useHandCursor: true });
-    
-    this.teleportButtonText = this.add.text(0, 0, 'TELEPORT HERE', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#ff8888',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-
-    // Repair bar (hidden by default, shown when room is hacked)
-    this.teleportRepairBarBg = this.add.rectangle(0, 10, 156, 7, 0x150822);
-    this.teleportRepairBarBg.setStrokeStyle(1, 0xbb66ee);
-    this.teleportRepairBarBg.setVisible(false);
-
-    this.teleportRepairBarFill = this.add.rectangle(-76, 10, 152, 3, 0x00ff88, 0.9);
-    this.teleportRepairBarFill.setOrigin(0, 0.5);
-    this.teleportRepairBarFill.setScale(0, 1);
-    this.teleportRepairBarFill.setVisible(false);
-    
-    this.teleportButton.add([
-      this.teleportButtonBg,
-      this.teleportButtonText,
-      this.teleportRepairBarBg,
-      this.teleportRepairBarFill,
-    ]);
-    this.teleportButton.setVisible(false);
-    this.cameraUI.add(this.teleportButton);
-    
-    this.teleportButtonBg.on('pointerover', () => {
-      if (this.isTeleportAnimating) {
-        this.teleportButtonBg.setFillStyle(0x664422);
-      } else if (this.isSelectedCameraHacked()) {
-        this.teleportButtonBg.setFillStyle(0x222222);
-      } else {
-        this.teleportButtonBg.setFillStyle(0x663333);
-      }
-    });
-    this.teleportButtonBg.on('pointerout', () => {
-      this.administratorRepairActive = false;
-      if (this.isTeleportAnimating) {
-        this.teleportButtonBg.setFillStyle(0x553311);
-      } else if (this.isSelectedCameraHacked()) {
-        this.teleportButtonBg.setFillStyle(0x1a1a1a);
-      } else {
-        this.teleportButtonBg.setFillStyle(0x442222);
-      }
-    });
-    this.teleportButtonBg.on('pointerdown', () => {
-      // If teleport animation is in progress, cancel it
-      if (this.isTeleportAnimating) {
-        this.cancelTeleport();
-        return;
-      }
-      // If room is hacked, start hold-to-repair
-      if (this.isSelectedCameraHacked()) {
-        this.administratorRepairActive = true;
-        this.audio._administratorRepairSoundTimer = 0; // fire first tick immediately
-        return;
-      }
-      const cam = CAMERAS[this.selectedCamera];
-      this.teleportToRoom(cam.node);
-    });
-    this.teleportButtonBg.on('pointerup', () => {
-      this.administratorRepairActive = false;
-    });
-    
-    // Camera lure button (play or remove lure from camera view)
-    this.cameraLureButton = this.add.container(1000, 520);
-    
-    const lureBtnBg = this.add.rectangle(0, 0, 180, 35, 0x224444);
-    lureBtnBg.setStrokeStyle(2, 0x44aaaa);
-    lureBtnBg.setInteractive({ useHandCursor: true });
-    
-    const lureBtnText = this.add.text(0, 0, 'PLAY LURE', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#66ffff',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    
-    this.cameraLureButton.add([lureBtnBg, lureBtnText]);
-    this.cameraLureButton.setVisible(false);
-    this.cameraUI.add(this.cameraLureButton);
-    
-    lureBtnBg.on('pointerover', () => {
-      const bg = this.cameraLureButton.list[0] as Phaser.GameObjects.Rectangle;
-      bg.setFillStyle(0x336666);
-    });
-    lureBtnBg.on('pointerout', () => {
-      this.updateCameraLureButtonStyle();
-    });
-    lureBtnBg.on('pointerdown', () => {
-      this.handleCameraLureAction();
-    });
-    
-    // Room view UI (shown when teleported)
-    this.createRoomViewUI();
   }
   
   /**
@@ -3029,242 +2092,6 @@ export class GameScene extends Phaser.Scene {
     if (hasUnplayedLure) {
       this.updateCameraLureButtonStyle();
     }
-  }
-  
-  /**
-   * Create room view UI (when engineer teleports to a room) - FULLSCREEN
-   */
-  private createRoomViewUI(): void {
-    this.roomViewUI = this.add.container(0, 0);
-    this.roomViewUI.setVisible(false);
-    this.roomViewUI.setDepth(110);
-    
-    // ===== FULLSCREEN ROOM VIEW =====
-    // Floor/wall perspective - fills the entire screen
-    const roomGraphics = this.add.graphics();
-    
-    // Ceiling
-    roomGraphics.fillStyle(0x080810, 1);
-    roomGraphics.beginPath();
-    roomGraphics.moveTo(0, 0);
-    roomGraphics.lineTo(1280, 0);
-    roomGraphics.lineTo(1100, 150);
-    roomGraphics.lineTo(180, 150);
-    roomGraphics.closePath();
-    roomGraphics.fill();
-    
-    // Back wall
-    roomGraphics.fillStyle(0x12121a, 1);
-    roomGraphics.fillRect(180, 150, 920, 250);
-    
-    // Left wall
-    roomGraphics.fillStyle(0x0e0e14, 1);
-    roomGraphics.beginPath();
-    roomGraphics.moveTo(0, 0);
-    roomGraphics.lineTo(180, 150);
-    roomGraphics.lineTo(180, 400);
-    roomGraphics.lineTo(0, 720);
-    roomGraphics.closePath();
-    roomGraphics.fill();
-    
-    // Right wall
-    roomGraphics.fillStyle(0x0e0e14, 1);
-    roomGraphics.beginPath();
-    roomGraphics.moveTo(1280, 0);
-    roomGraphics.lineTo(1100, 150);
-    roomGraphics.lineTo(1100, 400);
-    roomGraphics.lineTo(1280, 720);
-    roomGraphics.closePath();
-    roomGraphics.fill();
-    
-    // Floor with perspective
-    roomGraphics.fillStyle(0x0a0a10, 1);
-    roomGraphics.beginPath();
-    roomGraphics.moveTo(0, 720);
-    roomGraphics.lineTo(1280, 720);
-    roomGraphics.lineTo(1100, 400);
-    roomGraphics.lineTo(180, 400);
-    roomGraphics.closePath();
-    roomGraphics.fill();
-    
-    // Floor grid lines
-    roomGraphics.lineStyle(1, 0x1a1a25, 0.4);
-    for (let i = 0; i <= 8; i++) {
-      const t = i / 8;
-      const y = 400 + t * 320;
-      const leftX = 180 - t * 180;
-      const rightX = 1100 + t * 180;
-      roomGraphics.lineBetween(leftX, y, rightX, y);
-    }
-    
-    // Wall edges
-    roomGraphics.lineStyle(2, 0x2a2a40, 0.6);
-    roomGraphics.lineBetween(180, 150, 0, 720);
-    roomGraphics.lineBetween(1100, 150, 1280, 720);
-    roomGraphics.lineBetween(180, 150, 1100, 150);
-    roomGraphics.lineBetween(180, 400, 1100, 400);
-    
-    this.roomViewUI.add(roomGraphics);
-    
-    // Doorway in the back wall (larger, centered)
-    this.roomDoorway = this.add.container(640, 280);
-    
-    const doorFrame = this.add.graphics();
-    // Dark doorway opening
-    doorFrame.fillStyle(0x000000, 1);
-    doorFrame.fillRect(-80, -110, 160, 220);
-    // Door frame edges
-    doorFrame.lineStyle(3, 0x333344, 0.8);
-    doorFrame.strokeRect(-80, -110, 160, 220);
-    // Inner darkness
-    doorFrame.fillStyle(0x030308, 0.9);
-    doorFrame.fillRect(-70, -100, 140, 200);
-    
-    this.roomDoorway.add(doorFrame);
-    this.roomViewUI.add(this.roomDoorway);
-    
-    // Red eyes in doorway (shown when enemy approaches)
-    this.roomDoorwayEyes = this.add.container(640, 260);
-    this.roomDoorwayEyes.setVisible(false);
-    
-    const eyesGraphics = this.add.graphics();
-    // Left eye - larger
-    eyesGraphics.fillStyle(0xff0000, 0.9);
-    eyesGraphics.fillCircle(-20, 0, 10);
-    eyesGraphics.fillStyle(0xffaaaa, 1);
-    eyesGraphics.fillCircle(-23, -3, 3);
-    // Right eye
-    eyesGraphics.fillStyle(0xff0000, 0.9);
-    eyesGraphics.fillCircle(20, 0, 10);
-    eyesGraphics.fillStyle(0xffaaaa, 1);
-    eyesGraphics.fillCircle(17, -3, 3);
-    
-    this.roomDoorwayEyes.add(eyesGraphics);
-    this.roomViewUI.add(this.roomDoorwayEyes);
-    
-    // Room name header - top left
-    this.roomViewHeader = this.add.text(40, 30, 'ROOM: ---', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#44ff44',
-      fontStyle: 'bold',
-    });
-    this.roomViewUI.add(this.roomViewHeader);
-    
-    // "You are here" indicator
-    const hereText = this.add.text(640, 480, '', {  // Empty - not needed
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#44ff44',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.roomViewUI.add(hereText);
-    
-    // ===== BOTTOM ACTION BAR =====
-    const actionBar = this.add.rectangle(640, 660, 1200, 100, 0x0a0a15, 0.95);
-    actionBar.setStrokeStyle(2, 0x333355);
-    this.roomViewUI.add(actionBar);
-    
-    // Lure button - left side of bar
-    this.lureButton = this.add.container(400, 660);
-    const lureBtnBg = this.add.rectangle(0, 0, 280, 60, 0x224444);
-    lureBtnBg.setStrokeStyle(2, 0x44aaaa);
-    lureBtnBg.setInteractive({ useHandCursor: true });
-    
-    const lureBtnText = this.add.text(0, 0, 'PLACE LURE (50 METAL)', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#66ffff',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    
-    this.lureButton.add([lureBtnBg, lureBtnText]);
-    this.roomViewUI.add(this.lureButton);
-    
-    lureBtnBg.on('pointerover', () => lureBtnBg.setFillStyle(0x335555));
-    lureBtnBg.on('pointerout', () => lureBtnBg.setFillStyle(0x224444));
-    lureBtnBg.on('pointerdown', () => this.toggleLure());
-    
-    // Return button - right side of bar
-    this.returnButton = this.add.container(880, 660);
-    const returnBtnBg = this.add.rectangle(0, 0, 280, 60, 0x442222);
-    returnBtnBg.setStrokeStyle(2, 0xaa4444);
-    returnBtnBg.setInteractive({ useHandCursor: true });
-    
-    const returnBtnText = this.add.text(0, 0, 'RETURN TO INTEL', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#ff6666',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    
-    this.returnButton.add([returnBtnBg, returnBtnText]);
-    this.roomViewUI.add(this.returnButton);
-    
-    returnBtnBg.on('pointerover', () => returnBtnBg.setFillStyle(0x553333));
-    returnBtnBg.on('pointerout', () => returnBtnBg.setFillStyle(0x442222));
-    returnBtnBg.on('pointerdown', () => this.returnToIntel());
-    
-    // Tip text (removed - not needed)
-    const tipText = this.add.text(640, 620, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
-      color: '#555566',
-    }).setOrigin(0.5);
-    this.roomViewUI.add(tipText);
-    
-    // Escape warning overlay - positioned below the doorway, centered
-    this.escapeWarning = this.add.container(640, 580);
-    this.escapeWarning.setVisible(false);
-    this.escapeWarning.setDepth(50);
-    
-    // Bar background (dark, full width)
-    const barBg = this.add.rectangle(0, 0, 320, 20, 0x220000);
-    barBg.setStrokeStyle(2, 0x440000);
-    
-    // Progress bar that shrinks (starts full, shrinks to 0)
-    const progressBar = this.add.rectangle(-155, 0, 310, 14, 0xff0000);
-    progressBar.setOrigin(0, 0.5);
-    
-    // Inner glow effect
-    const innerGlow = this.add.rectangle(-155, 0, 310, 8, 0xff4444);
-    innerGlow.setOrigin(0, 0.5);
-    
-    this.escapeWarning.add([barBg, progressBar, innerGlow]);
-    this.roomViewUI.add(this.escapeWarning);
-    
-    // Pyro escape warning (Custom Night only) - appears in Intel room when Pyro lights match
-    this.pyroEscapeWarning = this.add.container(640, 100);
-    this.pyroEscapeWarning.setVisible(false);
-    this.pyroEscapeWarning.setDepth(100);
-    
-    // Fiery background panel
-    const pyroBg = this.add.rectangle(0, 0, 400, 80, 0x331100, 0.95);
-    pyroBg.setStrokeStyle(3, 0xff4400);
-    
-    // Warning text
-    const pyroWarningText = this.add.text(0, -20, 'PYRO LIT A MATCH!', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#ff6600',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    
-    // Timer text
-    this.pyroEscapeTimer = this.add.text(0, 15, 'ESCAPE: 10s', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#ffaa00',
-    }).setOrigin(0.5);
-    
-    // Fire icon hint
-    const fireHint = this.add.text(0, 40, 'TELEPORT TO ESCAPE!', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#ff8844',
-    }).setOrigin(0.5);
-    
-    this.pyroEscapeWarning.add([pyroBg, pyroWarningText, this.pyroEscapeTimer, fireHint]);
   }
   
   /**
@@ -4180,263 +3007,6 @@ export class GameScene extends Phaser.Scene {
   // VENT CAMERA SYSTEM (Pauling - Custom Night)
   // ============================================
 
-  private createVentUI(): void {
-    // Vent map overlay (shown over the camera feed area when in vent mode)
-    this.ventUI = this.add.container(0, 0);
-    this.ventUI.setVisible(false);
-    this.ventUI.setDepth(105);
-
-    const ventBg = this.add.rectangle(420, 340, 580, 500, 0x0a0a10);
-    ventBg.setStrokeStyle(4, 0x151520);
-    this.ventUI.add(ventBg);
-
-    const ventTitle = this.add.text(420, 120, 'VENT SYSTEM', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#cc88ff',
-    }).setOrigin(0.5);
-    this.ventUI.add(ventTitle);
-
-    const nodePositions: Record<string, { x: number; y: number }> = {
-      'VENT_ENTRY': { x: 420, y: 180 },
-      'VENT_MID': { x: 420, y: 245 },
-      'VENT_JUNCTION': { x: 420, y: 310 },
-      'VENT_LEFT_UPPER': { x: 270, y: 370 },
-      'VENT_RIGHT_UPPER': { x: 570, y: 370 },
-      'VENT_LEFT_LOWER': { x: 270, y: 430 },
-      'VENT_RIGHT_LOWER': { x: 570, y: 430 },
-      'VENT_LEFT_OPENING': { x: 270, y: 490 },
-      'VENT_RIGHT_OPENING': { x: 570, y: 490 },
-    };
-
-    const lineGraphics = this.add.graphics();
-    lineGraphics.lineStyle(2, 0x553388, 0.6);
-    lineGraphics.lineBetween(420, 180, 420, 245);
-    lineGraphics.lineBetween(420, 245, 420, 310);
-    lineGraphics.lineBetween(420, 310, 270, 370);
-    lineGraphics.lineBetween(420, 310, 570, 370);
-    lineGraphics.lineBetween(270, 370, 270, 430);
-    lineGraphics.lineBetween(570, 370, 570, 430);
-    lineGraphics.lineBetween(270, 430, 270, 490);
-    lineGraphics.lineBetween(570, 430, 570, 490);
-    this.ventUI.add(lineGraphics);
-
-    const nodeNames: Record<string, string> = {
-      'VENT_ENTRY': 'ENTRY',
-      'VENT_MID': 'MID',
-      'VENT_JUNCTION': 'JUNCTION',
-      'VENT_LEFT_UPPER': 'L.UPPER',
-      'VENT_RIGHT_UPPER': 'R.UPPER',
-      'VENT_LEFT_LOWER': 'L.LOWER',
-      'VENT_RIGHT_LOWER': 'R.LOWER',
-      'VENT_LEFT_OPENING': 'L.VENT',
-      'VENT_RIGHT_OPENING': 'R.VENT',
-    };
-
-    for (const [nodeId, pos] of Object.entries(nodePositions)) {
-      const container = this.add.container(pos.x, pos.y);
-      const bg = this.add.rectangle(0, 0, 80, 24, 0x221133);
-      bg.setStrokeStyle(1, 0x553388);
-      container.add(bg);
-      const label = this.add.text(0, 0, nodeNames[nodeId] || nodeId, {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '10px',
-        color: '#aa88cc',
-      }).setOrigin(0.5);
-      container.add(label);
-      this.ventUI.add(container);
-      this.ventNodeGraphics.set(nodeId, container);
-    }
-
-    // Pauling icon — silhouette with dark hair and purple outfit
-    this.ventPaulingIcon = this.add.container(420, 170);
-    const paulingGfx = this.add.graphics();
-    // Hair (dark, shoulder-length)
-    paulingGfx.fillStyle(0x1a1a2a, 1);
-    paulingGfx.fillCircle(0, -20, 8);
-    paulingGfx.fillRoundedRect(-7, -20, 14, 10, 2);
-    // Face
-    paulingGfx.fillStyle(0xddbb99, 1);
-    paulingGfx.fillCircle(0, -22, 5);
-    // Glasses (small rectangles)
-    paulingGfx.fillStyle(0x888888, 0.9);
-    paulingGfx.fillRect(-5, -24, 4, 2);
-    paulingGfx.fillRect(1, -24, 4, 2);
-    // Body (purple dress/suit)
-    paulingGfx.fillStyle(0x7733aa, 1);
-    paulingGfx.fillRoundedRect(-6, -12, 12, 14, 3);
-    // Arms
-    paulingGfx.fillRect(-9, -10, 4, 10);
-    paulingGfx.fillRect(5, -10, 4, 10);
-    this.ventPaulingIcon.add(paulingGfx);
-    const paulingLabel = this.add.text(0, 6, 'PAULING', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '7px',
-      color: '#cc88ff',
-    }).setOrigin(0.5);
-    this.ventPaulingIcon.add(paulingLabel);
-    this.ventUI.add(this.ventPaulingIcon);
-
-    // Seal indicators on the vent map (visual only)
-    this.ventSealLeftIndicator = this.add.rectangle(270, 510, 80, 8, 0x333333, 0);
-    this.ventUI.add(this.ventSealLeftIndicator);
-    this.ventSealRightIndicator = this.add.rectangle(570, 510, 80, 8, 0x333333, 0);
-    this.ventUI.add(this.ventSealRightIndicator);
-
-    // Seal buttons and thermostat go in the right panel (ventPanelControls)
-    this.ventPanelControls = this.add.container(0, 0);
-    this.ventPanelControls.setDepth(102);
-    this.ventPanelControls.setVisible(false);
-    this.cameraUI.add(this.ventPanelControls);
-
-    // Left seal button (in right panel)
-    this.ventSealLeftBtn = this.add.container(920, 280);
-    const leftBtnBg = this.add.rectangle(0, 0, 140, 40, 0x332244);
-    leftBtnBg.setStrokeStyle(2, 0x664488);
-    leftBtnBg.setInteractive({ useHandCursor: true });
-    const leftBtnText = this.add.text(0, 0, 'SEAL LEFT', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '13px',
-      color: '#cc88ff',
-    }).setOrigin(0.5);
-    leftBtnBg.on('pointerdown', () => this.toggleVentSeal('LEFT'));
-    leftBtnBg.on('pointerover', () => leftBtnBg.setFillStyle(0x443355));
-    leftBtnBg.on('pointerout', () => leftBtnBg.setFillStyle(0x332244));
-    this.ventSealLeftBtn.add([leftBtnBg, leftBtnText]);
-    this.ventPanelControls.add(this.ventSealLeftBtn);
-
-    // Right seal button (in right panel)
-    this.ventSealRightBtn = this.add.container(1080, 280);
-    const rightBtnBg = this.add.rectangle(0, 0, 140, 40, 0x332244);
-    rightBtnBg.setStrokeStyle(2, 0x664488);
-    rightBtnBg.setInteractive({ useHandCursor: true });
-    const rightBtnText = this.add.text(0, 0, 'SEAL RIGHT', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '13px',
-      color: '#cc88ff',
-    }).setOrigin(0.5);
-    rightBtnBg.on('pointerdown', () => this.toggleVentSeal('RIGHT'));
-    rightBtnBg.on('pointerover', () => rightBtnBg.setFillStyle(0x443355));
-    rightBtnBg.on('pointerout', () => rightBtnBg.setFillStyle(0x332244));
-    this.ventSealRightBtn.add([rightBtnBg, rightBtnText]);
-    this.ventPanelControls.add(this.ventSealRightBtn);
-
-    // Vent panel thermostat (vertical, in right panel)
-    const ventThermoContainer = this.add.container(1000, 420);
-
-    const vtHousing = this.add.rectangle(0, 0, 36, 90, 0x1a1a22);
-    vtHousing.setStrokeStyle(1, 0x333344);
-    ventThermoContainer.add(vtHousing);
-
-    const vtLabel = this.add.text(0, -55, 'TEMPERATURE', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#888888',
-    }).setOrigin(0.5);
-    ventThermoContainer.add(vtLabel);
-
-    const vtBarBg = this.add.rectangle(0, 0, 14, 66, 0x0a0a0a);
-    vtBarBg.setStrokeStyle(1, 0x444444);
-    ventThermoContainer.add(vtBarBg);
-
-    this.ventPanelThermoFill = this.add.rectangle(0, 33, 10, 0, 0x44cc44);
-    this.ventPanelThermoFill.setOrigin(0.5, 1);
-    ventThermoContainer.add(this.ventPanelThermoFill);
-
-    this.ventPanelThermoText = this.add.text(0, 55, '0°', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
-      color: '#666666',
-    }).setOrigin(0.5);
-    ventThermoContainer.add(this.ventPanelThermoText);
-
-    this.ventPanelControls.add(ventThermoContainer);
-
-    // ROOMS / VENTS folder tabs above the facility overview map panel
-    const tabY = 127;
-    const tabW = 110;
-    const tabH = 30;
-    const tabGap = 8;
-
-    this.ventCamsToggleBtn = this.add.container(0, 0);
-    this.ventCamsToggleBtn.setDepth(106);
-
-    // "ROOMS" tab
-    const roomsTabBg = this.add.rectangle(1000 - tabW/2 - tabGap/2, tabY, tabW, tabH, 0x0a1525);
-    roomsTabBg.setStrokeStyle(2, 0x3388cc);
-    roomsTabBg.setInteractive({ useHandCursor: true });
-    const roomsTabText = this.add.text(1000 - tabW/2 - tabGap/2, tabY, 'ROOMS', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '13px',
-      color: '#5588cc',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    roomsTabBg.on('pointerdown', () => {
-      if (this.isVentCameraMode) this.toggleVentCameraMode();
-    });
-    roomsTabBg.on('pointerover', () => roomsTabBg.setFillStyle(0x112233));
-    roomsTabBg.on('pointerout', () => roomsTabBg.setFillStyle(0x0a1525));
-
-    // "VENTS" tab
-    const ventsTabBg = this.add.rectangle(1000 + tabW/2 + tabGap/2, tabY, tabW, tabH, 0x15081a);
-    ventsTabBg.setStrokeStyle(2, 0x553388);
-    ventsTabBg.setInteractive({ useHandCursor: true });
-    this.ventCamsToggleText = this.add.text(1000 + tabW/2 + tabGap/2, tabY, 'VENTS', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '13px',
-      color: '#9944cc',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    ventsTabBg.on('pointerdown', () => {
-      if (!this.isVentCameraMode) this.toggleVentCameraMode();
-    });
-    ventsTabBg.on('pointerover', () => ventsTabBg.setFillStyle(0x221133));
-    ventsTabBg.on('pointerout', () => ventsTabBg.setFillStyle(0x15081a));
-
-    this.ventCamsToggleBtn.add([roomsTabBg, roomsTabText, ventsTabBg, this.ventCamsToggleText]);
-    this.ventCamsToggleBtn.setVisible(false);
-    this.cameraUI.add(this.ventCamsToggleBtn);
-  }
-
-  private createThermostatUI(): void {
-    // Thermostat on the wall to the left of the right door
-    // Right door is at x=1160; place thermostat at x=1060, vertical on the wall
-    this.thermostatContainer = this.add.container(1060, 260);
-    this.thermostatContainer.setDepth(5);
-    this.thermostatContainer.setVisible(false);
-
-    // Thermostat housing (small wall-mounted box)
-    const housing = this.add.rectangle(0, 0, 28, 70, 0x1a1a22);
-    housing.setStrokeStyle(1, 0x333344);
-    this.thermostatContainer.add(housing);
-
-    // Label above
-    const label = this.add.text(0, -42, 'TEMP', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '8px',
-      color: '#666666',
-    }).setOrigin(0.5);
-    this.thermostatContainer.add(label);
-
-    // Vertical bar background (mercury-style)
-    const barBg = this.add.rectangle(0, 0, 10, 50, 0x0a0a0a);
-    barBg.setStrokeStyle(1, 0x444444);
-    this.thermostatContainer.add(barBg);
-
-    // Fill bar (grows upward from bottom)
-    this.thermostatFill = this.add.rectangle(0, 25, 6, 0, 0x44cc44);
-    this.thermostatFill.setOrigin(0.5, 1);
-    this.thermostatContainer.add(this.thermostatFill);
-
-    // Percentage text below
-    this.thermostatText = this.add.text(0, 42, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '8px',
-      color: '#666666',
-    }).setOrigin(0.5);
-    this.thermostatContainer.add(this.thermostatText);
-  }
-
   private toggleVentCameraMode(): void {
     if (!this.isPaulingEnabled()) return;
 
@@ -4444,16 +3014,14 @@ export class GameScene extends Phaser.Scene {
     this.audio.playVentTabClickSound();
 
     if (this.isVentCameraMode) {
-      this.ventUI.setVisible(true);
-      this.ventPanelControls.setVisible(true);
+      this.ventUI.setVentViewVisible(true);
       this.cameraMapContent.setVisible(false);
       this.teleportButton?.setVisible(false);
       this.cameraLureButton?.setVisible(false);
       this.mapTitleText?.setText('◈ VENT MAP ◈');
       this.mapTitleText?.setColor('#9944cc');
     } else {
-      this.ventUI.setVisible(false);
-      this.ventPanelControls.setVisible(false);
+      this.ventUI.setVentViewVisible(false);
       this.cameraMapContent.setVisible(true);
       if (this.nightNumber >= 3) {
         this.teleportButton?.setVisible(true);
@@ -4491,89 +3059,6 @@ export class GameScene extends Phaser.Scene {
           this.audio.playVentThudSound();
         }
       }
-    }
-  }
-
-  private updateVentUI(): void {
-    if (!this.isPaulingEnabled()) return;
-
-    // Show toggle button when cameras are open
-    this.ventCamsToggleBtn.setVisible(this.isCameraMode);
-
-    // Show thermostat when in Intel room
-    this.thermostatContainer.setVisible(!this.isTeleported);
-
-    // Update Pauling icon position on vent map
-    if (this.ventUI.visible && this.pauling.isActive()) {
-      const nodePositions: Record<string, { x: number; y: number }> = {
-        'VENT_ENTRY': { x: 420, y: 180 },
-        'VENT_MID': { x: 420, y: 245 },
-        'VENT_JUNCTION': { x: 420, y: 310 },
-        'VENT_LEFT_UPPER': { x: 270, y: 370 },
-        'VENT_RIGHT_UPPER': { x: 570, y: 370 },
-        'VENT_LEFT_LOWER': { x: 270, y: 430 },
-        'VENT_RIGHT_LOWER': { x: 570, y: 430 },
-        'VENT_LEFT_OPENING': { x: 270, y: 490 },
-        'VENT_RIGHT_OPENING': { x: 570, y: 490 },
-      };
-      const pos = nodePositions[this.pauling.getCurrentNode()];
-      if (pos) {
-        this.ventPaulingIcon.setPosition(pos.x, pos.y);
-      }
-
-      // Highlight current node
-      this.ventNodeGraphics.forEach((container, nodeId) => {
-        const bg = container.getAt(0) as Phaser.GameObjects.Rectangle;
-        if (nodeId === this.pauling.getCurrentNode()) {
-          bg.setFillStyle(0x662288);
-          bg.setStrokeStyle(2, 0xcc44ff);
-        } else {
-          bg.setFillStyle(0x221133);
-          bg.setStrokeStyle(1, 0x553388);
-        }
-      });
-    }
-
-    // Update seal indicators
-    this.ventSealLeftIndicator?.setFillStyle(this.ventSealLeft ? 0xff4444 : 0x333333, this.ventSealLeft ? 0.8 : 0);
-    this.ventSealRightIndicator?.setFillStyle(this.ventSealRight ? 0xff4444 : 0x333333, this.ventSealRight ? 0.8 : 0);
-
-    // Update seal button colors
-    const leftBg = this.ventSealLeftBtn.getAt(0) as Phaser.GameObjects.Rectangle;
-    const rightBg = this.ventSealRightBtn.getAt(0) as Phaser.GameObjects.Rectangle;
-    if (this.ventSealLeft) {
-      leftBg.setStrokeStyle(2, 0xff4444);
-      (this.ventSealLeftBtn.getAt(1) as Phaser.GameObjects.Text).setText('UNSEAL L');
-    } else {
-      leftBg.setStrokeStyle(2, 0x664488);
-      (this.ventSealLeftBtn.getAt(1) as Phaser.GameObjects.Text).setText('SEAL LEFT');
-    }
-    if (this.ventSealRight) {
-      rightBg.setStrokeStyle(2, 0xff4444);
-      (this.ventSealRightBtn.getAt(1) as Phaser.GameObjects.Text).setText('UNSEAL R');
-    } else {
-      rightBg.setStrokeStyle(2, 0x664488);
-      (this.ventSealRightBtn.getAt(1) as Phaser.GameObjects.Text).setText('SEAL RIGHT');
-    }
-
-    // Update thermostat display (vertical mercury bar) — both Intel room and vent panel
-    // Display range: 50° (cold) to 110° (Pyro trigger)
-    const pct = Math.min(this.thermostat / GAME_CONSTANTS.THERMOSTAT_MAX, 1);
-    const displayTemp = Math.floor(GAME_CONSTANTS.THERMOSTAT_DISPLAY_MIN + pct * (GAME_CONSTANTS.THERMOSTAT_DISPLAY_MAX - GAME_CONSTANTS.THERMOSTAT_DISPLAY_MIN));
-    const thermoColor = pct < 0.4 ? 0x44cc44 : pct < 0.7 ? 0xcccc44 : pct < 0.9 ? 0xff8800 : 0xff2222;
-    const tempStr = `${displayTemp}°`;
-
-    this.thermostatFill.setSize(6, 50 * pct);
-    this.thermostatFill.setFillStyle(thermoColor);
-    this.thermostatText.setText(tempStr);
-
-    // Vent panel thermostat mirror
-    if (this.ventPanelThermoFill) {
-      this.ventPanelThermoFill.setSize(10, 66 * pct);
-      this.ventPanelThermoFill.setFillStyle(thermoColor);
-    }
-    if (this.ventPanelThermoText) {
-      this.ventPanelThermoText.setText(tempStr);
     }
   }
 
@@ -5872,8 +4357,7 @@ export class GameScene extends Phaser.Scene {
       this.administratorRepairActive = false; // stop repair if camera closed mid-hold
       // Hide vent UI but remember which tab was active
       if (this.isVentCameraMode) {
-        this.ventUI?.setVisible(false);
-        this.ventPanelControls?.setVisible(false);
+        this.ventUI?.setVentViewVisible(false);
       }
       if (this.wasWrangledBeforeCamera && this.sentry.exists) {
         this.sentry.isWrangled = true;
@@ -5888,8 +4372,7 @@ export class GameScene extends Phaser.Scene {
 
       // Restore ROOMS/VENTS tab state from last time
       if (this.isVentCameraMode && this.isPaulingEnabled()) {
-        this.ventUI?.setVisible(true);
-        this.ventPanelControls?.setVisible(true);
+        this.ventUI?.setVentViewVisible(true);
         this.cameraMapContent?.setVisible(false);
         this.teleportButton?.setVisible(false);
         this.cameraLureButton?.setVisible(false);
@@ -8095,7 +6578,7 @@ export class GameScene extends Phaser.Scene {
 
     // Update Pauling vent system and thermostat (Custom Night only)
     this.updatePaulingAndThermostat(delta);
-    this.updateVentUI();
+    this.ventUI.update();
 
     // Update teleport danger check (always runs, regardless of which enemies are enabled)
     this.updateTeleportDanger(delta);
