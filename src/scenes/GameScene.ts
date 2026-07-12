@@ -1020,6 +1020,7 @@ export class GameScene extends Phaser.Scene {
     this.pauseMenu = new PauseMenu(this, {
       getLocationLabel: () => this.getLocationLabel(),
       isMerasmusEnabled: () => this.isMerasmusEnabled(),
+      isMobile: () => this.isMobile,
       onResume: () => this.togglePause(),
       onRestart: () => {
         this.audio.stopDetectionSound();

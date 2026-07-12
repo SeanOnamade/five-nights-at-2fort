@@ -14,6 +14,8 @@ export interface PauseMenuCallbacks {
   getLocationLabel(): string;
   /** Whether the flip-view (Q) control is active this night */
   isMerasmusEnabled(): boolean;
+  /** Touch device — show button names instead of keyboard keys */
+  isMobile(): boolean;
 }
 
 /**
@@ -134,17 +136,27 @@ export class PauseMenu {
     }
 
     // Controls strip along the bottom (above the Engineer's Log) — keeps the
-    // center of the screen as negative space
-    const controlPairs: Array<[string, string]> = [
-      ['F', 'WRANGLER'],
-      ['A/D', 'AIM'],
-      ['SPACE', 'FIRE'],
-      ['TAB', 'CAMERAS'],
-      ['R', 'BUILD/REPAIR'],
-      ['ESC', 'PAUSE'],
-    ];
+    // center of the screen as negative space. Touch devices get the on-screen
+    // button names instead of keyboard keys.
+    const mobile = this.callbacks.isMobile();
+    const controlPairs: Array<[string, string]> = mobile
+      ? [
+          ['WRANGLE', 'WRANGLER'],
+          ['EDGES', 'AIM'],
+          ['FIRE', 'FIRE'],
+          ['CAM', 'CAMERAS'],
+          ['ACTION', 'BUILD/REPAIR'],
+        ]
+      : [
+          ['F', 'WRANGLER'],
+          ['A/D', 'AIM'],
+          ['SPACE', 'FIRE'],
+          ['TAB', 'CAMERAS'],
+          ['R', 'BUILD/REPAIR'],
+          ['ESC', 'PAUSE'],
+        ];
     if (this.callbacks.isMerasmusEnabled()) {
-      controlPairs.splice(5, 0, ['Q', 'FLIP VIEW']);
+      controlPairs.splice(5, 0, mobile ? ['FLIP', 'FLIP VIEW'] : ['Q', 'FLIP VIEW']);
     }
     const stripY = 580;
     const keyGap = 10;   // between key and its action
