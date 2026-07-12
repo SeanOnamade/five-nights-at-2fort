@@ -33,3 +33,6 @@ npm-debug.log*
 
 
 
+
+# Local reference audio (source rips, not shipped)
+reference-audio/

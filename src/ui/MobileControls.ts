@@ -126,10 +126,9 @@ export class MobileControls {
     fireBg.setStrokeStyle(3, 0xff4444);
     fireBg.setInteractive({ useHandCursor: true });
     const fireText = this.scene.add.text(0, 0, 'FIRE', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#ff6666',
-      fontStyle: 'bold',
+      fontFamily: 'VT323, "Courier New", monospace',
+      fontSize: '22px',
+      color: '#ff3b30',
     }).setOrigin(0.5);
     fireBg.on('pointerdown', () => {
       if (this.host.getGameStatus() !== 'PLAYING' || this.host.isPausedNow() || this.host.isCameraModeNow()) return;
@@ -146,12 +145,12 @@ export class MobileControls {
     
     // ===== PAUSE BUTTON (top right corner) =====
     this.mobilePauseButton = this.scene.add.container(width - 50, 50);
-    const pauseBg = this.scene.add.rectangle(0, 0, 80, 40, 0x1a2a3a, 0.9);
-    pauseBg.setStrokeStyle(2, 0x3a5a7a);
+    const pauseBg = this.scene.add.rectangle(0, 0, 80, 40, 0x140e06, 0.9);
+    pauseBg.setStrokeStyle(2, 0x8a6230);
     pauseBg.setInteractive({ useHandCursor: true });
     // Pause icon: two vertical bars using graphics
     const pauseIconGfx = this.scene.add.graphics();
-    pauseIconGfx.fillStyle(0x7799bb, 1);
+    pauseIconGfx.fillStyle(0xffb454, 1);
     pauseIconGfx.fillRect(-12, -10, 8, 20); // Left bar
     pauseIconGfx.fillRect(4, -10, 8, 20);   // Right bar
     pauseBg.on('pointerdown', () => {
@@ -159,12 +158,12 @@ export class MobileControls {
       this.host.togglePause();
     });
     pauseBg.on('pointerover', () => {
-      pauseBg.setFillStyle(0x2a3a4a);
-      pauseBg.setStrokeStyle(2, 0x5a8aba);
+      pauseBg.setFillStyle(0x2a1f10);
+      pauseBg.setStrokeStyle(2, 0xf0e6d2);
     });
     pauseBg.on('pointerout', () => {
-      pauseBg.setFillStyle(0x1a2a3a, 0.9);
-      pauseBg.setStrokeStyle(2, 0x3a5a7a);
+      pauseBg.setFillStyle(0x140e06, 0.9);
+      pauseBg.setStrokeStyle(2, 0x8a6230);
     });
     this.mobilePauseButton.add([pauseBg, pauseIconGfx]);
     this.mobileUI.add(this.mobilePauseButton);
@@ -191,22 +190,21 @@ export class MobileControls {
     // Spacing: Pause width-50, CAM width-145, ACTION width-240, FLIP width-335 (95px apart)
     this.mobileActionButton = this.scene.add.container(width - 240, 50);
     
-    const actionBg = this.scene.add.rectangle(0, 0, 80, 40, 0x224422);
-    actionBg.setStrokeStyle(2, 0x44aa44);
+    const actionBg = this.scene.add.rectangle(0, 0, 80, 40, 0x140e06);
+    actionBg.setStrokeStyle(2, 0x8a6230);
     actionBg.setInteractive({ useHandCursor: true });
     
     // Two-line text: action on top, cost below
     this.mobileActionText = this.scene.add.text(0, -6, 'BUILD', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '11px',
-      color: '#88ff88',
-      fontStyle: 'bold',
+      fontFamily: 'VT323, "Courier New", monospace',
+      fontSize: '14px',
+      color: '#ffb454',
     }).setOrigin(0.5);
     
     this.mobileActionCostText = this.scene.add.text(0, 8, '(100)', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '9px',
-      color: '#88ff88',
+      fontFamily: 'VT323, "Courier New", monospace',
+      fontSize: '12px',
+      color: '#ffb454',
     }).setOrigin(0.5);
     
     actionBg.on('pointerdown', () => {
@@ -215,8 +213,8 @@ export class MobileControls {
       this.host.handleMobileAction();
     });
     
-    actionBg.on('pointerover', () => actionBg.setFillStyle(0x336633));
-    actionBg.on('pointerout', () => actionBg.setFillStyle(0x224422));
+    actionBg.on('pointerover', () => actionBg.setFillStyle(0x2a1f10));
+    actionBg.on('pointerout', () => actionBg.setFillStyle(0x140e06));
     
     this.mobileActionButton.add([actionBg, this.mobileActionText, this.mobileActionCostText]);
     this.mobileUI.add(this.mobileActionButton);
@@ -243,25 +241,24 @@ export class MobileControls {
   ): Phaser.GameObjects.Container {
     const container = this.scene.add.container(x, y);
     
-    const bg = this.scene.add.rectangle(0, 0, 80, 40, 0x1a2a3a, 0.9);
-    bg.setStrokeStyle(2, 0x3a5a7a);
+    const bg = this.scene.add.rectangle(0, 0, 80, 40, 0x140e06, 0.9);
+    bg.setStrokeStyle(2, 0x8a6230);
     bg.setInteractive({ useHandCursor: true });
     
     const labelText = this.scene.add.text(0, 0, label, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '12px',
-      color: '#7799bb',
-      fontStyle: 'bold',
+      fontFamily: 'VT323, "Courier New", monospace',
+      fontSize: '15px',
+      color: '#ffb454',
     }).setOrigin(0.5);
     
     bg.on('pointerdown', callback);
     bg.on('pointerover', () => {
-      bg.setFillStyle(0x2a3a4a);
-      bg.setStrokeStyle(2, 0x5a8aba);
+      bg.setFillStyle(0x2a1f10);
+      bg.setStrokeStyle(2, 0xf0e6d2);
     });
     bg.on('pointerout', () => {
-      bg.setFillStyle(0x1a2a3a, 0.9);
-      bg.setStrokeStyle(2, 0x3a5a7a);
+      bg.setFillStyle(0x140e06, 0.9);
+      bg.setStrokeStyle(2, 0x8a6230);
     });
     
     container.add([bg, labelText]);
@@ -319,14 +316,14 @@ export class MobileControls {
     if (!bg || !label) return;
 
     if (this.host.isMerasmusViewFlipped()) {
-      bg.setFillStyle(0x2a4a2a);
-      bg.setStrokeStyle(2, 0x44ff44);
-      label.setColor('#44ff44');
+      bg.setFillStyle(0x2a1f10);
+      bg.setStrokeStyle(2, 0xf0e6d2);
+      label.setColor('#f0e6d2');
       label.setText('FLIPPED');
     } else {
-      bg.setFillStyle(0x1a2a3a, 0.9);
-      bg.setStrokeStyle(2, 0x3a5a7a);
-      label.setColor('#7799bb');
+      bg.setFillStyle(0x140e06, 0.9);
+      bg.setStrokeStyle(2, 0x8a6230);
+      label.setColor('#ffb454');
       label.setText('FLIP');
     }
   }
@@ -357,15 +354,15 @@ export class MobileControls {
     const label = this.mobileWranglerButton.list[1] as Phaser.GameObjects.Text;
     
     if (this.host.getSentry().isWrangled) {
-      bg.setFillStyle(0x2a4a2a);
-      bg.setStrokeStyle(2, 0x44ff44);
+      bg.setFillStyle(0x2a1f10);
+      bg.setStrokeStyle(2, 0xf0e6d2);
       label.setText('WRANGLED');
-      label.setColor('#44ff44');
+      label.setColor('#f0e6d2');
     } else {
-      bg.setFillStyle(0x1a2a3a, 0.9);
-      bg.setStrokeStyle(2, 0x3a5a7a);
+      bg.setFillStyle(0x140e06, 0.9);
+      bg.setStrokeStyle(2, 0x8a6230);
       label.setText('WRANGLE');
-      label.setColor('#7799bb');
+      label.setColor('#ffb454');
     }
   }
   
@@ -382,10 +379,10 @@ export class MobileControls {
       this.mobileActionText.setText('REMOVE');
       this.mobileActionText.setY(0); // Center vertically
       this.mobileActionCostText.setText('SAP');
-      this.mobileActionText.setColor('#ff8888');
-      this.mobileActionCostText.setColor('#ff8888');
-      bg.setFillStyle(0x442222);
-      bg.setStrokeStyle(2, 0xaa4444);
+      this.mobileActionText.setColor('#ff3b30');
+      this.mobileActionCostText.setColor('#ff3b30');
+      bg.setFillStyle(0x1c0a06);
+      bg.setStrokeStyle(2, 0x7a2420);
       this.mobileActionButton.setVisible(true);
       return;
     }
@@ -396,43 +393,32 @@ export class MobileControls {
     const sentry = this.host.getSentry();
     const metal = this.host.getMetal();
     
-    // Normal sentry actions
-    if (!sentry.exists) {
-      const canBuild = metal >= GAME_CONSTANTS.BUILD_SENTRY_COST;
-      this.mobileActionText.setText('BUILD');
-      this.mobileActionCostText.setText(`(${GAME_CONSTANTS.BUILD_SENTRY_COST})`);
-      const color = canBuild ? '#88ff88' : '#888888';
+    // Normal sentry actions — amber when affordable, faint when not
+    const styleAction = (text: string, cost: string, affordable: boolean) => {
+      this.mobileActionText.setText(text);
+      this.mobileActionCostText.setText(cost);
+      const color = affordable ? '#ffb454' : '#3d2c14';
       this.mobileActionText.setColor(color);
       this.mobileActionCostText.setColor(color);
-      bg.setFillStyle(canBuild ? 0x224422 : 0x222222);
-      bg.setStrokeStyle(2, canBuild ? 0x44aa44 : 0x444444);
+      bg.setFillStyle(affordable ? 0x140e06 : 0x100b05);
+      bg.setStrokeStyle(2, affordable ? 0x8a6230 : 0x3d2c14);
+    };
+    
+    if (!sentry.exists) {
+      styleAction('BUILD', `(${GAME_CONSTANTS.BUILD_SENTRY_COST})`, metal >= GAME_CONSTANTS.BUILD_SENTRY_COST);
     } else if (sentry.hp < sentry.maxHp) {
       const repairCost = Math.ceil(Math.min(sentry.maxHp - sentry.hp, GAME_CONSTANTS.REPAIR_SENTRY_AMOUNT));
-      const canRepair = metal >= repairCost;
-      this.mobileActionText.setText('REPAIR');
-      this.mobileActionCostText.setText(`(${repairCost})`);
-      const color = canRepair ? '#ffaa44' : '#888888';
-      this.mobileActionText.setColor(color);
-      this.mobileActionCostText.setColor(color);
-      bg.setFillStyle(canRepair ? 0x442a22 : 0x222222);
-      bg.setStrokeStyle(2, canRepair ? 0xaa6644 : 0x444444);
+      styleAction('REPAIR', `(${repairCost})`, metal >= repairCost);
     } else if (sentry.level < 3) {
-      const canUpgrade = metal >= GAME_CONSTANTS.UPGRADE_SENTRY_COST;
-      this.mobileActionText.setText('UPGRADE');
-      this.mobileActionCostText.setText(`(${GAME_CONSTANTS.UPGRADE_SENTRY_COST})`);
-      const color = canUpgrade ? '#88aaff' : '#888888';
-      this.mobileActionText.setColor(color);
-      this.mobileActionCostText.setColor(color);
-      bg.setFillStyle(canUpgrade ? 0x222244 : 0x222222);
-      bg.setStrokeStyle(2, canUpgrade ? 0x4466aa : 0x444444);
+      styleAction('UPGRADE', `(${GAME_CONSTANTS.UPGRADE_SENTRY_COST})`, metal >= GAME_CONSTANTS.UPGRADE_SENTRY_COST);
     } else {
       // Max level, no action needed - single line
       this.mobileActionText.setText('MAX');
       this.mobileActionText.setY(0);
       this.mobileActionCostText.setText('');
-      this.mobileActionText.setColor('#44aa44');
-      bg.setFillStyle(0x223322);
-      bg.setStrokeStyle(2, 0x336633);
+      this.mobileActionText.setColor('#8a6230');
+      bg.setFillStyle(0x140e06);
+      bg.setStrokeStyle(2, 0x3d2c14);
     }
   }
   
@@ -447,14 +433,14 @@ export class MobileControls {
     
     if (this.host.isCameraModeNow()) {
       label.setText('CLOSE');
-      bg.setFillStyle(0x4a2a2a);
-      bg.setStrokeStyle(2, 0xaa5555);
-      label.setColor('#ff8888');
+      bg.setFillStyle(0x1c0a06);
+      bg.setStrokeStyle(2, 0x7a2420);
+      label.setColor('#ff3b30');
     } else {
       label.setText('CAM');
-      bg.setFillStyle(0x1a2a3a, 0.9);
-      bg.setStrokeStyle(2, 0x3a5a7a);
-      label.setColor('#7799bb');
+      bg.setFillStyle(0x140e06, 0.9);
+      bg.setStrokeStyle(2, 0x8a6230);
+      label.setColor('#ffb454');
     }
   }
 }

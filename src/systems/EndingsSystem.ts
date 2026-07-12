@@ -7,7 +7,21 @@ import {
   drawMedicGhostSilhouette,
   drawPaulingJumpscarePortrait,
 } from '../drawing/medicPaulingPortraits';
+import { PALETTE, FONTS } from '../ui/kit/theme';
+import { addScanlines, addStatic, ensureNoiseTexture } from '../ui/kit/effects';
 import type { GameScene } from '../scenes/GameScene';
+
+type TextStyle = Phaser.Types.GameObjects.Text.TextStyle;
+
+/** Display-font style (Fjalla One) for end-screen titles */
+function display(size: number, color: string): TextStyle {
+  return { fontFamily: FONTS.display, fontSize: `${size}px`, color };
+}
+
+/** Terminal-font style (VT323) for end-screen body text */
+function term(size: number, color: string): TextStyle {
+  return { fontFamily: FONTS.terminal, fontSize: `${size}px`, color };
+}
 
 /**
  * Win/lose flows: jumpscare game-overs, victory screens, and the good/bad/dark
@@ -16,6 +30,113 @@ import type { GameScene } from '../scenes/GameScene';
  */
 export class EndingsSystem {
   constructor(private scene: GameScene) {}
+
+  /** Static grain + scanlines over the end screen (security-feed dressing). */
+  private addCrtDressing(staticAlpha = 0.04): void {
+    ensureNoiseTexture(this.scene);
+    const grain = addStatic(this.scene, 640, 360, 1280, 720, staticAlpha);
+    this.scene.endScreen.add(grain);
+    const scan = addScanlines(this.scene, 0, 0, 1280, 720, 0.1);
+    this.scene.endScreen.add(scan);
+  }
+
+  /**
+   * The lonely Engineer: sitting on the floor of a dark room, slumped
+   * forward, hardhat lamp dead, wrench dropped beside him. Shared by both
+   * dark endings. (x, y) is roughly his lap; drawing spans ~y-100..y+70.
+   */
+  private drawLonelyEngineer(g: Phaser.GameObjects.Graphics, x: number, y: number): void {
+    // Soft warm pool of light from above — layered circles, no hard edges
+    g.fillStyle(0x33220f, 0.1);
+    g.fillCircle(x, y - 55, 190);
+    g.fillStyle(0x442d14, 0.12);
+    g.fillCircle(x, y - 35, 130);
+    g.fillStyle(0x553a1a, 0.13);
+    g.fillCircle(x, y - 15, 85);
+    
+    // Ground shadow
+    g.fillStyle(0x000000, 0.55);
+    g.fillEllipse(x, y + 64, 160, 20);
+    
+    // Dim warm silhouette palette
+    const cloth = 0x2b211a;    // overalls
+    const clothHi = 0x3a2c20;
+    const shirt = 0x4a2620;    // RED team shirt, in shadow
+    const skin = 0x584434;
+    const hat = 0x6a5426;      // dimmed yellow hardhat
+    const hatHi = 0x7d6530;
+    
+    // Legs — knees up, feet planted
+    g.fillStyle(cloth, 1);
+    g.fillRoundedRect(x - 48, y + 6, 34, 46, 8);
+    g.fillRoundedRect(x + 14, y + 6, 34, 46, 8);
+    // Boots
+    g.fillStyle(0x1d1712, 1);
+    g.fillRoundedRect(x - 54, y + 46, 42, 14, 4);
+    g.fillRoundedRect(x + 12, y + 46, 42, 14, 4);
+    
+    // Hunched torso
+    g.fillStyle(shirt, 1);
+    g.fillEllipse(x - 2, y - 20, 76, 80);
+    // Overall bib
+    g.fillStyle(cloth, 1);
+    g.fillRoundedRect(x - 24, y - 34, 44, 50, 8);
+    // Straps over the shoulders
+    g.fillStyle(clothHi, 1);
+    g.fillRect(x - 20, y - 50, 8, 20);
+    g.fillRect(x + 8, y - 50, 8, 20);
+    
+    // Arms hanging over the knees
+    g.fillStyle(shirt, 1);
+    g.fillRoundedRect(x - 48, y - 24, 18, 46, 8);
+    g.fillRoundedRect(x + 28, y - 24, 18, 46, 8);
+    // Gloved hands, limp
+    g.fillStyle(0x3a3128, 1);
+    g.fillCircle(x - 39, y + 24, 9);
+    g.fillCircle(x + 37, y + 24, 9);
+    
+    // Head bowed forward
+    g.fillStyle(skin, 1);
+    g.fillCircle(x - 2, y - 64, 20);
+    // Goggles pushed up — dark band with two lenses
+    g.fillStyle(0x241c14, 1);
+    g.fillRoundedRect(x - 21, y - 71, 40, 9, 4);
+    g.fillStyle(0x191510, 1);
+    g.fillCircle(x - 10, y - 66, 6);
+    g.fillCircle(x + 7, y - 66, 6);
+    
+    // Hardhat: dome, then brim, tilted with the bowed head
+    g.fillStyle(hat, 1);
+    g.beginPath();
+    g.arc(x - 2, y - 74, 22, Math.PI, 0, false);
+    g.closePath();
+    g.fillPath();
+    g.fillStyle(hatHi, 1);
+    g.fillEllipse(x - 2, y - 74, 54, 9);
+    // Dead headlamp
+    g.fillStyle(0x33291a, 1);
+    g.fillCircle(x - 2, y - 89, 5);
+    
+    // Wrench dropped on the floor beside him
+    g.fillStyle(0x4c4438, 1);
+    g.fillRoundedRect(x + 62, y + 52, 46, 7, 3);
+    g.fillCircle(x + 64, y + 55, 8);
+    g.fillStyle(0x5c5344, 1);
+    g.fillRect(x + 100, y + 49, 10, 13);
+  }
+
+  /** Blinking terminal-style return prompt. */
+  private addReturnPrompt(y: number, label = '>> SPACE or CLICK to return to menu'): void {
+    const prompt = this.scene.add.text(640, y, label, term(20, PALETTE.amberDimCss)).setOrigin(0.5);
+    this.scene.endScreen.add(prompt);
+    this.scene.tweens.add({
+      targets: prompt,
+      alpha: 0.3,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+    });
+  }
 
   public gameOver(reason: string): void {
     if (this.scene.gameStatus !== 'PLAYING') return;
@@ -236,48 +357,42 @@ export class EndingsSystem {
       return;
     }
     
+    // Security-feed cut: static + scanlines under the report, with a very
+    // quiet dead-feed hiss fading in underneath
+    this.addCrtDressing(0.06);
+    this.scene.audio.startDeadFeedStatic();
+    
     // Show time of death (12-hour format)
     const hours24 = Math.floor(this.scene.gameMinutes / 60);
     const mins = this.scene.gameMinutes % 60;
     const displayHours = hours24 === 0 ? 12 : hours24;  // 00:XX becomes 12:XX
     const timeStr = `${displayHours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')} AM`;
     
-    const timeText = this.scene.add.text(640, 220, timeStr, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '36px',
-      color: '#ff4444',
-    }).setOrigin(0.5);
-    this.scene.endScreen.add(timeText);
+    // OSD header line, like the camera feed's last frame — shows where the
+    // Engineer actually was when the feed cut
+    const osdLine = this.scene.add
+      .text(640, 210, `REC ● ${this.scene.getLocationLabel()} — ${timeStr} — FEED TERMINATED`, term(22, PALETTE.amberDimCss))
+      .setOrigin(0.5);
+    this.scene.endScreen.add(osdLine);
     
-    const title = this.scene.add.text(640, 290, 'GAME OVER', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '64px',
-      color: '#ff0000',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
+    const title = this.scene.add.text(640, 300, 'GAME OVER', display(80, PALETTE.alertCss)).setOrigin(0.5);
     this.scene.endScreen.add(title);
     
-    const subtitle = this.scene.add.text(640, 370, reason, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#ff6666',
-    }).setOrigin(0.5);
-    this.scene.endScreen.add(subtitle);
-    
-    const menuPrompt = this.scene.add.text(640, 460, 'SPACE or CLICK to return to menu', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '20px',
-      color: '#888888',
-    }).setOrigin(0.5);
-    this.scene.endScreen.add(menuPrompt);
-    
+    // Unsteady phosphor flicker on the title
     this.scene.tweens.add({
-      targets: menuPrompt,
-      alpha: 0.3,
-      duration: 800,
+      targets: title,
+      alpha: { from: 1, to: 0.78 },
+      duration: 90,
       yoyo: true,
       repeat: -1,
+      hold: 900,
+      repeatDelay: 500,
     });
+    
+    const subtitle = this.scene.add.text(640, 385, reason, term(26, PALETTE.amberCss)).setOrigin(0.5);
+    this.scene.endScreen.add(subtitle);
+    
+    this.addReturnPrompt(470);
     
     this.scene.endScreen.setVisible(true);
     
@@ -333,209 +448,38 @@ export class EndingsSystem {
       survivalStr = `${survivalMins} ${minWord}`;
     }
     
-    // Dark, somber ending screen
-    const title = this.scene.add.text(640, 100, 'THE END', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '64px',
-      color: '#553333',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
+    // Dark, somber ending screen — faint grain, no bright scanlines
+    ensureNoiseTexture(this.scene);
+    const grain = addStatic(this.scene, 640, 360, 1280, 720, 0.03);
+    this.scene.endScreen.add(grain);
+    
+    const title = this.scene.add.text(640, 100, 'THE END', display(64, PALETTE.creamCss))
+      .setOrigin(0.5)
+      .setAlpha(0.75);
     this.scene.endScreen.add(title);
     
-    const subtitle = this.scene.add.text(640, 170, 'You survived...', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '28px',
-      color: '#666666',
-    }).setOrigin(0.5);
+    const subtitle = this.scene.add.text(640, 170, 'You survived...', term(28, PALETTE.amberDimCss)).setOrigin(0.5);
     this.scene.endScreen.add(subtitle);
     
     // Survival time - the "badge of honor"
-    const survivalText = this.scene.add.text(640, 230, survivalStr, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '42px',
-      color: '#aa8800',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
+    const survivalText = this.scene.add.text(640, 230, survivalStr, term(46, PALETTE.amberCss)).setOrigin(0.5);
     this.scene.endScreen.add(survivalText);
     
-    const cost = this.scene.add.text(640, 290, 'but at what cost?', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#555555',
-    }).setOrigin(0.5);
+    const cost = this.scene.add.text(640, 290, 'but at what cost?', term(24, PALETTE.amberDimCss))
+      .setOrigin(0.5)
+      .setAlpha(0.8);
     this.scene.endScreen.add(cost);
     
     // Lonely Engineer silhouette - sitting alone, defeated
     const graphics = this.scene.add.graphics();
-    
-    // Dark room backdrop with subtle gradient
-    graphics.fillStyle(0x080810, 0.95);
-    graphics.fillRect(340, 305, 600, 230);
-    
-    // Atmospheric spotlight from above - warm but dim
-    graphics.fillStyle(0x443322, 0.08);
-    graphics.fillCircle(640, 300, 150);
-    graphics.fillStyle(0x554433, 0.12);
-    graphics.fillCircle(640, 340, 100);
-    graphics.fillStyle(0x665544, 0.18);
-    graphics.fillCircle(640, 370, 60);
-    graphics.fillStyle(0x776655, 0.25);
-    graphics.fillCircle(640, 390, 35);
-    
-    const engX = 640;
-    const engY = 430;
-    
-    // Shadow beneath (drawn first)
-    graphics.fillStyle(0x000000, 0.5);
-    graphics.fillEllipse(engX, engY + 75, 100, 18);
-    
-    // LEGS - Engineer's work pants, sitting on crate/ground
-    graphics.fillStyle(0x2a2a3a, 1);
-    // Left leg bent
-    graphics.beginPath();
-    graphics.moveTo(engX - 40, engY + 30);
-    graphics.lineTo(engX - 15, engY + 30);
-    graphics.lineTo(engX - 20, engY + 65);
-    graphics.lineTo(engX - 50, engY + 65);
-    graphics.closePath();
-    graphics.fillPath();
-    // Right leg extended slightly
-    graphics.beginPath();
-    graphics.moveTo(engX + 5, engY + 30);
-    graphics.lineTo(engX + 35, engY + 30);
-    graphics.lineTo(engX + 55, engY + 65);
-    graphics.lineTo(engX + 20, engY + 65);
-    graphics.closePath();
-    graphics.fillPath();
-    
-    // Work boots
-    graphics.fillStyle(0x222230, 1);
-    graphics.fillRoundedRect(engX - 55, engY + 60, 25, 12, 3);
-    graphics.fillRoundedRect(engX + 35, engY + 60, 28, 12, 3);
-    
-    // TORSO - RED team shirt (but dim in shadow)
-    graphics.fillStyle(0x3a2a2a, 1);
-    graphics.beginPath();
-    graphics.moveTo(engX - 35, engY - 35);
-    graphics.lineTo(engX + 30, engY - 35);
-    graphics.lineTo(engX + 35, engY + 35);
-    graphics.lineTo(engX - 40, engY + 35);
-    graphics.closePath();
-    graphics.fillPath();
-    
-    // Overalls straps
-    graphics.fillStyle(0x252535, 1);
-    graphics.fillRect(engX - 25, engY - 30, 8, 50);
-    graphics.fillRect(engX + 12, engY - 30, 8, 50);
-    
-    // LEFT ARM - resting on knee, holding wrench
-    graphics.fillStyle(0x3a2a2a, 1);
-    graphics.beginPath();
-    graphics.moveTo(engX - 35, engY - 25);
-    graphics.lineTo(engX - 45, engY - 15);
-    graphics.lineTo(engX - 55, engY + 15);
-    graphics.lineTo(engX - 45, engY + 20);
-    graphics.closePath();
-    graphics.fillPath();
-    // Gloved hand
-    graphics.fillStyle(0x3a3a4a, 1);
-    graphics.fillCircle(engX - 52, engY + 18, 10);
-    // Wrench (iconic!)
-    graphics.fillStyle(0x444450, 1);
-    graphics.fillRect(engX - 75, engY + 10, 30, 6);
-    graphics.fillStyle(0x3a3a45, 1);
-    graphics.fillRect(engX - 78, engY + 5, 8, 16);
-    
-    // RIGHT ARM - up to face, defeated pose
-    graphics.fillStyle(0x3a2a2a, 1);
-    graphics.beginPath();
-    graphics.moveTo(engX + 25, engY - 25);
-    graphics.lineTo(engX + 35, engY - 35);
-    graphics.lineTo(engX + 25, engY - 55);
-    graphics.lineTo(engX + 15, engY - 45);
-    graphics.closePath();
-    graphics.fillPath();
-    // Gunslinger (robotic hand) touching face
-    graphics.fillStyle(0x4a4a55, 1);
-    graphics.fillCircle(engX + 22, engY - 58, 9);
-    graphics.fillStyle(0x555560, 1);
-    graphics.fillCircle(engX + 22, engY - 58, 6);
-    
-    // HEAD - slightly tilted down in despair
-    graphics.fillStyle(0x4a4a5a, 1);
-    graphics.fillCircle(engX + 5, engY - 65, 24);
-    
-    // Neck
-    graphics.fillStyle(0x4a4a5a, 1);
-    graphics.fillRect(engX - 5, engY - 45, 15, 12);
-    
-    // HARDHAT - Engineer's iconic yellow hardhat (dimmed)
-    // Brim first
-    graphics.fillStyle(0x4a4535, 1);
-    graphics.fillEllipse(engX + 5, engY - 80, 35, 8);
-    // Dome
-    graphics.fillStyle(0x555540, 1);
-    graphics.beginPath();
-    graphics.arc(engX + 5, engY - 82, 26, Math.PI, 0, false);
-    graphics.closePath();
-    graphics.fillPath();
-    // Highlight on dome
-    graphics.fillStyle(0x666650, 0.5);
-    graphics.beginPath();
-    graphics.arc(engX + 5, engY - 85, 18, Math.PI * 1.2, Math.PI * 1.8, false);
-    graphics.closePath();
-    graphics.fillPath();
-    // Hardhat light (dim, not powered)
-    graphics.fillStyle(0x444438, 1);
-    graphics.fillCircle(engX + 5, engY - 100, 7);
-    graphics.fillStyle(0x333330, 1);
-    graphics.fillCircle(engX + 5, engY - 100, 4);
-    
-    // GOGGLES - pushed up on forehead (iconic Engineer look)
-    graphics.fillStyle(0x333340, 1);
-    graphics.fillRoundedRect(engX - 18, engY - 82, 42, 10, 3);
-    // Goggle lenses
-    graphics.fillStyle(0x222235, 1);
-    graphics.fillCircle(engX - 8, engY - 77, 7);
-    graphics.fillCircle(engX + 14, engY - 77, 7);
-    // Lens reflection (very subtle)
-    graphics.fillStyle(0x334455, 0.3);
-    graphics.fillCircle(engX - 10, engY - 79, 3);
-    graphics.fillCircle(engX + 12, engY - 79, 3);
-    
-    // Face details (in shadow but visible)
-    // Brow/eye area (shadowed)
-    graphics.fillStyle(0x3a3a4a, 1);
-    graphics.fillRect(engX - 12, engY - 70, 30, 8);
-    
-    // Slight stubble/jaw
-    graphics.fillStyle(0x404050, 1);
-    graphics.fillEllipse(engX + 5, engY - 50, 18, 12);
-    
+    this.drawLonelyEngineer(graphics, 640, 440);
     this.scene.endScreen.add(graphics);
     
     // Death reason (smaller, at bottom)
-    const deathReason = this.scene.add.text(640, 560, reason, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#664444',
-    }).setOrigin(0.5);
+    const deathReason = this.scene.add.text(640, 560, reason, term(20, PALETTE.alertDimCss)).setOrigin(0.5);
     this.scene.endScreen.add(deathReason);
     
-    const prompt = this.scene.add.text(640, 620, 'SPACE or CLICK to return to menu', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#444444',
-    }).setOrigin(0.5);
-    this.scene.endScreen.add(prompt);
-    
-    this.scene.tweens.add({
-      targets: prompt,
-      alpha: 0.3,
-      duration: 1000,
-      yoyo: true,
-      repeat: -1,
-    });
+    this.addReturnPrompt(620);
     
     this.scene.endScreen.setVisible(true);
     
@@ -607,31 +551,23 @@ export class EndingsSystem {
   showStandardVictoryScreen(): void {
     this.scene.endScreen.removeAll(true);
     
-    const overlay = this.scene.add.rectangle(640, 360, 1280, 720, 0x000000, 0.9);
+    const overlay = this.scene.add.rectangle(640, 360, 1280, 720, 0x000000, 0.92);
     this.scene.endScreen.add(overlay);
     
-    const time = this.scene.add.text(640, 200, '6:00 AM', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '72px',
-      color: '#ffcc00',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
+    this.addCrtDressing();
+    
+    const time = this.scene.add.text(640, 190, '6:00 AM', display(84, PALETTE.creamCss)).setOrigin(0.5);
     this.scene.endScreen.add(time);
     
     const displayNight = this.scene.nightNumber === 7 ? 'CUSTOM' : this.scene.nightNumber === 8 ? 'NIGHTMARE' : this.scene.nightNumber;
-    const title = this.scene.add.text(640, 300, `NIGHT ${displayNight} COMPLETE!`, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '48px',
-      color: '#00ff00',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
+    const title = this.scene.add
+      .text(640, 295, `NIGHT ${displayNight} COMPLETE`, display(42, PALETTE.amberCss))
+      .setOrigin(0.5);
     this.scene.endScreen.add(title);
     
-    const subtitle = this.scene.add.text(640, 370, 'You survived the night!', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#88ff88',
-    }).setOrigin(0.5);
+    const subtitle = this.scene.add
+      .text(640, 360, 'Shift over. You survived the night.', term(24, PALETTE.amberDimCss))
+      .setOrigin(0.5);
     this.scene.endScreen.add(subtitle);
     
     // Star rating based on sentry level
@@ -639,11 +575,7 @@ export class EndingsSystem {
     const stars = '★'.repeat(starLevel) + '☆'.repeat(3 - starLevel);
     const starColor = starLevel === 3 ? '#ffd700' : starLevel === 2 ? '#c0c0c0' : '#cd7f32';
     
-    const ratingLabel = this.scene.add.text(640, 430, 'SENTRY RATING', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#888888',
-    }).setOrigin(0.5);
+    const ratingLabel = this.scene.add.text(640, 430, 'SENTRY RATING', term(18, PALETTE.amberDimCss)).setOrigin(0.5);
     this.scene.endScreen.add(ratingLabel);
     
     const starRating = this.scene.add.text(640, 470, stars, {
@@ -653,27 +585,12 @@ export class EndingsSystem {
     }).setOrigin(0.5);
     this.scene.endScreen.add(starRating);
     
-    const levelText = this.scene.add.text(640, 510, starLevel > 0 ? `Level ${starLevel} Sentry` : 'No Sentry', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#aaaaaa',
-    }).setOrigin(0.5);
+    const levelText = this.scene.add
+      .text(640, 512, starLevel > 0 ? `Level ${starLevel} Sentry` : 'No Sentry', term(20, PALETTE.amberDimCss))
+      .setOrigin(0.5);
     this.scene.endScreen.add(levelText);
     
-    const menuPrompt = this.scene.add.text(640, 580, 'SPACE or CLICK to continue', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '20px',
-      color: '#888888',
-    }).setOrigin(0.5);
-    this.scene.endScreen.add(menuPrompt);
-    
-    this.scene.tweens.add({
-      targets: menuPrompt,
-      alpha: 0.3,
-      duration: 800,
-      yoyo: true,
-      repeat: -1,
-    });
+    this.addReturnPrompt(585, '>> SPACE or CLICK to continue');
     
     this.scene.endScreen.setVisible(true);
     
@@ -697,30 +614,27 @@ export class EndingsSystem {
     const overlay = this.scene.add.rectangle(640, 360, 1280, 720, 0x000000, 0.95);
     this.scene.endScreen.add(overlay);
     
-    // Peaceful blue/warm gradient feel
-    const gradientOverlay = this.scene.add.rectangle(640, 360, 1280, 720, 0x1a2a4a, 0.3);
-    this.scene.endScreen.add(gradientOverlay);
+    // Warm dawn glow — sunrise over 2Fort, matching the game's amber palette
+    const dawnWash = this.scene.add.rectangle(640, 360, 1280, 720, 0x2a1608, 0.4);
+    this.scene.endScreen.add(dawnWash);
+    const dawnGlow = this.scene.add.graphics();
+    dawnGlow.fillStyle(0xffb454, 0.05);
+    dawnGlow.fillCircle(640, 130, 420);
+    dawnGlow.fillStyle(0xffb454, 0.06);
+    dawnGlow.fillCircle(640, 100, 260);
+    this.scene.endScreen.add(dawnGlow);
     
-    const time = this.scene.add.text(640, 80, '6:00 AM', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '48px',
-      color: '#ffcc00',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
+    const time = this.scene.add.text(640, 80, '6:00 AM', display(56, PALETTE.creamCss)).setOrigin(0.5);
     this.scene.endScreen.add(time);
     
-    const title = this.scene.add.text(640, 140, 'The nightmare is over.', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '32px',
-      color: '#88ff88',
-    }).setOrigin(0.5);
+    const title = this.scene.add
+      .text(640, 145, 'The nightmare is over.', term(34, PALETTE.amberCss))
+      .setOrigin(0.5);
     this.scene.endScreen.add(title);
     
-    const subtitle = this.scene.add.text(640, 180, 'You held the line, Engineer.', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
-      color: '#66cc66',
-    }).setOrigin(0.5);
+    const subtitle = this.scene.add
+      .text(640, 185, 'You held the line, Engineer.', term(26, PALETTE.amberDimCss))
+      .setOrigin(0.5);
     this.scene.endScreen.add(subtitle);
     
     // Draw all 9 mercs celebrating (simplified silhouettes)
@@ -728,36 +642,16 @@ export class EndingsSystem {
     drawCelebratingMercs(celebrationGraphics);
     this.scene.endScreen.add(celebrationGraphics);
     
-    const theEnd = this.scene.add.text(640, 520, 'THE END', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '56px',
-      color: '#ffffff',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
+    const theEnd = this.scene.add.text(640, 520, 'THE END', display(60, PALETTE.creamCss)).setOrigin(0.5);
     this.scene.endScreen.add(theEnd);
     
     // Credits
-    const credits = this.scene.add.text(640, 590, '- Thank you for playing -', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#888888',
-    }).setOrigin(0.5);
+    const credits = this.scene.add
+      .text(640, 590, '— Thank you for playing —', term(20, PALETTE.amberDimCss))
+      .setOrigin(0.5);
     this.scene.endScreen.add(credits);
     
-    const prompt = this.scene.add.text(640, 650, 'SPACE or CLICK to return to menu', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#555555',
-    }).setOrigin(0.5);
-    this.scene.endScreen.add(prompt);
-    
-    this.scene.tweens.add({
-      targets: prompt,
-      alpha: 0.3,
-      duration: 1000,
-      yoyo: true,
-      repeat: -1,
-    });
+    this.addReturnPrompt(650);
     
     this.scene.endScreen.setVisible(true);
     
@@ -784,6 +678,11 @@ export class EndingsSystem {
     const redOverlay = this.scene.add.rectangle(640, 360, 1280, 720, 0x330000, 0.3);
     this.scene.endScreen.add(redOverlay);
     
+    // Faint static under the story text
+    ensureNoiseTexture(this.scene);
+    const grain = addStatic(this.scene, 640, 360, 1280, 720, 0.035);
+    this.scene.endScreen.add(grain);
+    
     // Story text - appearing line by line
     const lines = [
       'The constant gunfire...',
@@ -805,11 +704,10 @@ export class EndingsSystem {
         return;
       }
       
-      const text = this.scene.add.text(640, y, line, {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '24px',
-        color: i >= 6 ? '#ff4444' : '#aaaaaa',
-      }).setOrigin(0.5).setAlpha(0);
+      const text = this.scene.add
+        .text(640, y, line, term(26, i >= 6 ? PALETTE.alertCss : PALETTE.amberDimCss))
+        .setOrigin(0.5)
+        .setAlpha(0);
       this.scene.endScreen.add(text);
       
       // Fade in each line
@@ -824,12 +722,10 @@ export class EndingsSystem {
     });
     
     // Night 6 announcement
-    const night6 = this.scene.add.text(640, 550, 'NIGHT 6', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '64px',
-      color: '#ff0000',
-      fontStyle: 'bold',
-    }).setOrigin(0.5).setAlpha(0);
+    const night6 = this.scene.add
+      .text(640, 550, 'NIGHT 6', display(72, PALETTE.alertCss))
+      .setOrigin(0.5)
+      .setAlpha(0);
     this.scene.endScreen.add(night6);
     
     this.scene.tweens.add({
@@ -839,11 +735,10 @@ export class EndingsSystem {
       delay: 4500,
     });
     
-    const prompt = this.scene.add.text(640, 620, 'SPACE or CLICK to begin', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '18px',
-      color: '#666666',
-    }).setOrigin(0.5).setAlpha(0);
+    const prompt = this.scene.add
+      .text(640, 620, '>> SPACE or CLICK to begin', term(20, PALETTE.amberDimCss))
+      .setOrigin(0.5)
+      .setAlpha(0);
     this.scene.endScreen.add(prompt);
     
     this.scene.tweens.add({
@@ -900,73 +795,33 @@ export class EndingsSystem {
     const overlay = this.scene.add.rectangle(640, 360, 1280, 720, 0x000000, 0.98);
     this.scene.endScreen.add(overlay);
     
-    const time = this.scene.add.text(640, 150, '6:00 AM', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '56px',
-      color: '#aa8800',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
+    // Faint grain, no bright scanlines — this ending stays somber
+    ensureNoiseTexture(this.scene);
+    const grain = addStatic(this.scene, 640, 360, 1280, 720, 0.03);
+    this.scene.endScreen.add(grain);
+    
+    const time = this.scene.add.text(640, 150, '6:00 AM', display(60, PALETTE.amberCss)).setOrigin(0.5);
     this.scene.endScreen.add(time);
     
-    const survived = this.scene.add.text(640, 230, 'You survived...', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '32px',
-      color: '#888888',
-    }).setOrigin(0.5);
+    const survived = this.scene.add.text(640, 230, 'You survived...', term(32, PALETTE.amberDimCss)).setOrigin(0.5);
     this.scene.endScreen.add(survived);
     
-    const cost = this.scene.add.text(640, 280, 'but at what cost?', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '28px',
-      color: '#666666',
-    }).setOrigin(0.5);
+    const cost = this.scene.add.text(640, 280, 'but at what cost?', term(28, PALETTE.amberDimCss))
+      .setOrigin(0.5)
+      .setAlpha(0.8);
     this.scene.endScreen.add(cost);
     
     // Lonely Engineer silhouette
     const graphics = this.scene.add.graphics();
-    
-    // Dark room with single figure
-    graphics.fillStyle(0x111122, 0.8);
-    graphics.fillRect(440, 320, 400, 200);
-    
-    // Engineer silhouette - alone, hunched
-    graphics.fillStyle(0x333344, 1);
-    graphics.fillCircle(640, 380, 30); // Head
-    graphics.fillRoundedRect(610, 400, 60, 80, 10); // Body
-    // Hardhat
-    graphics.fillStyle(0x444455, 1);
-    graphics.fillEllipse(640, 360, 40, 15);
-    
-    // Single dim light above
-    graphics.fillStyle(0x554422, 0.3);
-    graphics.fillCircle(640, 320, 80);
-    graphics.fillStyle(0x665533, 0.5);
-    graphics.fillCircle(640, 340, 40);
-    
+    this.drawLonelyEngineer(graphics, 640, 420);
     this.scene.endScreen.add(graphics);
     
-    const theEnd = this.scene.add.text(640, 550, 'THE END', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '48px',
-      color: '#553333',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
+    const theEnd = this.scene.add.text(640, 550, 'THE END', display(52, PALETTE.creamCss))
+      .setOrigin(0.5)
+      .setAlpha(0.7);
     this.scene.endScreen.add(theEnd);
     
-    const prompt = this.scene.add.text(640, 650, 'SPACE or CLICK to return to menu', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#444444',
-    }).setOrigin(0.5);
-    this.scene.endScreen.add(prompt);
-    
-    this.scene.tweens.add({
-      targets: prompt,
-      alpha: 0.3,
-      duration: 1000,
-      yoyo: true,
-      repeat: -1,
-    });
+    this.addReturnPrompt(650);
     
     this.scene.endScreen.setVisible(true);
     

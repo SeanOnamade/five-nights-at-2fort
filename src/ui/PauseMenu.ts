@@ -1,4 +1,8 @@
 import Phaser from 'phaser';
+import { PALETTE, headingStyle, osdStyle, terminalStyle } from './kit/theme';
+import { addScanlines, addStatic, ensureNoiseTexture } from './kit/effects';
+import { playMenuButtonSound, playMenuHoverSound } from '../utils/menuSounds';
+import { SettingsOverlay } from './SettingsOverlay';
 
 /** Actions triggered by the pause menu buttons; implemented by GameScene. */
 export interface PauseMenuCallbacks {
@@ -6,15 +10,24 @@ export interface PauseMenuCallbacks {
   onRestart(): void;
   onMainMenu(): void;
   onGiveUp(): void;
+  /** Where the Engineer currently is, e.g. "INTEL ROOM" or "CAM 05 — SPIRAL" */
+  getLocationLabel(): string;
+  /** Whether the flip-view (Q) control is active this night */
+  isMerasmusEnabled(): boolean;
 }
 
 /**
- * Pause menu overlay: resume/restart/main-menu buttons, optional Give Up button
- * (endless Night 6), and a random gameplay hint. Extracted from GameScene.
+ * Pause menu — the security tape on hold. Freeze-frame treatment
+ * (scanlines + vertical-hold jitter), OSD "PAUSED" marker, terminal-style
+ * text buttons, and a random Engineer's Log hint. Includes Settings.
  */
 export class PauseMenu {
   private container!: Phaser.GameObjects.Container;
+  private jitterTarget!: Phaser.GameObjects.Container;
   private hintText!: Phaser.GameObjects.Text;
+  private tapeLabel!: Phaser.GameObjects.Text;
+  private jitterTimer: Phaser.Time.TimerEvent | null = null;
+  private settingsOverlay!: SettingsOverlay;
 
   // Hints for pause menu
   private readonly hints: string[] = [
@@ -54,119 +67,191 @@ export class PauseMenu {
    * @param showGiveUp - Adds the Give Up button (endless Night 6 only)
    */
   create(showGiveUp: boolean): void {
+    const width = 1280;
+    const height = 720;
+
+    ensureNoiseTexture(this.scene);
+
     this.container = this.scene.add.container(0, 0);
     this.container.setVisible(false);
     this.container.setDepth(200);
-    
-    // Dark overlay
-    const overlay = this.scene.add.rectangle(640, 360, 1280, 720, 0x000000, 0.8);
-    this.container.add(overlay);
-    
-    // Main pause panel (center) - taller for endless Night 6 to fit Give Up button
-    const panelHeight = showGiveUp ? 420 : 350;
-    const panel = this.scene.add.rectangle(640, 360, 400, panelHeight, 0x1a1a2a);
-    panel.setStrokeStyle(3, 0xff6600);
-    this.container.add(panel);
-    
-    // Title
-    const title = this.scene.add.text(640, 220, 'PAUSED', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '48px',
-      color: '#ff6600',
-      fontStyle: 'bold',
-    }).setOrigin(0.5);
-    this.container.add(title);
-    
-    // Buttons Y position
-    const buttonsStartY = 310;
-    
-    // Resume button
-    const resumeBtn = this.scene.add.rectangle(640, buttonsStartY, 250, 45, 0x224422);
-    resumeBtn.setStrokeStyle(2, 0x44aa44);
-    resumeBtn.setInteractive({ useHandCursor: true });
-    resumeBtn.on('pointerover', () => resumeBtn.setFillStyle(0x336633));
-    resumeBtn.on('pointerout', () => resumeBtn.setFillStyle(0x224422));
-    resumeBtn.on('pointerdown', () => this.callbacks.onResume());
-    this.container.add(resumeBtn);
-    
-    const resumeText = this.scene.add.text(640, buttonsStartY, 'RESUME', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#88ff88',
-    }).setOrigin(0.5);
-    this.container.add(resumeText);
-    
-    // Restart button
-    const restartBtn = this.scene.add.rectangle(640, buttonsStartY + 55, 250, 45, 0x442222);
-    restartBtn.setStrokeStyle(2, 0xaa4444);
-    restartBtn.setInteractive({ useHandCursor: true });
-    restartBtn.on('pointerover', () => restartBtn.setFillStyle(0x663333));
-    restartBtn.on('pointerout', () => restartBtn.setFillStyle(0x442222));
-    restartBtn.on('pointerdown', () => this.callbacks.onRestart());
-    this.container.add(restartBtn);
-    
-    const restartText = this.scene.add.text(640, buttonsStartY + 55, 'RESTART NIGHT', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#ff8888',
-    }).setOrigin(0.5);
-    this.container.add(restartText);
-    
-    // Main menu button
-    const menuBtn = this.scene.add.rectangle(640, buttonsStartY + 110, 250, 45, 0x222244);
-    menuBtn.setStrokeStyle(2, 0x4444aa);
-    menuBtn.setInteractive({ useHandCursor: true });
-    menuBtn.on('pointerover', () => menuBtn.setFillStyle(0x333366));
-    menuBtn.on('pointerout', () => menuBtn.setFillStyle(0x222244));
-    menuBtn.on('pointerdown', () => {
-      this.callbacks.onMainMenu();
+
+    // Everything that should wobble with the vertical hold lives in here
+    this.jitterTarget = this.scene.add.container(0, 0);
+    this.container.add(this.jitterTarget);
+
+    // Freeze-frame: darken + faint static + heavy scanlines
+    const overlay = this.scene.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.82);
+    overlay.setInteractive(); // block clicks reaching the game underneath
+    this.jitterTarget.add(overlay);
+
+    const grain = addStatic(this.scene, width / 2, height / 2, width, height, 0.05);
+    this.jitterTarget.add(grain);
+
+    const scan = addScanlines(this.scene, 0, 0, width, height, 0.16, 3);
+    this.jitterTarget.add(scan);
+
+    // Dark OSD band across the top so the PAUSED marker doesn't tangle with
+    // the HUD readouts showing through the freeze-frame. Lives OUTSIDE the
+    // jitter container (added to `container` after it) so the band, its rule,
+    // and the labels on it hold steady while the freeze-frame wobbles.
+    const osdBand = this.scene.add.rectangle(width / 2, 60, width, 124, 0x000000, 0.72);
+    this.container.add(osdBand);
+    const osdBandRule = this.scene.add.rectangle(width / 2, 122, width, 1, PALETTE.amberFaint);
+    this.container.add(osdBandRule);
+
+    // OSD "PAUSED" marker — top-left, like a VCR
+    const pausedLabel = this.scene.add.text(46, 36, '▮▮ PAUSED', headingStyle(38, PALETTE.creamCss));
+    this.container.add(pausedLabel);
+    this.tapeLabel = this.scene.add.text(48, 84, '', osdStyle(17, PALETTE.amberDimCss));
+    this.container.add(this.tapeLabel);
+
+    // Blinking pause bars
+    this.scene.time.addEvent({
+      delay: 650,
+      loop: true,
+      callback: () => {
+        if (this.container.visible) pausedLabel.setAlpha(pausedLabel.alpha === 1 ? 0.55 : 1);
+      },
     });
-    this.container.add(menuBtn);
-    
-    const menuText = this.scene.add.text(640, buttonsStartY + 110, 'MAIN MENU', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '16px',
-      color: '#8888ff',
-    }).setOrigin(0.5);
-    this.container.add(menuText);
-    
-    // Give Up button (Endless Night 6 only) - Pyro jumpscare then dark ending
+
+    // Terminal button list (center-left)
+    const menuX = 140;
+    let menuY = 280;
+    const pitch = 54;
+
+    this.addButton(menuX, menuY, 'RESUME', () => this.callbacks.onResume());
+    menuY += pitch;
+    this.addButton(menuX, menuY, 'RESTART NIGHT', () => this.callbacks.onRestart());
+    menuY += pitch;
+    this.addButton(menuX, menuY, 'SETTINGS', () => this.settingsOverlay.show());
+    menuY += pitch;
+    this.addButton(menuX, menuY, 'MAIN MENU', () => this.callbacks.onMainMenu());
+    menuY += pitch;
     if (showGiveUp) {
-      const giveUpBtn = this.scene.add.rectangle(640, buttonsStartY + 165, 250, 45, 0x442244);
-      giveUpBtn.setStrokeStyle(2, 0xaa44aa);
-      giveUpBtn.setInteractive({ useHandCursor: true });
-      giveUpBtn.on('pointerover', () => giveUpBtn.setFillStyle(0x663366));
-      giveUpBtn.on('pointerout', () => giveUpBtn.setFillStyle(0x442244));
-      giveUpBtn.on('pointerdown', () => this.callbacks.onGiveUp());
-      this.container.add(giveUpBtn);
-      
-      const giveUpText = this.scene.add.text(640, buttonsStartY + 165, 'GIVE UP', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '16px',
-        color: '#ff88ff',
-      }).setOrigin(0.5);
-      this.container.add(giveUpText);
+      this.addButton(menuX, menuY, 'GIVE UP', () => this.callbacks.onGiveUp(), true);
+      menuY += pitch;
     }
-    
-    // Hint background (bottom)
-    const hintBg = this.scene.add.rectangle(640, 620, 500, 55, 0x0a0a14, 0.95);
-    hintBg.setStrokeStyle(1, 0x333344);
-    this.container.add(hintBg);
-    
-    // Hint text (random hint shown each pause)
-    this.hintText = this.scene.add.text(640, 620, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#cccccc',
-      fontStyle: 'italic',
-      wordWrap: { width: 470 },
-      align: 'center',
-    }).setOrigin(0.5);
-    this.container.add(this.hintText);
+
+    // Controls strip along the bottom (above the Engineer's Log) — keeps the
+    // center of the screen as negative space
+    const controlPairs: Array<[string, string]> = [
+      ['F', 'WRANGLER'],
+      ['A/D', 'AIM'],
+      ['SPACE', 'FIRE'],
+      ['TAB', 'CAMERAS'],
+      ['R', 'BUILD/REPAIR'],
+      ['ESC', 'PAUSE'],
+    ];
+    if (this.callbacks.isMerasmusEnabled()) {
+      controlPairs.splice(5, 0, ['Q', 'FLIP VIEW']);
+    }
+    const stripY = 580;
+    const keyGap = 10;   // between key and its action
+    const pairGap = 34;  // between control groups
+    const stripParts: Phaser.GameObjects.Text[] = [];
+    let cursorX = 0;
+    controlPairs.forEach(([key, action], i) => {
+      if (i > 0) {
+        const sep = this.scene.add
+          .text(cursorX, stripY, '·', terminalStyle(20, PALETTE.amberFaintCss))
+          .setOrigin(0, 0.5);
+        stripParts.push(sep);
+        cursorX += sep.width + pairGap;
+      }
+      const keyText = this.scene.add
+        .text(cursorX, stripY, key, terminalStyle(20, PALETTE.creamCss))
+        .setOrigin(0, 0.5);
+      stripParts.push(keyText);
+      cursorX += keyText.width + keyGap;
+      const actionText = this.scene.add
+        .text(cursorX, stripY, action, terminalStyle(20, PALETTE.amberDimCss))
+        .setOrigin(0, 0.5);
+      stripParts.push(actionText);
+      cursorX += actionText.width + pairGap;
+    });
+    // Center the whole strip
+    const stripOffset = (width - (cursorX - pairGap)) / 2;
+    stripParts.forEach((t) => {
+      t.x += stripOffset;
+      this.jitterTarget.add(t);
+    });
+
+    // Engineer's Log hint (bottom)
+    const hintRule = this.scene.add.rectangle(width / 2, 618, width - 160, 1, PALETTE.amberFaint);
+    this.jitterTarget.add(hintRule);
+
+    const hintHeader = this.scene.add
+      .text(80, 636, "ENGINEER'S LOG", osdStyle(16, PALETTE.amberDimCss))
+      .setOrigin(0, 0.5);
+    this.jitterTarget.add(hintHeader);
+
+    this.hintText = this.scene.add
+      .text(80, 668, '', {
+        fontFamily: 'VT323, "Courier New", monospace',
+        fontSize: '21px',
+        color: PALETTE.amberCss,
+        fontStyle: 'italic',
+        wordWrap: { width: width - 200 },
+      })
+      .setOrigin(0, 0.5);
+    this.jitterTarget.add(this.hintText);
+
+    // Settings overlay (sits above the pause menu)
+    this.settingsOverlay = new SettingsOverlay(this.scene);
+    this.settingsOverlay.create();
+  }
+
+  private addButton(x: number, y: number, label: string, onClick: () => void, danger = false): void {
+    const idle = danger ? PALETTE.alertDimCss : PALETTE.amberDimCss;
+    const hot = danger ? PALETTE.alertCss : PALETTE.creamCss;
+
+    const cursor = this.scene.add.text(x - 38, y, '>>', terminalStyle(28, hot)).setOrigin(0, 0.5);
+    cursor.setVisible(false);
+    this.jitterTarget.add(cursor);
+
+    const t = this.scene.add.text(x, y, label, terminalStyle(28, idle)).setOrigin(0, 0.5);
+    t.setInteractive({ useHandCursor: true });
+    t.on('pointerover', () => {
+      playMenuHoverSound();
+      t.setColor(hot);
+      cursor.setVisible(true);
+    });
+    t.on('pointerout', () => {
+      t.setColor(idle);
+      cursor.setVisible(false);
+    });
+    t.on('pointerdown', () => {
+      playMenuButtonSound();
+      onClick();
+    });
+    this.jitterTarget.add(t);
   }
 
   setVisible(visible: boolean): void {
     this.container?.setVisible(visible);
+
+    if (visible && this.tapeLabel) {
+      this.tapeLabel.setText(`SECURITY FEED ON HOLD — ${this.callbacks.getLocationLabel()}`);
+    }
+
+    if (visible && !this.jitterTimer) {
+      // Vertical-hold wobble while paused
+      this.jitterTimer = this.scene.time.addEvent({
+        delay: 90,
+        loop: true,
+        callback: () => {
+          this.jitterTarget.y = Math.random() < 0.18 ? Phaser.Math.Between(-2, 2) : 0;
+        },
+      });
+    } else if (!visible && this.jitterTimer) {
+      this.jitterTimer.remove();
+      this.jitterTimer = null;
+      this.jitterTarget.y = 0;
+      if (this.settingsOverlay?.isVisible()) {
+        this.settingsOverlay.hide();
+      }
+    }
   }
 
   /** Pick and display a random gameplay hint (called when pausing). */

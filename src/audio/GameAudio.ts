@@ -1,5 +1,6 @@
 import { GameStatus, GAME_CONSTANTS } from '../types';
 import type { PyroEnemy } from '../entities/PyroEnemy';
+import { getMusicVolume, getSfxVolume } from '../utils/settings';
 
 /**
  * Narrow view of the game state that sounds need to read.
@@ -120,6 +121,9 @@ export class GameAudio {
         this.masterAudioGain.connect(this.masterAudioCompressor);
         this.masterAudioCompressor.connect(this.sharedAudioContext.destination);
       }
+      // Keep the master bus tracking the SFX volume setting; this runs on
+      // every sound trigger so slider changes apply almost immediately.
+      this.masterAudioGain.gain.value = getSfxVolume();
       return this.sharedAudioContext;
     } catch {
       return null;
@@ -133,8 +137,20 @@ export class GameAudio {
     if (this.masterAudioGain) {
       node.connect(this.masterAudioGain);
     } else {
-      node.connect(ctx.destination);
+      node.connect(this.bus(ctx));
     }
+  }
+
+  /**
+   * Output bus for a node's final connect. Routes through the master gain
+   * (SFX volume + limiter) when the node belongs to the shared context;
+   * falls back to the raw destination for standalone contexts.
+   */
+  private bus(ctx: AudioContext): AudioNode {
+    if (ctx === this.sharedAudioContext && this.masterAudioGain) {
+      return this.masterAudioGain;
+    }
+    return ctx.destination;
   }
 
   /** Stop and disconnect an oscillator node safely. */
@@ -186,7 +202,7 @@ export class GameAudio {
         gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
         osc.connect(gain);
-        gain.connect(audioContext.destination);
+        gain.connect(this.bus(audioContext));
         lfo.start(now);
         osc.start(now);
         lfo.stop(now + duration);
@@ -207,7 +223,7 @@ export class GameAudio {
       underGain.gain.setValueAtTime(0.14, now);
       underGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
       under.connect(underGain);
-      underGain.connect(audioContext.destination);
+      underGain.connect(this.bus(audioContext));
       under.start(now);
       under.stop(now + duration);
 
@@ -237,7 +253,7 @@ export class GameAudio {
       noiseGain.gain.exponentialRampToValueAtTime(0.001, now + noiseDuration);
       noise.connect(noiseFilter);
       noiseFilter.connect(noiseGain);
-      noiseGain.connect(audioContext.destination);
+      noiseGain.connect(this.bus(audioContext));
       noise.start(now);
       noise.stop(now + noiseDuration);
     } catch (e) {
@@ -318,7 +334,7 @@ export class GameAudio {
   playMerasmusCackle(): void {
     try {
       const a = new Audio('./audio/merasmus-cackle.mp3');
-      a.volume = 0.85;
+      a.volume = 0.85 * getSfxVolume();
       void a.play().catch(() => {});
     } catch {
       /* missing or blocked audio */
@@ -344,7 +360,7 @@ export class GameAudio {
       const gainNode = audioContext.createGain();
       
       osc.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(this.bus(audioContext));
       
       // Warbling voice-like sound
       osc.type = 'sawtooth';
@@ -383,7 +399,7 @@ export class GameAudio {
       const gainNode = audioContext.createGain();
       
       osc.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(this.bus(audioContext));
       
       osc.type = 'sine';
       osc.frequency.setValueAtTime(400, audioContext.currentTime);
@@ -418,7 +434,7 @@ export class GameAudio {
       const gainNode = audioContext.createGain();
       
       osc.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(this.bus(audioContext));
       
       osc.type = 'sine';
       osc.frequency.setValueAtTime(600, audioContext.currentTime);
@@ -454,7 +470,7 @@ export class GameAudio {
         const gain = audioContext.createGain();
         
         osc.connect(gain);
-        gain.connect(audioContext.destination);
+        gain.connect(this.bus(audioContext));
         
         osc.type = 'sine';
         osc.frequency.value = note.freq;
@@ -473,7 +489,7 @@ export class GameAudio {
         const sparkle = audioContext.createOscillator();
         const sparkleGain = audioContext.createGain();
         sparkle.connect(sparkleGain);
-        sparkleGain.connect(audioContext.destination);
+        sparkleGain.connect(this.bus(audioContext));
         
         sparkle.type = 'sine';
         sparkle.frequency.value = 2000 + Math.random() * 2000;
@@ -513,7 +529,7 @@ export class GameAudio {
         const bellOsc = audioContext.createOscillator();
         const bellGain = audioContext.createGain();
         bellOsc.connect(bellGain);
-        bellGain.connect(audioContext.destination);
+        bellGain.connect(this.bus(audioContext));
         
         bellOsc.type = 'sine';
         bellOsc.frequency.value = 220;  // A3 - deep bell
@@ -529,7 +545,7 @@ export class GameAudio {
         const overOsc = audioContext.createOscillator();
         const overGain = audioContext.createGain();
         overOsc.connect(overGain);
-        overGain.connect(audioContext.destination);
+        overGain.connect(this.bus(audioContext));
         
         overOsc.type = 'sine';
         overOsc.frequency.value = 440;  // A4 - overtone
@@ -568,7 +584,7 @@ export class GameAudio {
         const gain = audioContext.createGain();
         
         osc.connect(gain);
-        gain.connect(audioContext.destination);
+        gain.connect(this.bus(audioContext));
         
         osc.type = 'triangle';  // Softer, sadder tone
         osc.frequency.value = note.freq;
@@ -586,7 +602,7 @@ export class GameAudio {
       const drone = audioContext.createOscillator();
       const droneGain = audioContext.createGain();
       drone.connect(droneGain);
-      droneGain.connect(audioContext.destination);
+      droneGain.connect(this.bus(audioContext));
       
       drone.type = 'sine';
       drone.frequency.value = 110;  // A2 - low drone (matches A minor)
@@ -625,7 +641,7 @@ export class GameAudio {
         const gain = audioContext.createGain();
         
         osc.connect(gain);
-        gain.connect(audioContext.destination);
+        gain.connect(this.bus(audioContext));
         
         osc.type = 'sine';
         osc.frequency.value = note.freq;
@@ -644,7 +660,7 @@ export class GameAudio {
         const sparkle = audioContext.createOscillator();
         const sparkleGain = audioContext.createGain();
         sparkle.connect(sparkleGain);
-        sparkleGain.connect(audioContext.destination);
+        sparkleGain.connect(this.bus(audioContext));
         
         sparkle.type = 'sine';
         sparkle.frequency.value = 1500 + Math.random() * 2500;
@@ -672,7 +688,7 @@ export class GameAudio {
       const drone = audioContext.createOscillator();
       const droneGain = audioContext.createGain();
       drone.connect(droneGain);
-      droneGain.connect(audioContext.destination);
+      droneGain.connect(this.bus(audioContext));
       
       drone.type = 'sawtooth';
       drone.frequency.value = 55;  // A1 - very low
@@ -696,7 +712,7 @@ export class GameAudio {
         const osc = audioContext.createOscillator();
         const gain = audioContext.createGain();
         osc.connect(gain);
-        gain.connect(audioContext.destination);
+        gain.connect(this.bus(audioContext));
         
         osc.type = 'sine';
         osc.frequency.value = accent.freq;
@@ -715,7 +731,7 @@ export class GameAudio {
         const beat = audioContext.createOscillator();
         const beatGain = audioContext.createGain();
         beat.connect(beatGain);
-        beatGain.connect(audioContext.destination);
+        beatGain.connect(this.bus(audioContext));
         
         beat.type = 'sine';
         beat.frequency.value = 40;
@@ -753,7 +769,7 @@ export class GameAudio {
         const gain = audioContext.createGain();
         
         osc.connect(gain);
-        gain.connect(audioContext.destination);
+        gain.connect(this.bus(audioContext));
         
         osc.type = 'sine';
         osc.frequency.value = note.freq;
@@ -772,7 +788,7 @@ export class GameAudio {
       const pad = audioContext.createOscillator();
       const padGain = audioContext.createGain();
       pad.connect(padGain);
-      padGain.connect(audioContext.destination);
+      padGain.connect(this.bus(audioContext));
       
       pad.type = 'sine';
       pad.frequency.value = 110;  // A2
@@ -875,7 +891,7 @@ export class GameAudio {
         const osc = audioContext.createOscillator();
         const gain = audioContext.createGain();
         osc.connect(gain);
-        gain.connect(audioContext.destination);
+        gain.connect(this.bus(audioContext));
         
         osc.type = i === 0 ? 'sawtooth' : 'square';
         osc.frequency.setValueAtTime(freq, audioContext.currentTime);
@@ -898,7 +914,7 @@ export class GameAudio {
       const noiseGain = audioContext.createGain();
       noiseSource.buffer = noiseBuffer;
       noiseSource.connect(noiseGain);
-      noiseGain.connect(audioContext.destination);
+      noiseGain.connect(this.bus(audioContext));
       noiseGain.gain.setValueAtTime(0.5, audioContext.currentTime);
       noiseGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
       noiseSource.start(audioContext.currentTime);
@@ -907,7 +923,7 @@ export class GameAudio {
       const bassOsc = audioContext.createOscillator();
       const bassGain = audioContext.createGain();
       bassOsc.connect(bassGain);
-      bassGain.connect(audioContext.destination);
+      bassGain.connect(this.bus(audioContext));
       bassOsc.type = 'sine';
       bassOsc.frequency.setValueAtTime(40, audioContext.currentTime);
       bassOsc.frequency.exponentialRampToValueAtTime(20, audioContext.currentTime + 0.5);
@@ -941,7 +957,7 @@ export class GameAudio {
       const gainNode = audioContext.createGain();
       
       oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(this.bus(audioContext));
       
       // Consistent click sound
       oscillator.type = 'square';
@@ -991,7 +1007,7 @@ export class GameAudio {
         osc1.connect(gainNode);
         osc2.connect(gainNode);
         osc3.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        gainNode.connect(this.bus(audioContext));
         
         // Very low frequency thud - impact
         osc1.type = 'sine';
@@ -1047,7 +1063,7 @@ export class GameAudio {
       osc1.connect(filter);
       osc2.connect(filter);
       filter.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(this.bus(audioContext));
       
       // Rising sci-fi sweep
       osc1.type = 'sawtooth';
@@ -1212,7 +1228,7 @@ export class GameAudio {
       const gainNode = audioContext.createGain();
       
       osc.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(this.bus(audioContext));
       
       osc.type = 'sine';
       osc.frequency.setValueAtTime(800, audioContext.currentTime);
@@ -1253,7 +1269,7 @@ export class GameAudio {
       
       osc1.connect(gainNode);
       osc2.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(this.bus(audioContext));
       
       // High-pitched shimmer
       osc1.type = 'sine';
@@ -1319,7 +1335,7 @@ export class GameAudio {
       
       clickSource.connect(clickFilter);
       clickFilter.connect(clickGain);
-      clickGain.connect(audioContext.destination);
+      clickGain.connect(this.bus(audioContext));
       
       clickSource.start(now);
       clickSource.stop(now + 0.03);
@@ -1352,7 +1368,7 @@ export class GameAudio {
       
       fwooshSource.connect(fwooshFilter);
       fwooshFilter.connect(fwooshGain);
-      fwooshGain.connect(audioContext.destination);
+      fwooshGain.connect(this.bus(audioContext));
       
       fwooshSource.start(now + 0.02); // Start right after click
       fwooshSource.stop(now + 0.02 + fwooshDuration);
@@ -1822,7 +1838,7 @@ export class GameAudio {
         
         crackleSource.connect(highpass);
         highpass.connect(crackleGain);
-        crackleGain.connect(audioContext.destination);
+        crackleGain.connect(this.bus(audioContext));
         
         crackleSource.start(burstStart);
         crackleSource.stop(burstStart + burstDuration);
@@ -1851,7 +1867,7 @@ export class GameAudio {
       
       baseSource.connect(bandpass);
       bandpass.connect(baseGain);
-      baseGain.connect(audioContext.destination);
+      baseGain.connect(this.bus(audioContext));
       
       baseSource.start(now);
       baseSource.stop(now + duration);
@@ -1907,7 +1923,7 @@ export class GameAudio {
       blastSource.connect(highpass);
       highpass.connect(bandpass);
       bandpass.connect(blastGain);
-      blastGain.connect(audioContext.destination);
+      blastGain.connect(this.bus(audioContext));
       
       blastSource.start(now);
       blastSource.stop(now + blastDuration);
@@ -1923,7 +1939,7 @@ export class GameAudio {
       thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
       
       thumpOsc.connect(thumpGain);
-      thumpGain.connect(audioContext.destination);
+      thumpGain.connect(this.bus(audioContext));
       
       thumpOsc.start(now);
       thumpOsc.stop(now + 0.15);
@@ -2000,7 +2016,7 @@ export class GameAudio {
       harmOsc.connect(harmGain);
       mainGain.connect(filter);
       harmGain.connect(filter);
-      filter.connect(audioContext.destination);
+      filter.connect(this.bus(audioContext));
       
       chargeOsc.start(now);
       harmOsc.start(now);
@@ -2021,7 +2037,7 @@ export class GameAudio {
       popGain.gain.exponentialRampToValueAtTime(0.01, now + duration * 0.65 + 0.15);
       
       popOsc.connect(popGain);
-      popGain.connect(audioContext.destination);
+      popGain.connect(this.bus(audioContext));
       
       popOsc.start(now + duration * 0.65);
       popOsc.stop(now + duration * 0.65 + 0.2);
@@ -2055,7 +2071,7 @@ export class GameAudio {
       const gainNode = audioContext.createGain();
       
       osc.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(this.bus(audioContext));
       
       // Frequency increases with progress
       const baseFreq = 60 + progress * 100;
@@ -2140,7 +2156,7 @@ export class GameAudio {
         const clink = audioContext.createOscillator();
         const clinkGain = audioContext.createGain();
         clink.connect(clinkGain);
-        clinkGain.connect(audioContext.destination);
+        clinkGain.connect(this.bus(audioContext));
         
         clink.type = 'triangle';
         const baseFreq = 800 + i * 100; // Rising pitch
@@ -2158,7 +2174,7 @@ export class GameAudio {
       const powerUp = audioContext.createOscillator();
       const powerGain = audioContext.createGain();
       powerUp.connect(powerGain);
-      powerGain.connect(audioContext.destination);
+      powerGain.connect(this.bus(audioContext));
       
       powerUp.type = 'sine';
       powerUp.frequency.setValueAtTime(300, audioContext.currentTime + 0.5);
@@ -2193,7 +2209,7 @@ export class GameAudio {
       const clink = audioContext.createOscillator();
       const clinkGain = audioContext.createGain();
       clink.connect(clinkGain);
-      clinkGain.connect(audioContext.destination);
+      clinkGain.connect(this.bus(audioContext));
       
       clink.type = 'triangle';
       clink.frequency.setValueAtTime(1000, audioContext.currentTime);
@@ -2209,7 +2225,7 @@ export class GameAudio {
       const chime = audioContext.createOscillator();
       const chimeGain = audioContext.createGain();
       chime.connect(chimeGain);
-      chimeGain.connect(audioContext.destination);
+      chimeGain.connect(this.bus(audioContext));
       
       chime.type = 'sine';
       chime.frequency.setValueAtTime(880, audioContext.currentTime + 0.05);
@@ -2245,7 +2261,7 @@ export class GameAudio {
         const ratchet = audioContext.createOscillator();
         const ratchetGain = audioContext.createGain();
         ratchet.connect(ratchetGain);
-        ratchetGain.connect(audioContext.destination);
+        ratchetGain.connect(this.bus(audioContext));
         
         ratchet.type = 'sawtooth';
         const freq = 400 + i * 80; // Rising pitch
@@ -2265,7 +2281,7 @@ export class GameAudio {
       const surgeGain = audioContext.createGain();
       surge.connect(surgeGain);
       surge2.connect(surgeGain);
-      surgeGain.connect(audioContext.destination);
+      surgeGain.connect(this.bus(audioContext));
       
       surge.type = 'sine';
       surge.frequency.setValueAtTime(200, audioContext.currentTime + 0.5);
@@ -2291,7 +2307,7 @@ export class GameAudio {
   /**
    * Play wrangler aim sound - mechanical servo/click when aiming
    */
-  playWranglerAimSound(): void {
+  playWranglerAimSound(direction: 'LEFT' | 'RIGHT' | 'NONE' = 'NONE'): void {
     try {
       if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
         this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -2302,28 +2318,36 @@ export class GameAudio {
         audioContext.resume();
       }
       
-      // Mechanical servo whir
+      // Mechanical servo whir — matched to the 140ms head swivel.
+      // Aiming at a door sweeps up (head turning out); returning to middle
+      // sweeps down (head settling back).
+      const aiming = direction !== 'NONE';
       const servo = audioContext.createOscillator();
       const servoGain = audioContext.createGain();
       servo.connect(servoGain);
-      servoGain.connect(audioContext.destination);
+      servoGain.connect(this.bus(audioContext));
       
       servo.type = 'sawtooth';
-      servo.frequency.setValueAtTime(150, audioContext.currentTime);
-      servo.frequency.linearRampToValueAtTime(200, audioContext.currentTime + 0.05);
-      servo.frequency.linearRampToValueAtTime(120, audioContext.currentTime + 0.1);
+      if (aiming) {
+        servo.frequency.setValueAtTime(140, audioContext.currentTime);
+        servo.frequency.linearRampToValueAtTime(230, audioContext.currentTime + 0.09);
+        servo.frequency.linearRampToValueAtTime(180, audioContext.currentTime + 0.14);
+      } else {
+        servo.frequency.setValueAtTime(200, audioContext.currentTime);
+        servo.frequency.linearRampToValueAtTime(110, audioContext.currentTime + 0.14);
+      }
       
       servoGain.gain.setValueAtTime(0.08, audioContext.currentTime);
-      servoGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.12);
+      servoGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.14);
       
       servo.start(audioContext.currentTime);
-      servo.stop(audioContext.currentTime + 0.12);
+      servo.stop(audioContext.currentTime + 0.14);
       
       // Click at end
       const click = audioContext.createOscillator();
       const clickGain = audioContext.createGain();
       click.connect(clickGain);
-      clickGain.connect(audioContext.destination);
+      clickGain.connect(this.bus(audioContext));
       
       click.type = 'square';
       click.frequency.setValueAtTime(800, audioContext.currentTime + 0.08);
@@ -2408,7 +2432,7 @@ export class GameAudio {
         
         osc1.connect(gainNode);
         osc2.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        gainNode.connect(this.bus(audioContext));
         
         // Main rising tone
         osc1.type = 'sawtooth';
@@ -2433,7 +2457,7 @@ export class GameAudio {
         const beep = audioContext.createOscillator();
         const beepGain = audioContext.createGain();
         beep.connect(beepGain);
-        beepGain.connect(audioContext.destination);
+        beepGain.connect(this.bus(audioContext));
         
         beep.type = 'sine';
         beep.frequency.setValueAtTime(880, audioContext.currentTime + 0.15);
@@ -2449,7 +2473,7 @@ export class GameAudio {
         const gainNode = audioContext.createGain();
         
         osc.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        gainNode.connect(this.bus(audioContext));
         
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(400, audioContext.currentTime);
@@ -2466,98 +2490,9 @@ export class GameAudio {
     }
   }
 
-  /**
-   * Play pause sound - UI pause effect
-   */
-  playPauseSound(): void {
-    try {
-      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
-        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      }
-      const audioContext = this.sharedAudioContext;
-      
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      
-      // Descending "pause" tone - like time stopping
-      const osc1 = audioContext.createOscillator();
-      const osc2 = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      const filter = audioContext.createBiquadFilter();
-      
-      osc1.connect(filter);
-      osc2.connect(filter);
-      filter.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(2000, audioContext.currentTime);
-      filter.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.3);
-      
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(600, audioContext.currentTime);
-      osc1.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.25);
-      
-      osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(800, audioContext.currentTime);
-      osc2.frequency.exponentialRampToValueAtTime(250, audioContext.currentTime + 0.25);
-      
-      gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
-      
-      osc1.start(audioContext.currentTime);
-      osc1.stop(audioContext.currentTime + 0.3);
-      osc2.start(audioContext.currentTime);
-      osc2.stop(audioContext.currentTime + 0.3);
-    } catch (e) {
-      // Audio not available
-    }
-  }
-
-  /**
-   * Play unpause/resume sound - UI resume effect
-   */
-  playUnpauseSound(): void {
-    try {
-      if (!this.sharedAudioContext || this.sharedAudioContext.state === 'closed') {
-        this.sharedAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      }
-      const audioContext = this.sharedAudioContext;
-      
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-      
-      // Ascending "resume" tone - like time starting again
-      const osc1 = audioContext.createOscillator();
-      const osc2 = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      osc1.connect(gainNode);
-      osc2.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(200, audioContext.currentTime);
-      osc1.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.15);
-      
-      osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(250, audioContext.currentTime);
-      osc2.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.15);
-      
-      gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(0.2, audioContext.currentTime + 0.1);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.2);
-      
-      osc1.start(audioContext.currentTime);
-      osc1.stop(audioContext.currentTime + 0.2);
-      osc2.start(audioContext.currentTime);
-      osc2.stop(audioContext.currentTime + 0.2);
-    } catch (e) {
-      // Audio not available
-    }
-  }
+  // (The old electronic pause/unpause tones were replaced by
+  // playVcrPauseSound / playVcrResumeSound — mechanical VCR clicks that
+  // match the freeze-frame pause screen.)
 
   /**
    * Play screen flip sound - soft, lowkey whoosh when raising/lowering the camera monitor
@@ -2603,7 +2538,7 @@ export class GameAudio {
       // compressor doesn't duck it under other simultaneous sounds
       source.connect(filter);
       filter.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(this.bus(audioContext));
 
       source.start(now);
       source.stop(now + duration);
@@ -2622,7 +2557,7 @@ export class GameAudio {
       thumpGain.gain.setValueAtTime(0.12, now);
       thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
       thump.connect(thumpGain);
-      thumpGain.connect(audioContext.destination);
+      thumpGain.connect(this.bus(audioContext));
       thump.start(now);
       thump.stop(now + 0.12);
     } catch (e) {
@@ -2651,7 +2586,7 @@ export class GameAudio {
       
       osc.connect(filter);
       filter.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(this.bus(audioContext));
       
       // Gentle low-pass filter
       filter.type = 'lowpass';
@@ -2669,6 +2604,19 @@ export class GameAudio {
       
       osc.start(audioContext.currentTime);
       osc.stop(audioContext.currentTime + 0.25);
+      
+      // Subtle CRT power-up whine — fast rising sweep as the tube warms
+      const whine = audioContext.createOscillator();
+      const whineGain = audioContext.createGain();
+      whine.connect(whineGain);
+      whineGain.connect(this.bus(audioContext));
+      whine.type = 'sine';
+      whine.frequency.setValueAtTime(400, audioContext.currentTime);
+      whine.frequency.exponentialRampToValueAtTime(4200, audioContext.currentTime + 0.45);
+      whineGain.gain.setValueAtTime(0.02, audioContext.currentTime);
+      whineGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+      whine.start(audioContext.currentTime);
+      whine.stop(audioContext.currentTime + 0.5);
     } catch (e) {
       // Audio not available
     }
@@ -2703,7 +2651,7 @@ export class GameAudio {
       noise.buffer = noiseBuffer;
       noise.connect(filter);
       filter.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(this.bus(audioContext));
       
       filter.type = 'highpass';
       filter.frequency.setValueAtTime(1000, audioContext.currentTime);
@@ -2744,7 +2692,7 @@ export class GameAudio {
       noise.buffer = buffer;
       const noiseGain = audioContext.createGain();
       noise.connect(noiseGain);
-      noiseGain.connect(audioContext.destination);
+      noiseGain.connect(this.bus(audioContext));
       noiseGain.gain.setValueAtTime(0.4, audioContext.currentTime);
       noiseGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
       noise.start(audioContext.currentTime);
@@ -2753,7 +2701,7 @@ export class GameAudio {
       const osc = audioContext.createOscillator();
       const oscGain = audioContext.createGain();
       osc.connect(oscGain);
-      oscGain.connect(audioContext.destination);
+      oscGain.connect(this.bus(audioContext));
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(150, audioContext.currentTime);
       osc.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.15);
@@ -2778,7 +2726,7 @@ export class GameAudio {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.bus(ctx));
       osc.type = 'square';
       osc.frequency.setValueAtTime(800, now);
       osc.frequency.exponentialRampToValueAtTime(500, now + 0.06);
@@ -2802,7 +2750,7 @@ export class GameAudio {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.bus(ctx));
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(200, now);
       osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
@@ -2815,7 +2763,7 @@ export class GameAudio {
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
       osc2.connect(gain2);
-      gain2.connect(ctx.destination);
+      gain2.connect(this.bus(ctx));
       osc2.type = 'square';
       osc2.frequency.setValueAtTime(600, now + 0.02);
       osc2.frequency.exponentialRampToValueAtTime(300, now + 0.08);
@@ -2840,7 +2788,7 @@ export class GameAudio {
       const bass = ctx.createOscillator();
       const bassGain = ctx.createGain();
       bass.connect(bassGain);
-      bassGain.connect(ctx.destination);
+      bassGain.connect(this.bus(ctx));
       bass.type = 'sine';
       bass.frequency.setValueAtTime(100, now);
       bass.frequency.exponentialRampToValueAtTime(30, now + 0.3);
@@ -2853,7 +2801,7 @@ export class GameAudio {
       const clang = ctx.createOscillator();
       const clangGain = ctx.createGain();
       clang.connect(clangGain);
-      clangGain.connect(ctx.destination);
+      clangGain.connect(this.bus(ctx));
       clang.type = 'triangle';
       clang.frequency.setValueAtTime(300, now);
       clang.frequency.exponentialRampToValueAtTime(120, now + 0.2);
@@ -2868,7 +2816,7 @@ export class GameAudio {
       const rattleFilter = ctx.createBiquadFilter();
       rattle.connect(rattleFilter);
       rattleFilter.connect(rattleGain);
-      rattleGain.connect(ctx.destination);
+      rattleGain.connect(this.bus(ctx));
       rattleFilter.type = 'bandpass';
       rattleFilter.frequency.setValueAtTime(1200, now);
       rattleFilter.Q.setValueAtTime(3, now);
@@ -2893,7 +2841,7 @@ export class GameAudio {
       const noiseFilter = ctx.createBiquadFilter();
       noise.connect(noiseFilter);
       noiseFilter.connect(noiseGain);
-      noiseGain.connect(ctx.destination);
+      noiseGain.connect(this.bus(ctx));
       noiseFilter.type = 'lowpass';
       noiseFilter.frequency.setValueAtTime(600, now);
       noiseGain.gain.setValueAtTime(0.8, now);
@@ -2916,7 +2864,7 @@ export class GameAudio {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.bus(ctx));
       osc.type = 'square';
       osc.frequency.setValueAtTime(freq, now);
       gain.gain.setValueAtTime(0.1 + pct * 0.1, now);
@@ -2939,7 +2887,7 @@ export class GameAudio {
       
       // Create a mechanical "click" sound like a cassette button
       const clickGain = ctx.createGain();
-      clickGain.connect(ctx.destination);
+      clickGain.connect(this.bus(ctx));
       
       // First click - the button press
       const click1 = ctx.createOscillator();
@@ -2959,7 +2907,7 @@ export class GameAudio {
       clunk.frequency.setValueAtTime(150, now + 0.03);
       clunk.frequency.exponentialRampToValueAtTime(60, now + 0.08);
       clunk.connect(clunkGain);
-      clunkGain.connect(ctx.destination);
+      clunkGain.connect(this.bus(ctx));
       clunkGain.gain.setValueAtTime(0.25, now + 0.03);
       clunkGain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
       clunk.start(now + 0.03);
@@ -2972,7 +2920,7 @@ export class GameAudio {
       whir.frequency.setValueAtTime(400, now + 0.05);
       whir.frequency.exponentialRampToValueAtTime(50, now + 0.25);
       whir.connect(whirGain);
-      whirGain.connect(ctx.destination);
+      whirGain.connect(this.bus(ctx));
       whirGain.gain.setValueAtTime(0.08, now + 0.05);
       whirGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
       whir.start(now + 0.05);
@@ -3155,7 +3103,7 @@ export class GameAudio {
       if (!this.intelRoomAmbience) {
         const audio = new Audio('./audio/intel-room-ambience.mp3');
         audio.loop = true;
-        audio.volume = 0.52;
+        audio.volume = 0.52 * getMusicVolume();
         const tryPlay = (): void => {
           if (this.intelRoomAmbience !== audio) return;
           if (this.host.isTeleportedNow() || this.host.isPausedNow() || this.host.getGameStatus() !== 'PLAYING') return;
@@ -3163,6 +3111,9 @@ export class GameAudio {
         };
         audio.addEventListener('canplaythrough', tryPlay, { once: true });
         audio.addEventListener('error', () => {
+          // dispose() clears src and reloads, which fires 'error' on the old
+          // element — only report failures for the live instance
+          if (this.intelRoomAmbience !== audio) return;
           console.log('[Audio] Intel room ambience failed to load');
         });
         this.intelRoomAmbience = audio;
@@ -3189,9 +3140,12 @@ export class GameAudio {
   disposeIntelRoomAmbience(): void {
     this.stopIntelRoomAmbience();
     if (this.intelRoomAmbience) {
-      this.intelRoomAmbience.src = '';
-      this.intelRoomAmbience.load();
+      const audio = this.intelRoomAmbience;
+      // Null the ref BEFORE clearing src: the empty-src load fires 'error',
+      // and the handler above ignores events from disposed instances
       this.intelRoomAmbience = null;
+      audio.src = '';
+      audio.load();
     }
   }
 
@@ -3265,7 +3219,7 @@ export class GameAudio {
       if (ctx.state === 'suspended') ctx.resume();
 
       const gain = ctx.createGain();
-      gain.connect(ctx.destination);
+      gain.connect(this.bus(ctx));
 
       // Two sharp ascending pings — like a radar/sonar alert
       [0, 0.18].forEach((offset) => {
@@ -3286,7 +3240,7 @@ export class GameAudio {
       noiseGain.gain.setValueAtTime(0.04, ctx.currentTime);
       noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
       noise.connect(noiseGain);
-      noiseGain.connect(ctx.destination);
+      noiseGain.connect(this.bus(ctx));
       noise.start(ctx.currentTime);
       noise.stop(ctx.currentTime + 0.15);
 
@@ -3310,7 +3264,7 @@ export class GameAudio {
       if (ctx.state === 'suspended') ctx.resume();
 
       const gain = ctx.createGain();
-      gain.connect(ctx.destination);
+      gain.connect(this.bus(ctx));
 
       // Descending pitch sweep — "power-down" feel
       const osc = ctx.createOscillator();
@@ -3359,7 +3313,7 @@ export class GameAudio {
       if (ctx.state === 'suspended') ctx.resume();
 
       const gain = ctx.createGain();
-      gain.connect(ctx.destination);
+      gain.connect(this.bus(ctx));
 
       // Short high-pitched electronic blip — screwdriver/typing feel
       const osc = ctx.createOscillator();
@@ -3391,7 +3345,7 @@ export class GameAudio {
       if (ctx.state === 'suspended') ctx.resume();
 
       const gain = ctx.createGain();
-      gain.connect(ctx.destination);
+      gain.connect(this.bus(ctx));
 
       // Rising two-tone chime — C5 → E5
       const freqs = [523, 659];
@@ -3499,6 +3453,493 @@ export class GameAudio {
     this.detectionSoundReleaseFrames = 0;
   }
 
+  // Dead-feed static loops ---------------------------------------------------
+  private deadFeedStaticSource: AudioBufferSourceNode | null = null;
+  private deadFeedStaticGain: GainNode | null = null;
+  private camDeadHissSource: AudioBufferSourceNode | null = null;
+  private camDeadHissGain: GainNode | null = null;
+
+  /** Shared band-limited noise loop used by both dead-feed sounds. */
+  private createDeadFeedNoiseChain(
+    ctx: AudioContext,
+    targetGain: number,
+    fadeSec: number
+  ): { src: AudioBufferSourceNode; gain: GainNode } {
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+
+    // Band-limit the hiss so it sits in the background instead of biting
+    const highpass = ctx.createBiquadFilter();
+    highpass.type = 'highpass';
+    highpass.frequency.value = 400;
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = 5500;
+
+    const gain = ctx.createGain();
+    // Linear ramp: audible from the first moment, swells gently to quiet
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(targetGain, ctx.currentTime + fadeSec);
+
+    src.connect(highpass);
+    highpass.connect(lowpass);
+    lowpass.connect(gain);
+    gain.connect(this.bus(ctx));
+    src.start();
+    return { src, gain };
+  }
+
+  private stopNoiseChain(
+    src: AudioBufferSourceNode | null,
+    gain: GainNode | null
+  ): void {
+    if (src) {
+      try {
+        src.stop();
+        src.disconnect();
+      } catch (e) {
+        // Already stopped
+      }
+    }
+    if (gain) {
+      try {
+        gain.disconnect();
+      } catch (e) {
+        // Already disconnected
+      }
+    }
+  }
+
+  /**
+   * Very quiet looping static, like a camera feed that went dead.
+   * Fades in slowly under the game over screen.
+   */
+  startDeadFeedStatic(): void {
+    if (this.deadFeedStaticSource) return;
+    try {
+      const ctx = this.ensureSharedAudioContext();
+      if (!ctx) return;
+      const chain = this.createDeadFeedNoiseChain(ctx, 0.008, 1.5);
+      this.deadFeedStaticSource = chain.src;
+      this.deadFeedStaticGain = chain.gain;
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
+  stopDeadFeedStatic(): void {
+    this.stopNoiseChain(this.deadFeedStaticSource, this.deadFeedStaticGain);
+    this.deadFeedStaticSource = null;
+    this.deadFeedStaticGain = null;
+  }
+
+  /** Even quieter hiss while viewing a destroyed camera. */
+  startCameraDeadFeedHiss(): void {
+    if (this.camDeadHissSource) return;
+    try {
+      const ctx = this.ensureSharedAudioContext();
+      if (!ctx) return;
+      const chain = this.createDeadFeedNoiseChain(ctx, 0.004, 0.4);
+      this.camDeadHissSource = chain.src;
+      this.camDeadHissGain = chain.gain;
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
+  stopCameraDeadFeedHiss(): void {
+    this.stopNoiseChain(this.camDeadHissSource, this.camDeadHissGain);
+    this.camDeadHissSource = null;
+    this.camDeadHissGain = null;
+  }
+
+  // Tiered alert sounds ------------------------------------------------------
+  private alertSoundLastAt: Record<string, number> = {};
+
+  /**
+   * Quiet audio cue per alert level. Per-level cooldown keeps alert spam
+   * (rocket hits, sapper click progress) from getting tiring — the banner
+   * stays the primary signal. 'info' alerts are deliberately silent.
+   */
+  playAlertSound(level: 'success' | 'info' | 'warning' | 'danger'): void {
+    if (level === 'info') return;
+    if (this.host.getGameStatus() !== 'PLAYING') return;
+
+    const now = performance.now();
+    const last = this.alertSoundLastAt[level] ?? -Infinity;
+    if (now - last < 1500) return;
+    this.alertSoundLastAt[level] = now;
+
+    try {
+      const ctx = this.ensureSharedAudioContext();
+      if (!ctx) return;
+      const t = ctx.currentTime;
+
+      const tone = (freq: number, start: number, dur: number, type: OscillatorType, vol: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.bus(ctx));
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t + start);
+        gain.gain.setValueAtTime(vol, t + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + start + dur);
+        osc.start(t + start);
+        osc.stop(t + start + dur);
+      };
+
+      switch (level) {
+        case 'danger':
+          // Short low double-buzz
+          tone(120, 0, 0.06, 'square', 0.06);
+          tone(110, 0.09, 0.07, 'square', 0.06);
+          break;
+        case 'warning':
+          // Single mid blip
+          tone(420, 0, 0.07, 'triangle', 0.055);
+          break;
+        case 'success':
+          // Soft two-note up-chirp
+          tone(520, 0, 0.06, 'sine', 0.05);
+          tone(780, 0.07, 0.07, 'sine', 0.05);
+          break;
+      }
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
+  // VCR pause/resume ---------------------------------------------------------
+
+  /** Mechanical ka-chunk — tape put on hold. */
+  playVcrPauseSound(): void {
+    try {
+      const ctx = this.ensureSharedAudioContext();
+      if (!ctx) return;
+      const t = ctx.currentTime;
+
+      // Low mechanical thud
+      const thud = ctx.createOscillator();
+      const thudGain = ctx.createGain();
+      thud.connect(thudGain);
+      thudGain.connect(this.bus(ctx));
+      thud.type = 'sine';
+      thud.frequency.setValueAtTime(90, t);
+      thud.frequency.exponentialRampToValueAtTime(45, t + 0.09);
+      thudGain.gain.setValueAtTime(0.16, t);
+      thudGain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+      thud.start(t);
+      thud.stop(t + 0.1);
+
+      // Brief tape squeak as the head disengages
+      const squeak = ctx.createOscillator();
+      const squeakGain = ctx.createGain();
+      squeak.connect(squeakGain);
+      squeakGain.connect(this.bus(ctx));
+      squeak.type = 'triangle';
+      squeak.frequency.setValueAtTime(1400, t + 0.03);
+      squeak.frequency.exponentialRampToValueAtTime(700, t + 0.1);
+      squeakGain.gain.setValueAtTime(0.03, t + 0.03);
+      squeakGain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+      squeak.start(t + 0.03);
+      squeak.stop(t + 0.11);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
+  /** Click + short motor spin-up — tape rolling again. */
+  playVcrResumeSound(): void {
+    try {
+      const ctx = this.ensureSharedAudioContext();
+      if (!ctx) return;
+      const t = ctx.currentTime;
+
+      // Click
+      const click = ctx.createOscillator();
+      const clickGain = ctx.createGain();
+      click.connect(clickGain);
+      clickGain.connect(this.bus(ctx));
+      click.type = 'square';
+      click.frequency.setValueAtTime(900, t);
+      click.frequency.exponentialRampToValueAtTime(450, t + 0.04);
+      clickGain.gain.setValueAtTime(0.08, t);
+      clickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+      click.start(t);
+      click.stop(t + 0.05);
+
+      // Motor spin-up
+      const motor = ctx.createOscillator();
+      const motorGain = ctx.createGain();
+      motor.connect(motorGain);
+      motorGain.connect(this.bus(ctx));
+      motor.type = 'sawtooth';
+      motor.frequency.setValueAtTime(50, t + 0.03);
+      motor.frequency.linearRampToValueAtTime(130, t + 0.22);
+      motorGain.gain.setValueAtTime(0.045, t + 0.03);
+      motorGain.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+      motor.start(t + 0.03);
+      motor.stop(t + 0.26);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
+  // Per-room camera ambience beds --------------------------------------------
+  private camAmbienceNode: string | null = null;
+  private camAmbienceSource: AudioBufferSourceNode | null = null;
+  private camAmbienceGain: GainNode | null = null;
+  private camAmbienceExtraOsc: OscillatorNode | null = null;
+  private camAmbienceExtraGain: GainNode | null = null;
+  private camAmbienceLfo: OscillatorNode | null = null;
+  private camAmbienceLfoGain: GainNode | null = null;
+  private camAmbienceEventTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Very quiet looping room tone for the selected camera, with a per-room
+   * character: drips in the sewer, wind in the courtyard, duct rumble at the
+   * grate, creaks on the bridge, electrical hum in the halls.
+   */
+  startCameraRoomAmbience(node: string): void {
+    if (this.camAmbienceNode === node && this.camAmbienceSource) return;
+    this.stopCameraRoomAmbience();
+
+    try {
+      const ctx = this.ensureSharedAudioContext();
+      if (!ctx) return;
+      const t = ctx.currentTime;
+
+      // Per-room recipe: noise filter tint + level, optional layers
+      const recipes: Record<string, { freq: number; gain: number; wind?: boolean; hum?: boolean; rumble?: boolean; events?: 'drip' | 'creak' }> = {
+        SEWER: { freq: 900, gain: 0.006, events: 'drip' },
+        COURTYARD: { freq: 1600, gain: 0.007, wind: true },
+        GRATE: { freq: 350, gain: 0.008, rumble: true },
+        BRIDGE: { freq: 1100, gain: 0.005, events: 'creak' },
+        STAIRCASE: { freq: 700, gain: 0.005 },
+        SPIRAL: { freq: 500, gain: 0.005 },
+        LEFT_HALL: { freq: 800, gain: 0.004, hum: true },
+        RIGHT_HALL: { freq: 800, gain: 0.004, hum: true },
+      };
+      const recipe = recipes[node];
+      if (!recipe) return;
+
+      // Base noise bed
+      const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = recipe.freq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(recipe.gain, t + 0.6);
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.bus(ctx));
+      src.start();
+      this.camAmbienceSource = src;
+      this.camAmbienceGain = gain;
+
+      // Wind: slow LFO sweeping the filter cutoff
+      if (recipe.wind) {
+        const lfo = ctx.createOscillator();
+        const lfoGain = ctx.createGain();
+        lfo.type = 'sine';
+        lfo.frequency.value = 0.13;
+        lfoGain.gain.value = 700;
+        lfo.connect(lfoGain);
+        lfoGain.connect(filter.frequency);
+        lfo.start();
+        this.camAmbienceLfo = lfo;
+        this.camAmbienceLfoGain = lfoGain;
+      }
+
+      // Electrical hum / duct rumble: steady low oscillator layer
+      if (recipe.hum || recipe.rumble) {
+        const osc = ctx.createOscillator();
+        const oscGain = ctx.createGain();
+        osc.type = recipe.hum ? 'sine' : 'triangle';
+        osc.frequency.value = recipe.hum ? 120 : 46;
+        oscGain.gain.setValueAtTime(0, t);
+        oscGain.gain.linearRampToValueAtTime(recipe.hum ? 0.004 : 0.008, t + 0.6);
+        osc.connect(oscGain);
+        oscGain.connect(this.bus(ctx));
+        osc.start();
+        this.camAmbienceExtraOsc = osc;
+        this.camAmbienceExtraGain = oscGain;
+      }
+
+      // Random one-shot events (drips / creaks)
+      if (recipe.events) {
+        const scheduleEvent = () => {
+          const delay = 2500 + Math.random() * 4500;
+          this.camAmbienceEventTimer = setTimeout(() => {
+            try {
+              if (!this.camAmbienceSource || !this.sharedAudioContext) return;
+              const c = this.sharedAudioContext;
+              const now2 = c.currentTime;
+              const osc = c.createOscillator();
+              const g = c.createGain();
+              osc.connect(g);
+              g.connect(this.bus(c));
+              if (recipe.events === 'drip') {
+                osc.type = 'sine';
+                const f = 900 + Math.random() * 600;
+                osc.frequency.setValueAtTime(f, now2);
+                osc.frequency.exponentialRampToValueAtTime(f * 0.6, now2 + 0.09);
+                g.gain.setValueAtTime(0.02, now2);
+                g.gain.exponentialRampToValueAtTime(0.001, now2 + 0.12);
+                osc.start(now2);
+                osc.stop(now2 + 0.12);
+              } else {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(160 + Math.random() * 60, now2);
+                osc.frequency.linearRampToValueAtTime(90, now2 + 0.3);
+                g.gain.setValueAtTime(0.012, now2);
+                g.gain.exponentialRampToValueAtTime(0.001, now2 + 0.32);
+                osc.start(now2);
+                osc.stop(now2 + 0.32);
+              }
+            } catch (e) {
+              // Audio not available
+            }
+            scheduleEvent();
+          }, delay);
+        };
+        scheduleEvent();
+      }
+
+      this.camAmbienceNode = node;
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
+  stopCameraRoomAmbience(): void {
+    if (this.camAmbienceEventTimer) {
+      clearTimeout(this.camAmbienceEventTimer);
+      this.camAmbienceEventTimer = null;
+    }
+    this.stopNoiseChain(this.camAmbienceSource, this.camAmbienceGain);
+    this.camAmbienceSource = null;
+    this.camAmbienceGain = null;
+    this.camAmbienceExtraOsc = this.stopOscillator(this.camAmbienceExtraOsc);
+    if (this.camAmbienceExtraGain) {
+      try {
+        this.camAmbienceExtraGain.disconnect();
+      } catch (e) {
+        // Already disconnected
+      }
+      this.camAmbienceExtraGain = null;
+    }
+    this.camAmbienceLfo = this.stopOscillator(this.camAmbienceLfo);
+    if (this.camAmbienceLfoGain) {
+      try {
+        this.camAmbienceLfoGain.disconnect();
+      } catch (e) {
+        // Already disconnected
+      }
+      this.camAmbienceLfoGain = null;
+    }
+    this.camAmbienceNode = null;
+  }
+
+  // Administrator hack tick (targeted camera only) ----------------------------
+  private hackTickTimer: ReturnType<typeof setTimeout> | null = null;
+  private hackTickProgress = 0;
+
+  /**
+   * Quiet accelerating tick while watching the camera the Administrator is
+   * actively hacking. Rate rises with hack progress. Only runs while the
+   * player is on that camera — off-screen hacks stay silent.
+   */
+  startHackTickLoop(): void {
+    if (this.hackTickTimer) return;
+    const scheduleTick = () => {
+      // 1.5 ticks/sec at progress 0 → ~5/sec near completion
+      const rate = 1.5 + this.hackTickProgress * 3.5;
+      this.hackTickTimer = setTimeout(() => {
+        try {
+          const ctx = this.ensureSharedAudioContext();
+          if (ctx) {
+            const t = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.bus(ctx));
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(1000 + this.hackTickProgress * 400, t);
+            gain.gain.setValueAtTime(0.025 + this.hackTickProgress * 0.02, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+            osc.start(t);
+            osc.stop(t + 0.03);
+          }
+        } catch (e) {
+          // Audio not available
+        }
+        scheduleTick();
+      }, 1000 / rate);
+    };
+    scheduleTick();
+  }
+
+  setHackTickProgress(progress: number): void {
+    this.hackTickProgress = Math.max(0, Math.min(1, progress));
+  }
+
+  stopHackTickLoop(): void {
+    if (this.hackTickTimer) {
+      clearTimeout(this.hackTickTimer);
+      this.hackTickTimer = null;
+    }
+    this.hackTickProgress = 0;
+  }
+
+  // Thermostat heat creaks -----------------------------------------------------
+  private nextHeatCreakAt = 0;
+
+  /**
+   * Occasional metallic expansion tinks once the vents run hot (>75%).
+   * Called every frame from the thermostat update; self-throttles to a
+   * random 3–8s spacing.
+   */
+  maybePlayHeatCreak(pct: number): void {
+    if (pct < 0.75) return;
+    const now = performance.now();
+    if (now < this.nextHeatCreakAt) return;
+    this.nextHeatCreakAt = now + 3000 + Math.random() * 5000;
+
+    try {
+      const ctx = this.ensureSharedAudioContext();
+      if (!ctx) return;
+      const t = ctx.currentTime;
+
+      // Metallic tink: high sine with a fast pitch drop + tiny noise tail
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(this.bus(ctx));
+      osc.type = 'sine';
+      const f = 1800 + Math.random() * 700;
+      osc.frequency.setValueAtTime(f, t);
+      osc.frequency.exponentialRampToValueAtTime(f * 0.7, t + 0.06);
+      gain.gain.setValueAtTime(0.035, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+      osc.start(t);
+      osc.stop(t + 0.14);
+    } catch (e) {
+      // Audio not available
+    }
+  }
+
   /**
    * Stop ALL game sounds - called on game over/victory
    */
@@ -3517,6 +3958,10 @@ export class GameAudio {
     // Ghost scream runs on its own AudioContext, so closing the shared context
     // below doesn't silence it - stop it explicitly or it screams over game over
     this.stopMedicGhostScream();
+    this.stopDeadFeedStatic();
+    this.stopCameraDeadFeedHiss();
+    this.stopCameraRoomAmbience();
+    this.stopHackTickLoop();
 
     // Force stop any oscillators that might still be running
     const oscillatorsToStop = [
@@ -3804,7 +4249,7 @@ export class GameAudio {
         thudGain.gain.setValueAtTime(loudness, start);
         thudGain.gain.exponentialRampToValueAtTime(0.001, start + stepDuration);
         thud.connect(thudGain);
-        thudGain.connect(audioContext.destination);
+        thudGain.connect(this.bus(audioContext));
         thud.start(start);
         thud.stop(start + stepDuration);
 
@@ -3825,7 +4270,7 @@ export class GameAudio {
         scuffGain.gain.exponentialRampToValueAtTime(0.001, start + scuffDuration);
         scuff.connect(scuffFilter);
         scuffFilter.connect(scuffGain);
-        scuffGain.connect(audioContext.destination);
+        scuffGain.connect(this.bus(audioContext));
         scuff.start(start);
         scuff.stop(start + scuffDuration);
       }
@@ -3841,7 +4286,7 @@ export class GameAudio {
         thumpGain.gain.setValueAtTime(0.2, start);
         thumpGain.gain.exponentialRampToValueAtTime(0.001, start + 0.15);
         thump.connect(thumpGain);
-        thumpGain.connect(audioContext.destination);
+        thumpGain.connect(this.bus(audioContext));
         thump.start(start);
         thump.stop(start + 0.15);
       }
@@ -3862,13 +4307,18 @@ export class GameAudio {
       this.medicGhostAudioContext = audioContext;
       this.medicGhostOscillators = [];
       
+      // Standalone context bypasses the shared master bus — apply SFX volume here
+      const screamBus = audioContext.createGain();
+      screamBus.gain.value = getSfxVolume();
+      screamBus.connect(this.bus(audioContext));
+      
       const duration = 3.5;  // Full ghost duration
       
       // LOUD initial shriek - the jumpscare
       const shriek = audioContext.createOscillator();
       const shriekGain = audioContext.createGain();
       shriek.connect(shriekGain);
-      shriekGain.connect(audioContext.destination);
+      shriekGain.connect(screamBus);
       
       shriek.type = 'sawtooth';
       shriek.frequency.setValueAtTime(1800, audioContext.currentTime);
@@ -3891,7 +4341,7 @@ export class GameAudio {
       lfo.connect(lfoGain);
       lfoGain.connect(warble.frequency);
       warble.connect(warbleGain);
-      warbleGain.connect(audioContext.destination);
+      warbleGain.connect(screamBus);
       
       warble.type = 'square';
       warble.frequency.value = 600;
@@ -3913,7 +4363,7 @@ export class GameAudio {
       const drone = audioContext.createOscillator();
       const droneGain = audioContext.createGain();
       drone.connect(droneGain);
-      droneGain.connect(audioContext.destination);
+      droneGain.connect(screamBus);
       
       drone.type = 'sawtooth';
       drone.frequency.value = 55;
@@ -3931,7 +4381,7 @@ export class GameAudio {
         const pop = audioContext.createOscillator();
         const popGain = audioContext.createGain();
         pop.connect(popGain);
-        popGain.connect(audioContext.destination);
+        popGain.connect(screamBus);
         
         pop.type = 'square';
         pop.frequency.value = 100 + Math.random() * 2000;

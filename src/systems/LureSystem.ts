@@ -19,7 +19,7 @@ export class LureSystem {
     // Play the lure
     this.scene.activeLure.playing = true;
     this.scene.activeLure.playTimeRemaining = GAME_CONSTANTS.LURE_DURATION;
-    this.scene.showAlert('Lure activated!', 0x00ffff);
+    this.scene.showAlert('Lure activated!', 'info');
     this.scene.audio.playLureSound();
     console.log('Lure activated from camera view at', this.scene.activeLure.node);
     
@@ -36,10 +36,10 @@ export class LureSystem {
     const btnText = this.scene.cameraLureButton.list[1] as Phaser.GameObjects.Text;
     
     // Always show play option (button is hidden when lure is playing)
-    btnBg.setFillStyle(0x224444);
-    btnBg.setStrokeStyle(2, 0x44aaaa);
+    btnBg.setFillStyle(0x140e06);
+    btnBg.setStrokeStyle(2, 0x8a6230);
     btnText.setText('PLAY LURE');
-    btnText.setColor('#66ffff');
+    btnText.setColor('#ffb454');
   }
 
   /**
@@ -70,11 +70,11 @@ export class LureSystem {
         // Play the lure (activate Medic voice)
         this.scene.activeLure.playing = true;
         this.scene.activeLure.playTimeRemaining = GAME_CONSTANTS.LURE_DURATION;
-        this.scene.showAlert('Lure activated!', 0x00ffff);
+        this.scene.showAlert('Lure activated!', 'info');
         this.scene.audio.playLureSound();
         console.log('Lure activated at', this.scene.currentRoom);
       } else {
-        this.scene.showAlert('Lure already playing!', 0xffff00);
+        this.scene.showAlert('Lure already playing!', 'warning');
       }
       this.updateLureButtonText();
       return;
@@ -82,23 +82,23 @@ export class LureSystem {
     
     // If lure exists elsewhere, can't do anything here
     if (this.scene.activeLure && this.scene.activeLure.placed) {
-      this.scene.showAlert(`Lure already at ${this.scene.activeLure.node.replace('_', ' ')}!`, 0xffff00);
+      this.scene.showAlert(`Lure already at ${this.scene.activeLure.node.replace('_', ' ')}!`, 'warning');
       return;
     }
     
     if (!this.scene.isTeleported) {
-      this.scene.showAlert('Must be teleported to place lure!', 0xff6600);
+      this.scene.showAlert('Must be teleported to place lure!', 'warning');
       return;
     }
     
     if (this.scene.currentRoom === 'INTEL') {
-      this.scene.showAlert('Cannot place lure in Intel room!', 0xff0000);
+      this.scene.showAlert('Cannot place lure in Intel room!', 'warning');
       return;
     }
     
     // Place new lure
     if (this.scene.metal < GAME_CONSTANTS.LURE_COST) {
-      this.scene.showAlert('Not enough metal! (50 required)', 0xff0000);
+      this.scene.showAlert('Not enough metal! (50 required)', 'warning');
       return;
     }
     
@@ -111,20 +111,9 @@ export class LureSystem {
     };
     console.log(`Lure placed at ${this.scene.currentRoom}`);
     this.scene.audio.playLurePlacedSound();
-    this.scene.showAlert(`Lure placed! Play from cameras.`, 0x00ffff);
+    this.scene.showAlert(`Lure placed! Play from cameras.`, 'info');
     this.scene.updateHUD();
     this.updateLureButtonText();
-  }
-
-  /**
-   * Pick up lure from current room
-   */
-  _pickupLure(): void {
-    if (this.scene.activeLure && this.scene.activeLure.node === this.scene.currentRoom) {
-      this.scene.activeLure = null;
-      this.scene.showAlert('Lure picked up', 0xffff00);
-      this.updateLureButtonText();
-    }
   }
 
   /**
@@ -141,36 +130,36 @@ export class LureSystem {
         // At the lure location
         if (this.scene.activeLure.playing) {
           btnText.setText('🔊 LURE PLAYING...');
-          btnBg.setFillStyle(0x224444);
-          btnBg.setStrokeStyle(2, 0x00ffff);
-          btnText.setColor('#66ffff');
+          btnBg.setFillStyle(0x2a1f10);
+          btnBg.setStrokeStyle(2, 0xffb454);
+          btnText.setColor('#ffb454');
         } else {
           btnText.setText('PLAY LURE');
-          btnBg.setFillStyle(0x442244);
-          btnBg.setStrokeStyle(2, 0xaa44aa);
-          btnText.setColor('#cc88ff');
+          btnBg.setFillStyle(0x1c1409);
+          btnBg.setStrokeStyle(2, 0xf0e6d2);
+          btnText.setColor('#f0e6d2');
         }
       } else {
         // Lure is placed elsewhere - show info (can't place another)
         const lureRoom = this.scene.activeLure.node.replace('_', ' ');
         btnText.setText(`LURE AT ${lureRoom}`);
-        btnBg.setFillStyle(0x222222);
-        btnBg.setStrokeStyle(2, 0x555555);
-        btnText.setColor('#888888');
+        btnBg.setFillStyle(0x140e06);
+        btnBg.setStrokeStyle(2, 0x3d2c14);
+        btnText.setColor('#8a6230');
       }
     } else {
       // No lure placed - check if enough metal
       const canAfford = this.scene.metal >= GAME_CONSTANTS.LURE_COST;
       btnText.setText('PLACE LURE (50 metal)');
       if (canAfford) {
-        btnBg.setFillStyle(0x224444);
-        btnBg.setStrokeStyle(2, 0x44aaaa);
-        btnText.setColor('#66ffff');
+        btnBg.setFillStyle(0x1c1409);
+        btnBg.setStrokeStyle(2, 0x8a6230);
+        btnText.setColor('#ffb454');
       } else {
         // Greyed out - not enough metal
-        btnBg.setFillStyle(0x1a1a1a);
-        btnBg.setStrokeStyle(2, 0x333333);
-        btnText.setColor('#555555');
+        btnBg.setFillStyle(0x100b05);
+        btnBg.setStrokeStyle(2, 0x3d2c14);
+        btnText.setColor('#3d2c14');
       }
     }
   }

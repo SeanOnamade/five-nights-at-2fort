@@ -140,8 +140,21 @@ const config: Phaser.Types.Core.GameConfig = {
   },
 };
 
-// Create the game instance
-const game = new Phaser.Game(config);
+// Load the terminal/display webfonts before booting Phaser so canvas text
+// renders with the correct faces on the first frame. Falls back after 2s.
+let game: Phaser.Game;
+
+const fontLoad = Promise.all([
+  document.fonts.load('26px VT323'),
+  document.fonts.load('26px "Fjalla One"'),
+]);
+const timeout = new Promise((resolve) => setTimeout(resolve, 2000));
+
+Promise.race([fontLoad, timeout])
+  .catch(() => undefined)
+  .then(() => {
+    game = new Phaser.Game(config);
+  });
 
 // Export for potential debugging and mobile detection
 export { game, isMobileDevice };

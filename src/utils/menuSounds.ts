@@ -3,6 +3,8 @@
  * Uses a single shared AudioContext where possible.
  */
 
+import { getSfxVolume } from './settings';
+
 let menuAudioContext: AudioContext | null = null;
 
 function getMenuAudioContext(): AudioContext | null {
@@ -28,12 +30,14 @@ function beep(
   type: OscillatorType,
   peakGain: number
 ): void {
+  const scaled = peakGain * getSfxVolume();
+  if (scaled <= 0) return;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = type;
   osc.frequency.setValueAtTime(freq, ctx.currentTime);
   gain.gain.setValueAtTime(0, ctx.currentTime);
-  gain.gain.linearRampToValueAtTime(peakGain, ctx.currentTime + 0.004);
+  gain.gain.linearRampToValueAtTime(scaled, ctx.currentTime + 0.004);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
   osc.connect(gain);
   gain.connect(ctx.destination);
@@ -83,7 +87,7 @@ export function playGameStartChime(): void {
     oscillator.type = 'sine';
     oscillator.frequency.setValueAtTime(440, ctx.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
-    gainNode.gain.setValueAtTime(0.15, ctx.currentTime);
+    gainNode.gain.setValueAtTime(0.15 * getSfxVolume(), ctx.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
     oscillator.start(ctx.currentTime);
     oscillator.stop(ctx.currentTime + 0.3);

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameStatus } from '../types';
+import { getSfxVolume } from '../utils/settings';
 
 /** Scene state the Engineer recordings need; implemented by GameScene. */
 export interface RecordingUIHost {
@@ -37,24 +38,24 @@ export class RecordingUI {
     this.recordingSkipButton.setDepth(210);  // Above pause menu (200)
     this.recordingSkipButton.setVisible(false);
     
-    const skipBg = this.scene.add.rectangle(0, 0, 80, 30, 0x333333, 0.9);
-    skipBg.setStrokeStyle(2, 0x666666);
+    const skipBg = this.scene.add.rectangle(0, 0, 80, 30, 0x140e06, 0.9);
+    skipBg.setStrokeStyle(2, 0x8a6230);
     skipBg.setInteractive({ useHandCursor: true });
     
     const skipText = this.scene.add.text(0, 0, 'SKIP', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '14px',
-      color: '#aaaaaa',
+      fontFamily: 'VT323, "Courier New", monospace',
+      fontSize: '17px',
+      color: '#ffb454',
     }).setOrigin(0.5);
     
     skipBg.on('pointerover', () => {
-      skipBg.setFillStyle(0x555555);
-      skipText.setColor('#ffffff');
+      skipBg.setFillStyle(0x2a1f10);
+      skipText.setColor('#f0e6d2');
     });
     
     skipBg.on('pointerout', () => {
-      skipBg.setFillStyle(0x333333);
-      skipText.setColor('#aaaaaa');
+      skipBg.setFillStyle(0x140e06);
+      skipText.setColor('#ffb454');
     });
     
     skipBg.on('pointerdown', () => {
@@ -69,8 +70,8 @@ export class RecordingUI {
     this.recordingIndicator.setDepth(210);  // Above pause menu (200)
     this.recordingIndicator.setVisible(false);
     
-    const indicatorBg = this.scene.add.rectangle(0, 0, 100, 30, 0x1a1a1a, 0.9);
-    indicatorBg.setStrokeStyle(1, 0x444444);
+    const indicatorBg = this.scene.add.rectangle(0, 0, 100, 30, 0x140e06, 0.9);
+    indicatorBg.setStrokeStyle(1, 0x3d2c14);
     
     const tapeIcon = this.scene.add.text(-35, 0, '(●)', {
       fontSize: '12px',
@@ -78,9 +79,9 @@ export class RecordingUI {
     }).setOrigin(0.5);
     
     const playingText = this.scene.add.text(15, 0, 'PLAYING', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '10px',
-      color: '#00ff00',
+      fontFamily: 'VT323, "Courier New", monospace',
+      fontSize: '13px',
+      color: '#ffb454',
     }).setOrigin(0.5);
     
     // Blink the playing text
@@ -154,7 +155,7 @@ export class RecordingUI {
     // Try to load and play the audio
     try {
       this.recordingAudio = new Audio(`./audio/recordings/${recordingFile}`);
-      this.recordingAudio.volume = 0.7;
+      this.recordingAudio.volume = 0.7 * getSfxVolume();
       
       this.recordingAudio.addEventListener('canplaythrough', () => {
         if (this.recordingAudio && this.host.getGameStatus() === 'PLAYING') {

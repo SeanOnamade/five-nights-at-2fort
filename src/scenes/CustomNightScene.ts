@@ -17,6 +17,9 @@ import {
   playMenuToggleOffSound,
   playMenuToggleOnSound,
 } from '../utils/menuSounds';
+import { PALETTE, headingStyle, osdStyle, terminalStyle } from '../ui/kit/theme';
+import { addScanlines, addStatic, addVignette, ensureNoiseTexture } from '../ui/kit/effects';
+import { createTextButton } from '../ui/kit/widgets';
 
 const ENEMY_DISPLAY: Record<CustomNightEnemyId, string> = {
   scout: 'SCOUT',
@@ -60,14 +63,28 @@ const ENEMY_ACCENT: Record<CustomNightEnemyId, number> = {
   merasmus: 0x8866dd,
 };
 
+/** The classic story-mode roster (Nights 1-5) */
+const STORY_ROSTER: CustomNightEnemyId[] = ['scout', 'soldier', 'demoman', 'heavy', 'sniper', 'spy', 'pyro'];
+
+interface CardRefs {
+  frame: Phaser.GameObjects.Rectangle;
+  portraitBg: Phaser.GameObjects.Rectangle;
+  art: Phaser.GameObjects.Container;
+  offStatic: Phaser.GameObjects.TileSprite;
+  name: Phaser.GameObjects.Text;
+  status: Phaser.GameObjects.Text;
+}
+
 /**
- * FNAF-style custom night gallery — pick threats, then READY.
+ * Custom night — threat selection on the security terminal.
+ * OFF cards read as powered-down monitors (dark + static);
+ * ON cards light up with an amber frame.
  */
 export class CustomNightScene extends Phaser.Scene {
   private enemies!: Record<CustomNightEnemyId, boolean>;
-  private portraitPanels = new Map<CustomNightEnemyId, Phaser.GameObjects.Rectangle>();
-  private portraitArt = new Map<CustomNightEnemyId, Phaser.GameObjects.Container>();
-  private cardStatusLabels = new Map<CustomNightEnemyId, Phaser.GameObjects.Text>();
+  private cards = new Map<CustomNightEnemyId, CardRefs>();
+  private threatFill!: Phaser.GameObjects.Rectangle;
+  private threatLabel!: Phaser.GameObjects.Text;
   private started = false;
 
   constructor() {
@@ -78,61 +95,76 @@ export class CustomNightScene extends Phaser.Scene {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
     this.enemies = loadCustomNightEnemies();
+    this.cards.clear();
     this.started = false;
     const spyDisguise = pickRandomSpyDisguise();
 
-    const bg = this.add.graphics();
-    bg.fillGradientStyle(0x050508, 0x050508, 0x101018, 0x101018, 1);
-    bg.fillRect(0, 0, width, height);
+    ensureNoiseTexture(this);
 
-    const grid = this.add.graphics();
-    grid.lineStyle(1, 0x1a1a28, 0.35);
-    for (let x = 0; x < width; x += 48) grid.lineBetween(x, 0, x, height);
-    for (let y = 0; y < height; y += 48) grid.lineBetween(0, y, width, y);
+    this.add.rectangle(width / 2, height / 2, width, height, PALETTE.bg);
+    addVignette(this, width, height);
 
-    this.add
-      .text(width / 2, 52, 'CUSTOM NIGHT', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '44px',
-        color: '#cc5522',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5);
+    // ===== HEADER BAND (y 0-130) =====
+    this.add.text(48, 26, 'CUSTOM NIGHT', headingStyle(40, PALETTE.creamCss));
+    this.add.text(50, 78, 'SELECT YOUR THREATS — TAP A MONITOR TO TOGGLE', osdStyle(16, PALETTE.amberDimCss));
 
-    this.add
-      .text(width / 2, 98, 'SELECT YOUR THREATS — TAP A PORTRAIT TO TOGGLE', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '13px',
-        color: '#666677',
-      })
-      .setOrigin(0.5);
+    // Right block: threat meter on top, presets below — all right-aligned
+    const rightEdge = width - 48;
+    const meterW = 220;
+    const meterValueW = 62; // room for "11/11"
+    const meterX = rightEdge - meterValueW - meterW;
+    this.add.text(meterX, 24, 'THREAT LEVEL', osdStyle(15, PALETTE.amberDimCss));
+    const meterTrack = this.add.rectangle(meterX + meterW / 2, 56, meterW, 10, PALETTE.amberFaint);
+    meterTrack.setStrokeStyle(1, PALETTE.amberDim);
+    this.threatFill = this.add.rectangle(meterX, 56, 0, 10, PALETTE.amber).setOrigin(0, 0.5);
+    this.threatLabel = this.add
+      .text(rightEdge, 56, '', terminalStyle(22, PALETTE.creamCss))
+      .setOrigin(1, 0.5);
 
-    const cols = 5;
-    const cardW = 210;
-    const cardH = 168;
-    const gapX = 18;
-    const gapY = 22;
-    const gridW = cols * cardW + (cols - 1) * gapX;
-    const originX = (width - gridW) / 2 + cardW / 2;
-    const row1Y = 168;
-    const rowPitch = cardH + gapY;
+    // Preset row ends at the right edge, right-to-left
+    const presetY = 96;
+    const presets: Array<[string, () => void]> = [
+      ['[ ALL ON ]', () => this.applyPreset(() => true)],
+      ['[ STORY ]', () => this.applyPreset((id) => STORY_ROSTER.includes(id))],
+      ['[ ALL OFF ]', () => this.applyPreset(() => false)],
+    ];
+    let presetRightX = rightEdge;
+    presets.forEach(([label, action]) => {
+      const btn = createTextButton(this, presetRightX, presetY, label, action, 20);
+      btn.setOrigin(1, 0.5);
+      presetRightX -= btn.width + 24;
+    });
+
+    // Header hairline separating the band from the grid
+    this.add.rectangle(width / 2, 126, width - 96, 1, PALETTE.amberFaint);
+
+    // ===== CARD GRID — 6 + 5 (no lone straggler row) =====
+    const cardW = 186;
+    const cardH = 200;
+    const gapX = 16;
+    const row1Y = 254;
+    const row2Y = 254 + cardH + 26;
+
+    const rowCenterX = (count: number, col: number) => {
+      const total = count * cardW + (count - 1) * gapX;
+      return (width - total) / 2 + cardW / 2 + col * (cardW + gapX);
+    };
 
     CUSTOM_NIGHT_ENEMY_ORDER.forEach((id, index) => {
-      const col = index % cols;
-      const row = Math.floor(index / cols);
-      const cx = originX + col * (cardW + gapX);
-      const cy = row1Y + row * rowPitch;
+      const inRow1 = index < 6;
+      const cx = inRow1 ? rowCenterX(6, index) : rowCenterX(5, index - 6);
+      const cy = inRow1 ? row1Y : row2Y;
 
-      const frame = this.add.rectangle(cx, cy, cardW + 6, cardH + 6, 0x000000, 0.35);
-      frame.setStrokeStyle(2, 0x333344);
+      const frame = this.add.rectangle(cx, cy, cardW, cardH, 0x000000, 0.4);
+      frame.setStrokeStyle(1, PALETTE.amberFaint);
 
-      const portraitW = cardW - 24;
-      const portraitH = 88;
-      const portraitBg = this.add.rectangle(cx, cy - 12, portraitW, portraitH, 0x06060a, 1);
-      portraitBg.setStrokeStyle(2, 0x151520);
+      const portraitW = cardW - 20;
+      const portraitH = 104;
+      const portraitCY = cy - 36;
+      const portraitBg = this.add.rectangle(cx, portraitCY, portraitW, portraitH, 0x050302, 1);
+      portraitBg.setStrokeStyle(1, PALETTE.amberFaint);
 
-      const drawY = cy - 2;
-      const portraitWrap = this.add.container(cx, drawY);
+      const portraitWrap = this.add.container(cx, portraitCY + 12);
       const portraitGfx = this.add.graphics();
       if (id === 'spy') {
         drawCharacterSilhouette(portraitGfx, 0, 0, spyDisguise.name, spyDisguise.color);
@@ -144,37 +176,27 @@ export class CustomNightScene extends Phaser.Scene {
         drawCharacterSilhouette(portraitGfx, 0, 0, SILHOUETTE_NAME[id], ENEMY_ACCENT[id]);
       }
       portraitWrap.add(portraitGfx);
-      portraitWrap.setScale(id === 'pauling' ? 0.32 : 0.38);
+      portraitWrap.setScale(id === 'pauling' ? 0.36 : 0.44);
 
-      this.portraitPanels.set(id, portraitBg);
-      this.portraitArt.set(id, portraitWrap);
+      // Powered-off static over the portrait area (visible when OFF)
+      const offStatic = addStatic(this, cx, portraitCY, portraitW, portraitH, 0.09);
 
-      this.add
-        .text(cx, cy + 52, ENEMY_DISPLAY[id], {
-          fontFamily: 'Courier New, monospace',
-          fontSize: '15px',
-          color: '#dddddd',
-          fontStyle: 'bold',
-        })
+      const name = this.add
+        .text(cx, cy + 40, ENEMY_DISPLAY[id], terminalStyle(22, PALETTE.creamCss))
         .setOrigin(0.5);
 
-      const status = this.add.text(cx, cy + 74, '', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '12px',
-        color: '#8899aa',
-        fontStyle: 'bold',
-      }).setOrigin(0.5);
+      const status = this.add.text(cx, cy + 68, '', osdStyle(15)).setOrigin(0.5);
 
-      const hit = this.add.rectangle(cx, cy, cardW + 6, cardH + 6, 0x000000, 0.001);
+      const hit = this.add.rectangle(cx, cy, cardW, cardH, 0x000000, 0.001);
       hit.setInteractive({ useHandCursor: true });
 
-      this.cardStatusLabels.set(id, status);
+      this.cards.set(id, { frame, portraitBg, art: portraitWrap, offStatic, name, status });
 
       hit.on('pointerover', () => {
-        frame.setStrokeStyle(2, 0xff8833);
+        frame.setStrokeStyle(2, PALETTE.cream);
       });
       hit.on('pointerout', () => {
-        frame.setStrokeStyle(2, 0x333344);
+        this.refreshCard(id);
       });
       hit.on('pointerdown', () => {
         this.enemies[id] = !this.enemies[id];
@@ -182,75 +204,86 @@ export class CustomNightScene extends Phaser.Scene {
         else playMenuToggleOffSound();
         saveCustomNightEnemies(this.enemies);
         this.refreshCard(id);
+        this.refreshThreatMeter();
       });
 
       this.refreshCard(id);
     });
 
-    const backBg = this.add.rectangle(120, height - 48, 200, 44, 0x12121a);
-    backBg.setStrokeStyle(2, 0x445566);
-    backBg.setInteractive({ useHandCursor: true });
-    const backText = this.add
-      .text(120, height - 48, '◀ BACK', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '18px',
-        color: '#8899bb',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5);
+    this.refreshThreatMeter();
 
-    backBg.on('pointerover', () => {
-      backBg.setFillStyle(0x1c1c28);
-      backText.setColor('#aabbdd');
-    });
-    backBg.on('pointerout', () => {
-      backBg.setFillStyle(0x12121a);
-      backText.setColor('#8899bb');
-    });
-    backBg.on('pointerdown', () => {
-      playMenuButtonSound();
-      this.scene.start('BootScene');
-    });
+    // Scanlines over everything
+    addScanlines(this, 0, 0, width, height, 0.1).setDepth(90);
 
-    const readyBg = this.add.rectangle(width - 160, height - 48, 240, 48, 0x1a2218);
-    readyBg.setStrokeStyle(3, 0x44aa44);
-    readyBg.setInteractive({ useHandCursor: true });
+    // Footer buttons
+    const back = createTextButton(this, 60, height - 26, '◀ BACK', () => this.scene.start('BootScene'), 26);
+    back.setOrigin(0, 0.5);
+
     const readyText = this.add
-      .text(width - 160, height - 48, '▶ READY', {
-        fontFamily: 'Courier New, monospace',
-        fontSize: '22px',
-        color: '#66dd66',
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5);
+      .text(width - 60, height - 26, '▶ READY', terminalStyle(30, PALETTE.creamCss))
+      .setOrigin(1, 0.5);
+    readyText.setInteractive({ useHandCursor: true });
+    readyText.on('pointerover', () => readyText.setColor(PALETTE.amberCss));
+    readyText.on('pointerout', () => readyText.setColor(PALETTE.creamCss));
+    readyText.on('pointerdown', () => this.startCustomNight(readyText));
 
-    readyBg.on('pointerover', () => {
-      readyBg.setFillStyle(0x243024);
-      readyText.setColor('#88ff88');
+    // Blinking cursor next to READY
+    this.tweens.add({
+      targets: readyText,
+      alpha: { from: 1, to: 0.75 },
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
     });
-    readyBg.on('pointerout', () => {
-      readyBg.setFillStyle(0x1a2218);
-      readyText.setColor('#66dd66');
+  }
+
+  private applyPreset(pick: (id: CustomNightEnemyId) => boolean): void {
+    CUSTOM_NIGHT_ENEMY_ORDER.forEach((id) => {
+      this.enemies[id] = pick(id);
     });
-    readyBg.on('pointerdown', () => this.startCustomNight(readyText));
+    saveCustomNightEnemies(this.enemies);
+    CUSTOM_NIGHT_ENEMY_ORDER.forEach((id) => this.refreshCard(id));
+    this.refreshThreatMeter();
   }
 
   private refreshCard(id: CustomNightEnemyId): void {
     const on = this.enemies[id];
-    const panel = this.portraitPanels.get(id);
-    const art = this.portraitArt.get(id);
-    const label = this.cardStatusLabels.get(id);
-    if (panel) {
-      panel.setAlpha(on ? 1 : 0.42);
-      panel.setStrokeStyle(2, on ? 0x66ff88 : 0x151520);
+    const refs = this.cards.get(id);
+    if (!refs) return;
+
+    if (on) {
+      refs.frame.setStrokeStyle(2, PALETTE.amber);
+      refs.portraitBg.setFillStyle(0x0a0603, 1);
+      refs.portraitBg.setStrokeStyle(1, PALETTE.amberDim);
+      refs.art.setAlpha(1);
+      refs.offStatic.setVisible(false);
+      refs.name.setColor(PALETTE.creamCss);
+      refs.status.setText('● ACTIVE');
+      refs.status.setColor(PALETTE.amberCss);
+    } else {
+      refs.frame.setStrokeStyle(1, PALETTE.amberFaint);
+      refs.portraitBg.setFillStyle(0x020202, 1);
+      refs.portraitBg.setStrokeStyle(1, PALETTE.amberFaint);
+      refs.art.setAlpha(0.08);
+      refs.offStatic.setVisible(true);
+      // Names stay readable when off; status a notch dimmer than the name
+      refs.name.setColor(PALETTE.amberCss);
+      refs.status.setText('OFFLINE');
+      refs.status.setColor(PALETTE.amberDimCss);
     }
-    if (art) {
-      art.setAlpha(on ? 1 : 0.42);
-    }
-    if (label) {
-      label.setText(on ? 'ACTIVE' : 'OFF');
-      label.setColor(on ? '#66ff99' : '#666677');
-    }
+  }
+
+  private refreshThreatMeter(): void {
+    const total = CUSTOM_NIGHT_ENEMY_ORDER.length;
+    const active = CUSTOM_NIGHT_ENEMY_ORDER.filter((id) => this.enemies[id]).length;
+    const ratio = active / total;
+    const meterW = 240;
+
+    this.threatFill.width = meterW * ratio;
+    this.threatFill.setFillStyle(ratio >= 0.7 ? PALETTE.alert : PALETTE.amber);
+    this.threatLabel.setText(`${active}/${total}`);
+    this.threatLabel.setColor(ratio >= 0.7 ? PALETTE.alertCss : PALETTE.creamCss);
   }
 
   private startCustomNight(readyText: Phaser.GameObjects.Text): void {

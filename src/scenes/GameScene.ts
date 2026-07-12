@@ -17,8 +17,13 @@ import { MobileControls } from '../ui/MobileControls';
 import { PauseMenu } from '../ui/PauseMenu';
 import { VentUI } from '../ui/VentUI';
 import { buildCameraUI } from '../ui/CameraUI';
+import { drawRoomProps, RoomBounds } from '../ui/roomProps';
+
+// Back-wall bounds for the per-room prop layers in each view
+const CAMERA_FEED_BOUNDS: RoomBounds = { x: 240, y: 190, w: 360, h: 250, floorDepth: 115 };
+const TELEPORT_ROOM_BOUNDS: RoomBounds = { x: 180, y: 150, w: 920, h: 250, floorDepth: 320 };
 import { RecordingUI } from '../ui/RecordingUI';
-import { HUD } from '../ui/HUD';
+import { HUD, AlertLevel } from '../ui/HUD';
 import { MerasmusSystem } from '../systems/MerasmusSystem';
 import { TeleportSystem } from '../systems/TeleportSystem';
 import { LureSystem } from '../systems/LureSystem';
@@ -56,6 +61,8 @@ import {
   drawJumpscareSilhouette,
   drawCelebratingMercs,
 } from '../drawing/enemySilhouettes';
+import { PALETTE, FONTS } from '../ui/kit/theme';
+import { addStatic, ensureNoiseTexture } from '../ui/kit/effects';
 
 /**
  * GameScene - Main gameplay scene for Night 1
@@ -308,6 +315,9 @@ export class GameScene extends Phaser.Scene {
   // Sentry visual
   public sentryGraphic!: Phaser.GameObjects.Container;
   public sentryBody!: Phaser.GameObjects.Rectangle;
+  public sentryLevelText!: Phaser.GameObjects.Text;
+  private sentryHead!: Phaser.GameObjects.Container;
+  private sentryHeadAngle = 0;
   private sentryGun!: Phaser.GameObjects.Rectangle;
   public aimBeam!: Phaser.GameObjects.Graphics;
   
@@ -324,6 +334,8 @@ export class GameScene extends Phaser.Scene {
   private cameraMapNodes: Map<string, Phaser.GameObjects.Container> = new Map();
   // Map of NodeId -> red X text overlay on the camera map (shown when teleporter is hacked)
   private hackedRoomMapIndicators: Map<string, Phaser.GameObjects.Text> = new Map();
+  // Map of NodeId -> transient "!" on the camera map (flashes for 3s when a hack starts)
+  private hackStartMapIndicators: Map<string, Phaser.GameObjects.Text> = new Map();
   private scoutMapIcon!: Phaser.GameObjects.Container;
   private soldierMapIcon!: Phaser.GameObjects.Container;
   private intelRoomIcon!: Phaser.GameObjects.Arc;
@@ -354,7 +366,8 @@ export class GameScene extends Phaser.Scene {
   private administratorHackBarContainer!: Phaser.GameObjects.Container;
   private administratorHackBarFill!: Phaser.GameObjects.Rectangle;
   private administratorHackBarBorder!: Phaser.GameObjects.Rectangle;
-  private administratorHackBarCross!: Phaser.GameObjects.Graphics; // diagonal cross shown when bar is empty
+  private administratorHackLabel!: Phaser.GameObjects.Text;
+  private administratorHackHint!: Phaser.GameObjects.Text;
   // Repair overlay for hacked teleporter rooms
   private administratorRepairOverlay!: Phaser.GameObjects.Container;
   private administratorRepairBarFill!: Phaser.GameObjects.Rectangle;
@@ -370,6 +383,8 @@ export class GameScene extends Phaser.Scene {
   public cameraLureButton!: Phaser.GameObjects.Container;  // Play lure from camera view
   public roomViewUI!: Phaser.GameObjects.Container;
   public roomViewHeader!: Phaser.GameObjects.Text;  // Room name header
+  public roomViewProps!: Phaser.GameObjects.Graphics;  // Per-room props in teleported view
+  private cameraFeedRoomProps!: Phaser.GameObjects.Graphics;  // Per-room props in camera feed
   public lureButton!: Phaser.GameObjects.Container;
   private returnButton!: Phaser.GameObjects.Container;
   public escapeWarning!: Phaser.GameObjects.Container;
@@ -671,6 +686,21 @@ export class GameScene extends Phaser.Scene {
     }
   }
   
+  /**
+   * OSD label for where the Engineer currently is: "INTEL ROOM" at the desk,
+   * or the camera feed name (e.g. "CAM 05 — SPIRAL") when teleported out.
+   */
+  public getLocationLabel(): string {
+    if (!this.isTeleported || this.currentRoom === 'INTEL') {
+      return 'INTEL ROOM';
+    }
+    const cam = CAMERAS.find((c) => c.node === this.currentRoom);
+    if (cam) {
+      return `CAM ${cam.id.toString().padStart(2, '0')} — ${cam.name}`;
+    }
+    return this.currentRoom.replace(/_/g, ' ');
+  }
+
   /**
    * Return to title: stop gameplay HTMLAudio (intel room loop) and Web Audio before switching scenes,
    * so ambience cannot keep playing over BootScene.
@@ -988,6 +1018,8 @@ export class GameScene extends Phaser.Scene {
     this.createEndScreen();
     this.recordings.create();
     this.pauseMenu = new PauseMenu(this, {
+      getLocationLabel: () => this.getLocationLabel(),
+      isMerasmusEnabled: () => this.isMerasmusEnabled(),
       onResume: () => this.togglePause(),
       onRestart: () => {
         this.audio.stopDetectionSound();
@@ -1057,6 +1089,77 @@ export class GameScene extends Phaser.Scene {
     // Start ambient dispenser hum in Intel room
     this.audio.startDispenserHum();
     this.audio.startIntelRoomAmbience();
+    
+    // FNAF-style night title card over the opening moments
+    this.showNightTitleCard();
+  }
+  
+  /**
+   * "12:00 AM — NIGHT X" title card shown at night start.
+   * Purely visual: input and the clock keep running underneath.
+   */
+  private showNightTitleCard(): void {
+    const width = 1280;
+    const height = 720;
+    
+    ensureNoiseTexture(this);
+    
+    const card = this.add.container(0, 0);
+    card.setDepth(500);
+    
+    const blackout = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 1);
+    card.add(blackout);
+    
+    const grain = addStatic(this, width / 2, height / 2, width, height, 0.05);
+    card.add(grain);
+    
+    const clockText = this.add.text(width / 2, height / 2 - 40, '12:00 AM', {
+      fontFamily: FONTS.terminal,
+      fontSize: '64px',
+      color: PALETTE.creamCss,
+    }).setOrigin(0.5);
+    card.add(clockText);
+    
+    let nightLabel: string;
+    let nightColor: string = PALETTE.amberCss;
+    if (this.isNightmareMode) {
+      nightLabel = 'NIGHTMARE';
+      nightColor = PALETTE.alertCss;
+    } else if (this.isCustomNightMode) {
+      nightLabel = 'CUSTOM NIGHT';
+    } else if (this.isBadEndingNight6) {
+      nightLabel = 'NIGHT 6';
+      nightColor = PALETTE.alertCss;
+    } else {
+      nightLabel = `NIGHT ${this.nightNumber}`;
+    }
+    
+    const nightText = this.add.text(width / 2, height / 2 + 28, nightLabel, {
+      fontFamily: FONTS.display,
+      fontSize: '36px',
+      color: nightColor,
+    }).setOrigin(0.5);
+    card.add(nightText);
+    
+    // Subtle flicker on the clock while the card holds
+    const flicker = this.time.addEvent({
+      delay: 120,
+      loop: true,
+      callback: () => clockText.setAlpha(Math.random() < 0.15 ? 0.6 : 1),
+    });
+    
+    // Hold, then fade into the night
+    this.tweens.add({
+      targets: card,
+      alpha: 0,
+      duration: 700,
+      delay: 2200,
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        flicker.remove();
+        card.destroy();
+      },
+    });
   }
   
   // ============================================
@@ -1066,41 +1169,166 @@ export class GameScene extends Phaser.Scene {
   private createRoom(): void {
     const width = 1280;
     const height = 720;
+    const floorY = 440; // Top of the floor plane — doorways sit on it
     
-    // Dark room background
-    this._roomBackground = this.add.rectangle(width / 2, height / 2, width, height, 0x1a1a2e);
+    // Dark room background — warm near-black (terminal palette)
+    this._roomBackground = this.add.rectangle(width / 2, height / 2, width, height, 0x171008);
     
-    // Floor
-    this.add.rectangle(width / 2, height - 80, width, 160, 0x2d2d44);
+    // Floor plane (big foreground expanse, like the intel room's open court)
+    this.add.rectangle(width / 2, (floorY + height) / 2, width, height - floorY, 0x231a10);
     
-    // Back wall texture (simple lines)
-    const wallGraphics = this.add.graphics();
-    wallGraphics.lineStyle(2, 0x252540);
-    for (let i = 0; i < width; i += 100) {
-      wallGraphics.lineBetween(i, 0, i, height - 160);
-    }
+    // ---- Static room dressing (single graphics object, flat 8-bit shapes) ----
+    const room = this.add.graphics();
     
-    // Intel briefcase (center back)
-    this.add.rectangle(width / 2, height - 200, 60, 40, 0xcc5500);
-    this.add.text(width / 2, height - 200, 'INTEL', {
-      fontSize: '12px',
-      color: '#ffffff',
-    }).setOrigin(0.5);
+    // Ceiling beam — heavy dark rafter running across the very top (source shots)
+    room.fillStyle(0x0c0805, 1);
+    room.fillRect(0, 0, width, 18);
+    room.lineStyle(2, 0x000000, 0.6);
+    room.lineBetween(0, 18, width, 18);
+    
+    // Wainscot band along the back wall (RED intel's orange-red lower wall)
+    room.fillStyle(0x5e2a16, 1);
+    room.fillRect(190, floorY - 70, 900, 70);
+    room.lineStyle(3, 0x9a8a68, 0.35); // beige trim rail on top of the wainscot
+    room.lineBetween(190, floorY - 70, 1090, floorY - 70);
+    
+    // Corner seams — side walls converge ahead (doorways live on the side walls)
+    room.lineStyle(2, 0x2a1c0e, 1);
+    room.lineBetween(190, floorY, 100, 18);   // left wall/back wall seam
+    room.lineBetween(1090, floorY, 1180, 18); // right wall/back wall seam
+    // Floor edges continuing the same seams toward the viewer
+    room.lineBetween(190, floorY, 0, height);
+    room.lineBetween(1090, floorY, width, height);
+    // Back wall / floor junction
+    room.lineStyle(2, 0x0e0a05, 1);
+    room.lineBetween(190, floorY, 1090, floorY);
+    
+    // Observation windows — underground, so they glow with the red-lit map
+    // rooms behind them (like the RED world-map windows in the source shots)
+    const paneY = 36;
+    const paneW = 82;
+    const paneH = 56;
+    [380, 472, 726, 818].forEach((paneX, i) => {
+      // Warm red glow base
+      room.fillStyle(0x3a1410, 1);
+      room.fillRect(paneX, paneY, paneW, paneH);
+      // Map continents — brighter red blobs, staggered per pane
+      room.fillStyle(0x63201a, 1);
+      const off = (i % 2) * 18;
+      room.fillRect(paneX + 10 + off, paneY + 12, 24, 14);
+      room.fillRect(paneX + 44 - off, paneY + 32, 20, 12);
+      room.fillRect(paneX + 30, paneY + 6, 12, 8);
+      // Frame + mullion
+      room.lineStyle(2, 0x2a2018, 1);
+      room.strokeRect(paneX, paneY, paneW, paneH);
+      room.lineBetween(paneX + paneW / 2, paneY, paneX + paneW / 2, paneY + paneH);
+    });
+    
+    // Painted court lines on the floor (faint, like the capture-zone markings)
+    room.lineStyle(2, 0x8a7a5a, 0.10);
+    room.strokeRect(320, 475, 640, 160);
+    
+    // Circular RED floor decal under the sentry — ring, disc, lettering ring
+    room.fillStyle(0x3f1712, 0.40);
+    room.fillEllipse(640, 585, 300, 110);
+    room.lineStyle(4, 0x7a2418, 0.45);
+    room.strokeEllipse(640, 585, 300, 110);
+    room.lineStyle(2, 0x9a8a68, 0.14); // faint cream lettering ring
+    room.strokeEllipse(640, 585, 230, 82);
+    
+    // Cream script "RED" in the decal center, squashed flat onto the floor
+    this.add.text(640, 585, 'RED', {
+      fontFamily: FONTS.display,
+      fontSize: '44px',
+      color: '#9a8a68',
+    }).setOrigin(0.5).setAlpha(0.28).setScale(1, 0.5);
+    
+    // ---- Hanging lamps (dome shades like the source; light pools pulse slowly) ----
+    const lampXs = [300, 980];
+    lampXs.forEach((lampX) => {
+      room.lineStyle(3, 0x0d0a06, 1);
+      room.lineBetween(lampX, 18, lampX, 96);
+      // Dome shade (flat bottom at y=124)
+      room.fillStyle(0x15100a, 1);
+      room.slice(lampX, 124, 32, Math.PI, Math.PI * 2, false);
+      room.fillPath();
+      // Warm bulb glint under the shade
+      room.fillStyle(0xffdf9a, 0.85);
+      room.fillRect(lampX - 6, 122, 12, 4);
+      
+      // Dim pool of light on the floor below (separate object so it can pulse)
+      const pool = this.add.ellipse(lampX, 480, 200, 34, 0x40300f, 0.4);
+      this.tweens.add({
+        targets: pool,
+        alpha: 0.25,
+        duration: 2800,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    });
+    
+    // ---- Foreground desk, centered at the bottom — the Engineer sits behind
+    // it in the corner, looking out at the doorways ----
+    const deskTop = 640;
+    const deskL = 340;
+    const deskR = 940;
+    const desk = this.add.graphics();
+    // Tabletop (night-dim wood tan)
+    desk.fillStyle(0x54402a, 1);
+    desk.fillRect(deskL, deskTop, deskR - deskL, 60);
+    desk.lineStyle(2, 0x76593a, 1); // top highlight edge
+    desk.lineBetween(deskL, deskTop, deskR, deskTop);
+    // Front face
+    desk.fillStyle(0x32261a, 1);
+    desk.fillRect(deskL, deskTop + 60, deskR - deskL, height - (deskTop + 60));
+    
+    // Black rotary phone, right side of the desk (as in the source shots)
+    desk.fillStyle(0x0d0d0d, 1);
+    desk.fillRect(788, deskTop + 10, 44, 18);             // base
+    desk.fillRect(782, deskTop, 56, 8);                   // handset bar
+    desk.fillCircle(782, deskTop + 4, 7);                 // handset ends
+    desk.fillCircle(838, deskTop + 4, 7);
+    desk.fillStyle(0x2a2a2a, 1);
+    desk.fillCircle(810, deskTop + 19, 7);                // dial
+    
+    // Clipboard, left of center — dark board, beige paper, metal clip
+    desk.fillStyle(0x3e2c18, 1);
+    desk.fillRect(430, deskTop + 8, 50, 34);
+    desk.fillStyle(0x9a8a68, 0.9);
+    desk.fillRect(434, deskTop + 12, 42, 26);
+    desk.fillStyle(0x777777, 1);
+    desk.fillRect(447, deskTop + 5, 16, 6);
+    // Faint scribble lines on the paper
+    desk.lineStyle(1, 0x54402a, 0.8);
+    desk.lineBetween(438, deskTop + 18, 470, deskTop + 18);
+    desk.lineBetween(438, deskTop + 24, 464, deskTop + 24);
+    desk.lineBetween(438, deskTop + 30, 472, deskTop + 30);
+    
+    // Stack of logbooks near center — dark red ledger on brown journal
+    desk.fillStyle(0x46341e, 1);
+    desk.fillRect(580, deskTop + 22, 68, 14);
+    desk.fillStyle(0x5e1c14, 1);
+    desk.fillRect(586, deskTop + 10, 58, 12);
+    desk.lineStyle(1, 0x9a8a68, 0.5); // page edges
+    desk.lineBetween(586, deskTop + 20, 644, deskTop + 20);
     
     // Left doorway
-    this._leftDoorFrame = this.add.rectangle(120, height / 2 - 50, 140, 280, 0x0d0d1a);
+    this._leftDoorFrame = this.add.rectangle(120, height / 2 - 50, 140, 280, 0x0c0804);
     this.leftDoor = this.add.rectangle(120, height / 2 - 50, 120, 260, 0x000000);
     this.add.text(120, height / 2 - 180, 'LEFT DOOR', {
-      fontSize: '14px',
-      color: '#666666',
+      fontFamily: FONTS.terminal,
+      fontSize: '16px',
+      color: PALETTE.amberFaintCss,
     }).setOrigin(0.5);
     
     // Right doorway
-    this._rightDoorFrame = this.add.rectangle(width - 120, height / 2 - 50, 140, 280, 0x0d0d1a);
+    this._rightDoorFrame = this.add.rectangle(width - 120, height / 2 - 50, 140, 280, 0x0c0804);
     this.rightDoor = this.add.rectangle(width - 120, height / 2 - 50, 120, 260, 0x000000);
     this.add.text(width - 120, height / 2 - 180, 'RIGHT DOOR', {
-      fontSize: '14px',
-      color: '#666666',
+      fontFamily: FONTS.terminal,
+      fontSize: '16px',
+      color: PALETTE.amberFaintCss,
     }).setOrigin(0.5);
     
     // Create enemy visuals for doorways (hidden by default)
@@ -1326,10 +1554,9 @@ export class GameScene extends Phaser.Scene {
     
     // Charge countdown text (appears when sniper is charging)
     this.sniperChargeText = this.add.text(640, 150, '', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '32px',
-      color: '#ff0000',
-      fontStyle: 'bold',
+      fontFamily: FONTS.terminal,
+      fontSize: '34px',
+      color: PALETTE.alertCss,
       backgroundColor: '#000000',
       padding: { x: 15, y: 8 },
     }).setOrigin(0.5);
@@ -1462,22 +1689,69 @@ export class GameScene extends Phaser.Scene {
     // Sentry container
     this.sentryGraphic = this.add.container(width / 2, height - 220);
     
-    // Sentry base/body - RED team
-    this.sentryBody = this.add.rectangle(0, 0, 60, 80, 0xBB4444);
-    this.sentryBody.setStrokeStyle(3, 0xCC4444);
+    // Tripod legs + mounting column (drawn first, behind the head)
+    const sentryLegs = this.add.graphics();
+    sentryLegs.lineStyle(5, 0x2a2a26, 1);
+    sentryLegs.lineBetween(0, 18, -30, 52);   // front-left leg
+    sentryLegs.lineBetween(0, 18, 30, 52);    // front-right leg
+    sentryLegs.lineBetween(0, 18, 0, 56);     // rear leg
+    sentryLegs.fillStyle(0x1c1c1a, 1);        // feet
+    sentryLegs.fillRect(-34, 50, 10, 5);
+    sentryLegs.fillRect(24, 50, 10, 5);
+    sentryLegs.fillRect(-5, 54, 10, 5);
+    sentryLegs.fillStyle(0x3a3a36, 1);        // column between legs and head
+    sentryLegs.fillRect(-8, 8, 16, 14);
     
-    // Sentry gun barrel
-    this.sentryGun = this.add.rectangle(0, -50, 20, 40, 0x555555);
+    // Head assembly — swivels toward the aimed door (pivot at body center)
+    this.sentryHead = this.add.container(0, -8);
     
-    // Level indicator
-    const levelBadge = this.add.rectangle(0, 30, 30, 20, 0xff6600);
-    const levelText = this.add.text(0, 30, 'L1', {
+    // The red sensor/ammo box (flash + mobile tap target)
+    this.sentryBody = this.add.rectangle(0, 0, 60, 44, 0xa63c30);
+    this.sentryBody.setStrokeStyle(3, 0x2e0f0a);
+    
+    // Gun barrel on top
+    this.sentryGun = this.add.rectangle(0, -34, 14, 28, 0x4a4a4a);
+    this.sentryGun.setStrokeStyle(2, 0x1c1c1c);
+    
+    // Head detailing (drawn over the body)
+    const sentryDetail = this.add.graphics();
+    // Top highlight band on the head box
+    sentryDetail.fillStyle(0xc9574a, 0.5);
+    sentryDetail.fillRect(-27, -19, 54, 8);
+    // Corner rivets
+    sentryDetail.fillStyle(0x2e0f0a, 1);
+    sentryDetail.fillCircle(-24, -16, 2);
+    sentryDetail.fillCircle(24, -16, 2);
+    sentryDetail.fillCircle(-24, 16, 2);
+    sentryDetail.fillCircle(24, 16, 2);
+    // Barrel core highlight + muzzle band
+    sentryDetail.fillStyle(0x6a6a6a, 1);
+    sentryDetail.fillRect(-2, -46, 4, 22);
+    sentryDetail.fillStyle(0x1c1c1c, 1);
+    sentryDetail.fillRect(-9, -52, 18, 6);
+    // Sensor lens with red eye and faint glow ring
+    sentryDetail.fillStyle(0x1c1210, 1);
+    sentryDetail.fillRect(-12, -7, 24, 14);
+    sentryDetail.fillStyle(0xff3b30, 0.95);
+    sentryDetail.fillCircle(0, 0, 3.5);
+    sentryDetail.lineStyle(2, 0xff3b30, 0.25);
+    sentryDetail.strokeCircle(0, 0, 6);
+    // Side antenna
+    sentryDetail.lineStyle(2, 0x1c1c1c, 1);
+    sentryDetail.lineBetween(26, -18, 34, -38);
+    
+    this.sentryHead.add([this.sentryBody, this.sentryGun, sentryDetail]);
+    
+    // Level indicator on the column
+    const levelBadge = this.add.rectangle(0, 30, 30, 18, 0xff6600);
+    levelBadge.setStrokeStyle(2, 0x2e0f0a);
+    this.sentryLevelText = this.add.text(0, 30, 'L1', {
       fontSize: '12px',
       color: '#ffffff',
       fontStyle: 'bold',
     }).setOrigin(0.5);
     
-    this.sentryGraphic.add([this.sentryBody, this.sentryGun, levelBadge, levelText]);
+    this.sentryGraphic.add([sentryLegs, this.sentryHead, levelBadge, this.sentryLevelText]);
     
     // Make sentry body interactive for mobile tap-to-fire
     this.sentryBody.setInteractive({ useHandCursor: true });
@@ -1524,10 +1798,9 @@ export class GameScene extends Phaser.Scene {
     // BIG SHAKING instruction above sapper - "TAP" on mobile, "SPACE" on desktop
     const instructionText = this.isMobile ? 'TAP' : 'SPACE';
     const spaceText = this.add.text(0, -80, instructionText, {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '42px',
-      color: '#ff0000',
-      fontStyle: 'bold',
+      fontFamily: FONTS.terminal,
+      fontSize: '46px',
+      color: PALETTE.alertCss,
     }).setOrigin(0.5);
     
     // Make it tappable on mobile - large tap target covering sentry area
@@ -1548,11 +1821,11 @@ export class GameScene extends Phaser.Scene {
           this.spy.removeSapper();
           this.sapperIndicator.setVisible(false);
           this.audio.stopSapperSound();
-          this.showAlert('SAPPER REMOVED!', 0x00ff00);
+          this.showAlert('SAPPER REMOVED!', 'success');
           this.sapperRemoveClicks = 0;
           this.audio.playSound('fire');
         } else {
-          this.showAlert(`REMOVING SAPPER... (${this.sapperRemoveClicks}/${GAME_CONSTANTS.SPY_SAP_REMOVE_CLICKS})`, 0xffaa00);
+          this.showAlert(`REMOVING SAPPER... (${this.sapperRemoveClicks}/${GAME_CONSTANTS.SPY_SAP_REMOVE_CLICKS})`, 'warning');
           this.audio.playSound('fire');
         }
       });
@@ -1605,16 +1878,63 @@ export class GameScene extends Phaser.Scene {
     const dispX = 280;
     const dispY = height - 180;
     
-    // Dispenser base (bottom left area)
-    this.dispenserGraphic = this.add.rectangle(dispX, dispY, 50, 70, 0xBB4444);
-    this.dispenserGraphic.setStrokeStyle(2, 0xCC4444);
+    // Dispenser cabinet ("Provisions" vending machine from the source art).
+    // The cabinet rectangle stays the glow-tween target.
+    this.dispenserGraphic = this.add.rectangle(dispX, dispY, 54, 80, 0xa63c30);
+    this.dispenserGraphic.setStrokeStyle(2, 0x2e0f0a);
     
-    // Dispenser top cap
-    this.add.rectangle(dispX, dispY - 40, 40, 10, 0xDD6666);
+    const disp = this.add.graphics();
     
-    // Dispenser screen (dark red tint for RED team)
-    const screen = this.add.rectangle(dispX, dispY - 15, 30, 20, 0x331111);
-    screen.setStrokeStyle(1, 0xaa4444);
+    // Control box on top with a small green cross indicator
+    disp.fillStyle(0x3a3230, 1);
+    disp.fillRect(dispX - 16, dispY - 54, 32, 14);
+    disp.lineStyle(2, 0x1c1c1a, 1);
+    disp.strokeRect(dispX - 16, dispY - 54, 32, 14);
+    disp.fillStyle(0x3f8f3f, 1);
+    disp.fillRect(dispX - 2, dispY - 51, 8, 3);   // cross: horizontal bar
+    disp.fillRect(dispX + 1, dispY - 54, 2, 9);   // cross: vertical bar (chunky 8-bit)
+    
+    // Cream "Provisions" marquee band with a red script squiggle
+    disp.fillStyle(0x9a8a68, 1);
+    disp.fillRect(dispX - 23, dispY - 36, 46, 11);
+    disp.lineStyle(2, 0x7a2418, 0.9);
+    disp.lineBetween(dispX - 16, dispY - 30, dispX + 16, dispY - 30);
+    
+    // Radar screen — dark glass, pink dial arc and needle
+    disp.fillStyle(0x1c0f0c, 1);
+    disp.fillRect(dispX - 17, dispY - 20, 34, 24);
+    disp.lineStyle(2, 0x7a2c22, 1);
+    disp.strokeRect(dispX - 17, dispY - 20, 34, 24);
+    disp.lineStyle(2, 0xd97a6a, 0.8);
+    disp.beginPath();
+    disp.arc(dispX, dispY + 2, 12, Math.PI, Math.PI * 2);
+    disp.strokePath();
+    disp.lineBetween(dispX, dispY + 2, dispX + 8, dispY - 7); // needle
+    
+    // Three control knobs under the screen
+    disp.fillStyle(0x2a2a2a, 1);
+    [-11, 0, 11].forEach((dx) => disp.fillCircle(dispX + dx, dispY + 11, 3));
+    
+    // Vent grille at the bottom
+    disp.fillStyle(0x3a3632, 1);
+    disp.fillRect(dispX - 16, dispY + 20, 32, 14);
+    disp.lineStyle(1, 0x1c1c1a, 1);
+    disp.lineBetween(dispX - 13, dispY + 24, dispX + 13, dispY + 24);
+    disp.lineBetween(dispX - 13, dispY + 28, dispX + 13, dispY + 28);
+    
+    // Orange oxygen-style tank strapped to the left side
+    disp.fillStyle(0xb85c20, 1);
+    disp.fillRect(dispX - 37, dispY - 4, 10, 26);
+    disp.fillCircle(dispX - 32, dispY - 4, 5);
+    disp.lineStyle(2, 0x2e0f0a, 1);
+    disp.lineBetween(dispX - 37, dispY + 6, dispX - 27, dispY + 6); // strap
+    
+    // Pressure gauge on the top-right corner
+    disp.fillStyle(0x9a8a68, 1);
+    disp.fillCircle(dispX + 22, dispY - 45, 7);
+    disp.lineStyle(2, 0x2e0f0a, 1);
+    disp.strokeCircle(dispX + 22, dispY - 45, 7);
+    disp.lineBetween(dispX + 22, dispY - 45, dispX + 26, dispY - 50); // needle
     
     // Metal flow indicator (animated)
     const metalFlow = this.add.graphics();
@@ -1657,8 +1977,9 @@ export class GameScene extends Phaser.Scene {
     });
     
     this.add.text(dispX, height - 130, 'DISPENSER', {
-      fontSize: '10px',
-      color: '#ffaaaa',
+      fontFamily: FONTS.terminal,
+      fontSize: '12px',
+      color: PALETTE.amberFaintCss,
     }).setOrigin(0.5);
     
     // Animated glow effect
@@ -1686,29 +2007,32 @@ export class GameScene extends Phaser.Scene {
       onAdminHackBarClicked: () => {
         if (this.isAdministratorEnabled() && this.administrator && this.administrator.getState() === 'HACKING') {
           this.administrator.interruptHack();
-          this.showAlert('Hack interrupted!', 0x00ff88);
+          this.showAlert('Hack interrupted!', 'success');
         }
       },
       onTeleportButtonOver: () => {
         if (this.isTeleportAnimating) {
-          this.teleportButtonBg.setFillStyle(0x664422);
+          this.teleportButtonBg.setFillStyle(0x3a2c14);
         } else if (this.isSelectedCameraHacked()) {
-          this.teleportButtonBg.setFillStyle(0x222222);
+          this.teleportButtonBg.setFillStyle(0x241a0e);
         } else {
-          this.teleportButtonBg.setFillStyle(0x663333);
+          this.teleportButtonBg.setFillStyle(0x2e100a);
         }
       },
       onTeleportButtonOut: () => {
         this.administratorRepairActive = false;
         if (this.isTeleportAnimating) {
-          this.teleportButtonBg.setFillStyle(0x553311);
+          this.teleportButtonBg.setFillStyle(0x2a1f10);
         } else if (this.isSelectedCameraHacked()) {
-          this.teleportButtonBg.setFillStyle(0x1a1a1a);
+          this.teleportButtonBg.setFillStyle(0x140e06);
         } else {
-          this.teleportButtonBg.setFillStyle(0x442222);
+          this.teleportButtonBg.setFillStyle(0x1c0a06);
         }
       },
       onTeleportButtonDown: () => {
+        // Ignore clicks that race with death/pause — otherwise a post-mortem
+        // teleport starts (enemy freezes + ambience restarts on a dead game)
+        if (this.gameStatus !== 'PLAYING' || this.isPaused) return;
         // If teleport animation is in progress, cancel it
         if (this.isTeleportAnimating) {
           this.teleport.cancelTeleport();
@@ -1728,11 +2052,14 @@ export class GameScene extends Phaser.Scene {
       },
       onLureButtonOver: () => {
         const bg = this.cameraLureButton.list[0] as Phaser.GameObjects.Rectangle;
-        bg.setFillStyle(0x336666);
+        bg.setFillStyle(0x2a1f10);
       },
       onLureButtonOut: () => this.lure.updateCameraLureButtonStyle(),
       onLureButtonDown: () => this.lure.handleCameraLureAction(),
-      onReturnToIntel: () => this.teleport.returnToIntel(),
+      onReturnToIntel: () => {
+        if (this.gameStatus !== 'PLAYING' || this.isPaused) return;
+        this.teleport.returnToIntel();
+      },
       onToggleLure: () => this.lure.toggleLure(),
     });
 
@@ -1752,6 +2079,7 @@ export class GameScene extends Phaser.Scene {
     this.cameraMapContent = el.cameraMapContent;
     this.cameraMapNodes = el.cameraMapNodes;
     this.hackedRoomMapIndicators = el.hackedRoomMapIndicators;
+    this.hackStartMapIndicators = el.hackStartMapIndicators;
     this.intelRoomIcon = el.intelRoomIcon;
     this.scoutMapIcon = el.scoutMapIcon;
     this.soldierMapIcon = el.soldierMapIcon;
@@ -1764,7 +2092,8 @@ export class GameScene extends Phaser.Scene {
     this.administratorHackBarContainer = el.administratorHackBarContainer;
     this.administratorHackBarBorder = el.administratorHackBarBorder;
     this.administratorHackBarFill = el.administratorHackBarFill;
-    this.administratorHackBarCross = el.administratorHackBarCross;
+    this.administratorHackLabel = el.administratorHackLabel;
+    this.administratorHackHint = el.administratorHackHint;
     this.administratorRepairOverlay = el.administratorRepairOverlay;
     this.administratorRepairBarFill = el.administratorRepairBarFill;
     this.teleportButton = el.teleportButton;
@@ -1775,6 +2104,8 @@ export class GameScene extends Phaser.Scene {
     this.cameraLureButton = el.cameraLureButton;
     this.roomViewUI = el.roomViewUI;
     this.roomViewHeader = el.roomViewHeader;
+    this.roomViewProps = el.roomViewProps;
+    this.cameraFeedRoomProps = el.cameraFeedRoomProps;
     this.lureButton = el.lureButton;
     this.returnButton = el.returnButton;
     this.escapeWarning = el.escapeWarning;
@@ -1783,8 +2114,15 @@ export class GameScene extends Phaser.Scene {
     this.pyroEscapeWarning = el.pyroEscapeWarning;
     this.pyroEscapeTimer = el.pyroEscapeTimer;
 
-    // Initialize with first camera selected
+    // Initialize with first camera selected (draw its props too, since
+    // selectCamera() early-returns when re-selecting the same index)
     this.selectedCamera = 0;
+    drawRoomProps(this.cameraFeedRoomProps, CAMERAS[0].node, CAMERA_FEED_BOUNDS, 'feed');
+  }
+  
+  /** Redraw the teleported room view's per-room props (called on teleport). */
+  public drawTeleportedRoomProps(node: NodeId): void {
+    drawRoomProps(this.roomViewProps, node, TELEPORT_ROOM_BOUNDS, 'warm');
   }
   
   /**
@@ -1845,7 +2183,7 @@ export class GameScene extends Phaser.Scene {
     // Reset the no-teleport timer so Mode 2 doesn't fire right after a Mode 1 hack
     this.administratorNoTeleportTimer = 0;
 
-    this.showAlert(`⚠ ADMINISTRATOR: ${target.replace('_', ' ')} TELEPORTER HACKED`, 0x9944cc);
+    this.showAlert(`⚠ ADMINISTRATOR: ${target.replace('_', ' ')} TELEPORTER HACKED`, 'danger');
     this.updateHackedRoomMapIndicators();
     this.teleport.updateTeleportButtonAppearance();
     this.audio.playAdministratorHackSound();
@@ -1866,7 +2204,7 @@ export class GameScene extends Phaser.Scene {
     if (remote) {
       // Remote repair costs metal
       if (this.metal < GAME_CONSTANTS.CAMERA_REMOTE_REPAIR_COST) {
-        this.showAlert('Not enough metal! (50 required)', 0xff0000);
+        this.showAlert('Not enough metal! (50 required)', 'warning');
         return;
       }
       this.metal -= GAME_CONSTANTS.CAMERA_REMOTE_REPAIR_COST;
@@ -1877,7 +2215,7 @@ export class GameScene extends Phaser.Scene {
     camState.destroyedBy = null;
     camState.destroyedUntil = 0;
     
-    this.showAlert(`Camera ${cam.name} repaired!`, 0x00ff00);
+    this.showAlert(`Camera ${cam.name} repaired!`, 'success');
   }
   
   /**
@@ -1893,10 +2231,10 @@ export class GameScene extends Phaser.Scene {
       const lurePlayingAtNode = lureAtNode && this.activeLure!.playing;
       
       if (node === selectedNode) {
-        // Selected camera - GREEN
+        // Selected camera - feed green (matches the live monitor)
         glow.setFillStyle(0x44ff44, 0.3);
         bg.setStrokeStyle(2, 0x66ff66);
-        bg.setFillStyle(0x1a4030);
+        bg.setFillStyle(0x14301a);
       } else if (lurePlayingAtNode) {
         // Active lure playing - PULSING RED/ORANGE
         glow.setFillStyle(0xff6600, 0.5);
@@ -1908,9 +2246,9 @@ export class GameScene extends Phaser.Scene {
         bg.setStrokeStyle(2, 0xff8800);
         bg.setFillStyle(0x2a1a0a);
       } else {
-        glow.setFillStyle(0x44aaff, 0);
-        bg.setStrokeStyle(2, 0x2266aa);
-        bg.setFillStyle(0x0a1830);
+        glow.setFillStyle(0xffb454, 0);
+        bg.setStrokeStyle(2, 0x8a6230);
+        bg.setFillStyle(0x140e06);
       }
     });
   }
@@ -1923,6 +2261,37 @@ export class GameScene extends Phaser.Scene {
     this.hackedRoomMapIndicators.forEach((indicator, node) => {
       const hackedState = this.hackedRooms.get(node as NodeId);
       indicator.setVisible(!!(hackedState && hackedState.hacked));
+    });
+  }
+
+  /**
+   * Flash a "!" next to the map node of the room the Administrator just began
+   * hacking. Visible for ~3 seconds, then fades — quick players spot the hack
+   * without searching; slower ones must remember which camera it was.
+   */
+  private flashHackStartIndicator(node: NodeId): void {
+    const indicator = this.hackStartMapIndicators.get(node);
+    if (!indicator) return;
+
+    this.tweens.killTweensOf(indicator);
+    indicator.setVisible(true);
+    indicator.setAlpha(1);
+
+    // Urgent blink for the first moments, then fade out (3s total)
+    this.tweens.add({
+      targets: indicator,
+      alpha: { from: 1, to: 0.25 },
+      duration: 250,
+      yoyo: true,
+      repeat: 3,  // ~2s of blinking
+      onComplete: () => {
+        this.tweens.add({
+          targets: indicator,
+          alpha: 0,
+          duration: 1000,
+          onComplete: () => indicator.setVisible(false),
+        });
+      },
     });
   }
 
@@ -1948,6 +2317,9 @@ export class GameScene extends Phaser.Scene {
     this.selectedCamera = index;
     const cam = CAMERAS[index];
     this.cameraFeedTitle.setText(`CAM 0${cam.id} - ${cam.name}`);
+    
+    // Redraw this room's identifying props in the feed
+    drawRoomProps(this.cameraFeedRoomProps, cam.node, CAMERA_FEED_BOUNDS, 'feed');
     
     // Update map node colors (highlights selected + lure)
     this.updateMapNodeColors(cam.node);
@@ -2115,7 +2487,7 @@ export class GameScene extends Phaser.Scene {
       this.teleportButton?.setVisible(false);
       this.cameraLureButton?.setVisible(false);
       this.mapTitleText?.setText('◈ VENT MAP ◈');
-      this.mapTitleText?.setColor('#9944cc');
+      this.mapTitleText?.setColor(PALETTE.creamCss);
     } else {
       this.ventUI.setVentViewVisible(false);
       this.cameraMapContent.setVisible(true);
@@ -2124,7 +2496,7 @@ export class GameScene extends Phaser.Scene {
         this.cameraLureButton?.setVisible(true);
       }
       this.mapTitleText?.setText('◈ FACILITY OVERVIEW ◈');
-      this.mapTitleText?.setColor('#5588cc');
+      this.mapTitleText?.setColor(PALETTE.amberDimCss);
     }
   }
 
@@ -2179,6 +2551,8 @@ export class GameScene extends Phaser.Scene {
         this.thermostatBeepTimer = 0;
         this.audio.playThermostatBeep(pct);
       }
+      // Occasional metallic expansion tinks while running hot (self-throttled)
+      this.audio.maybePlayHeatCreak(pct);
     } else {
       this.thermostatBeepTimer = 0;
     }
@@ -2322,11 +2696,11 @@ export class GameScene extends Phaser.Scene {
           this.spy.removeSapper();
           this.sapperIndicator.setVisible(false);
           this.audio.stopSapperSound();
-          this.showAlert('SAPPER REMOVED!', 0x00ff00);
+          this.showAlert('SAPPER REMOVED!', 'success');
           this.sapperRemoveClicks = 0;
           this.audio.playSound('fire');
         } else {
-          this.showAlert(`REMOVING SAPPER... (${this.sapperRemoveClicks}/${GAME_CONSTANTS.SPY_SAP_REMOVE_CLICKS})`, 0xffaa00);
+          this.showAlert(`REMOVING SAPPER... (${this.sapperRemoveClicks}/${GAME_CONSTANTS.SPY_SAP_REMOVE_CLICKS})`, 'warning');
           this.audio.playSound('fire');
         }
         return; // Don't process normal fire when removing sapper
@@ -2414,11 +2788,11 @@ export class GameScene extends Phaser.Scene {
         this.spy.removeSapper();
         this.sapperIndicator.setVisible(false);
         this.audio.stopSapperSound();
-        this.showAlert('SAPPER REMOVED!', 0x00ff00);
+        this.showAlert('SAPPER REMOVED!', 'success');
         this.sapperRemoveClicks = 0;
         this.audio.playSound('fire');
       } else {
-        this.showAlert(`REMOVING SAPPER... (${this.sapperRemoveClicks}/${GAME_CONSTANTS.SPY_SAP_REMOVE_CLICKS})`, 0xffaa00);
+        this.showAlert(`REMOVING SAPPER... (${this.sapperRemoveClicks}/${GAME_CONSTANTS.SPY_SAP_REMOVE_CLICKS})`, 'warning');
         this.audio.playSound('fire');
       }
       return;
@@ -2451,8 +2825,8 @@ export class GameScene extends Phaser.Scene {
     this.pauseMenu.setVisible(this.isPaused);
     
     if (this.isPaused) {
-      // Pause the game
-      this.audio.playPauseSound();
+      // Pause the game — tape goes on hold
+      this.audio.playVcrPauseSound();
       this.audio.stopDetectionSound();
       this.audio.stopDispenserHum();
       this.audio.stopIntelRoomAmbience();
@@ -2460,6 +2834,10 @@ export class GameScene extends Phaser.Scene {
       this.audio.stopPyroCracklingAmbient();
       this.audio.stopMerasmusHum();
       this.audio.stopMedicGhostScream();  // Stop ghost scream during pause
+      this.audio.stopApproachGrowl();     // Teleport-room "enemy heard you" growl
+      this.audio.stopSapperSound();       // Spy sapper loop
+      this.audio.stopPyroHallwayHiss(true);
+      this.audio.stopDemoEyeGlowSound();
       this.physics?.pause();
       
       // Pause Engineer recording if playing
@@ -2468,8 +2846,8 @@ export class GameScene extends Phaser.Scene {
       // Show a random hint
       this.pauseMenu.showRandomHint();
     } else {
-      // Resume
-      this.audio.playUnpauseSound();
+      // Resume — tape rolls again
+      this.audio.playVcrResumeSound();
       this.physics?.resume();
       // Resume dispenser hum if in Intel room (plays even with cameras up)
       if (!this.isTeleported) {
@@ -2486,6 +2864,71 @@ export class GameScene extends Phaser.Scene {
       if (this.medicGhostActive) {
         this.audio.playMedicGhostScream();
       }
+      // Resume approach growl if an enemy is still closing in on the teleport room
+      // (its per-frame update only adjusts volume; it doesn't restart the loop)
+      if (this.isTeleported && this.enemyApproachingRoom) {
+        this.audio.startApproachGrowl();
+        this.audio.updateApproachGrowl(this.teleportEscapeTimer);
+      }
+      // Resume sapper loop if the Spy is still sapping
+      if (this.isSpyEnabled() && this.spy && this.spy.isSapping()) {
+        this.audio.playSapperSound();
+      }
+      // Sniper laser hum, Pyro hallway hiss, and Demo eye-glow sound are
+      // start/stopped every frame by update() and restart on their own.
+    }
+
+    // Camera ambience / dead-feed hiss / hack tick follow the pause state
+    // (update() early-returns while paused, so sync them here too)
+    this.updateCameraAudioState();
+  }
+
+  /**
+   * Keep the camera-view audio loops (room ambience, dead-feed hiss, and the
+   * Administrator hack tick) in sync with what the player is looking at.
+   * Called every frame and from pause/camera toggles; all starts no-op when
+   * already running, so this is cheap.
+   */
+  private updateCameraAudioState(): void {
+    const camsUp =
+      this.gameStatus === 'PLAYING' &&
+      this.isCameraMode &&
+      !this.isCameraBooting &&
+      !this.isPaused &&
+      !this.isVentCameraMode;
+
+    const cam = CAMERAS[this.selectedCamera];
+    const camState = this.cameraStates.get(cam.id);
+    const destroyed = !!camState?.destroyed;
+
+    // Room ambience: only on a live feed
+    if (camsUp && !destroyed) {
+      this.audio.startCameraRoomAmbience(cam.node);
+    } else {
+      this.audio.stopCameraRoomAmbience();
+    }
+
+    // Dead-feed hiss: only while looking at a destroyed camera
+    if (camsUp && destroyed) {
+      this.audio.startCameraDeadFeedHiss();
+    } else {
+      this.audio.stopCameraDeadFeedHiss();
+    }
+
+    // Hack tick: ONLY while watching the exact camera the Administrator is
+    // actively hacking — off-screen hacks stay silent (insidious by design)
+    const ticking =
+      camsUp &&
+      this.isAdministratorEnabled() &&
+      this.administrator &&
+      this.administrator.isActive() &&
+      this.administrator.getState() === 'HACKING' &&
+      this.administrator.getCurrentTarget() === cam.node;
+    if (ticking) {
+      this.audio.startHackTickLoop();
+      this.audio.setHackTickProgress(this.administrator.getHackProgress());
+    } else {
+      this.audio.stopHackTickLoop();
     }
   }
   
@@ -2520,8 +2963,8 @@ export class GameScene extends Phaser.Scene {
       this.updateWranglerVisuals();
       this.updateHUD();
       
-      // Play aim sound when changing aim direction
-      this.audio.playWranglerAimSound();
+      // Play aim sound when changing aim direction (sweep matches head swivel)
+      this.audio.playWranglerAimSound(this.sentry.aimedDoor);
       
       // Pause dispenser hum when aiming down a hallway (for focus)
       // Only pause if sentry actually exists - otherwise resume hum
@@ -2592,6 +3035,23 @@ export class GameScene extends Phaser.Scene {
   }
   
   public updateWranglerVisuals(): void {
+    // Swivel the sentry head toward the aimed door
+    const headAngle = !this.sentry.exists || !this.sentry.isWrangled
+      ? 0
+      : this.sentry.aimedDoor === 'LEFT' ? -55
+      : this.sentry.aimedDoor === 'RIGHT' ? 55
+      : 0;
+    if (headAngle !== this.sentryHeadAngle) {
+      this.sentryHeadAngle = headAngle;
+      this.tweens.killTweensOf(this.sentryHead);
+      this.tweens.add({
+        targets: this.sentryHead,
+        angle: headAngle,
+        duration: 140,
+        ease: 'Sine.easeOut',
+      });
+    }
+    
     // Hide enemies by default
     this.scoutInDoorway.setVisible(false);
     this.soldierInDoorway.setVisible(false);
@@ -2864,7 +3324,7 @@ export class GameScene extends Phaser.Scene {
         this.teleportButton?.setVisible(false);
         this.cameraLureButton?.setVisible(false);
         this.mapTitleText?.setText('◈ VENT MAP ◈');
-        this.mapTitleText?.setColor('#9944cc');
+        this.mapTitleText?.setColor(PALETTE.creamCss);
       }
       
       // Initialize shared audio context on user gesture (camera button click)
@@ -3046,20 +3506,33 @@ export class GameScene extends Phaser.Scene {
         this.administratorHackBarContainer.setVisible(true);
         const hackProgress = administratorState === 'HACKING' ? this.administrator.getHackProgress() : 0;
         this.administratorHackBarFill.setScale(hackProgress, 1);
-        // Colour: grey (0x555555) when targeting/empty, gradient → Pauling purple (0x9944cc) as bar fills
-        if (hackProgress <= 0) {
-          this.administratorHackBarFill.setFillStyle(0x444444, 0.7);
-          this.administratorHackBarBorder?.setStrokeStyle(2, 0x555555);
-          this.administratorHackBarCross?.setVisible(true);
+        // Phase-dependent strip text: during TARGETING the hack hasn't started
+        // yet and can't be interrupted; once HACKING begins, clicking works.
+        if (administratorState === 'TARGETING') {
+          // Greyed out while she's locking on — nothing is clickable yet
+          this.administratorHackLabel?.setText('⚠ TELEPORTER HACK INCOMING');
+          this.administratorHackLabel?.setColor('#9a9a9a');
+          this.administratorHackHint?.setText('CANNOT INTERRUPT YET');
+          this.administratorHackHint?.setColor('#666666');
         } else {
-          // Lerp grey (0x44,0x44,0x44) → purple (0x99,0x44,0xcc) by progress
-          const r = Math.round(0x44 + (0x99 - 0x44) * hackProgress);
-          const g = 0x44;
-          const b = Math.round(0x44 + (0xcc - 0x44) * hackProgress);
+          // Hack is live — colors return to signal the strip is actionable
+          this.administratorHackLabel?.setText('⚠ TELEPORTER HACK');
+          this.administratorHackLabel?.setColor(PALETTE.alertCss);
+          this.administratorHackHint?.setText('CLICK TO INTERRUPT');
+          this.administratorHackHint?.setColor(PALETTE.creamCss);
+        }
+        // Colour: dim amber when targeting/empty, gradient → alert red as bar fills
+        if (hackProgress <= 0) {
+          this.administratorHackBarFill.setFillStyle(0x3a2c18, 0.85);
+          this.administratorHackBarBorder?.setStrokeStyle(1, 0x3d2c14);
+        } else {
+          // Lerp dim amber (0x8a,0x62,0x30) → alert red (0xff,0x3b,0x30) by progress
+          const r = Math.round(0x8a + (0xff - 0x8a) * hackProgress);
+          const g = Math.round(0x62 + (0x3b - 0x62) * hackProgress);
+          const b = 0x30;
           const col = (r << 16) | (g << 8) | b;
-          this.administratorHackBarFill.setFillStyle(col, 0.85 + hackProgress * 0.1);
-          this.administratorHackBarBorder?.setStrokeStyle(2, col);
-          this.administratorHackBarCross?.setVisible(false);
+          this.administratorHackBarFill.setFillStyle(col, 0.9);
+          this.administratorHackBarBorder?.setStrokeStyle(1, col);
         }
       } else {
         this.administratorHackBarContainer.setVisible(false);
@@ -3339,7 +3812,7 @@ export class GameScene extends Phaser.Scene {
     this.playRocketAnimation();
     
     this.sentrySystem.damageSentry(GAME_CONSTANTS.ROCKET_DAMAGE);
-    this.showAlert(`ROCKET HIT! -${GAME_CONSTANTS.ROCKET_DAMAGE} HP`, 0xff4400);
+    this.showAlert(`ROCKET HIT! -${GAME_CONSTANTS.ROCKET_DAMAGE} HP`, 'danger');
   }
   
   /**
@@ -3589,8 +4062,9 @@ export class GameScene extends Phaser.Scene {
   // GAME STATE
   // ============================================
   
-  public showAlert(message: string, color: number): void {
-    this.hud.showAlert(message, color);
+  public showAlert(message: string, level: AlertLevel = 'warning'): void {
+    this.audio.playAlertSound(level);
+    this.hud.showAlert(message, level);
   }
 
   public updateHUD(): void {
@@ -3614,6 +4088,9 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     if (this.gameStatus !== 'PLAYING') return;
     if (this.isPaused) return;
+    
+    // Keep camera-view audio loops in sync with what's on screen
+    this.updateCameraAudioState();
     
     // ---- ENGINEER RECORDING TIMER ----
     this.recordings.update(delta);
@@ -3644,7 +4121,7 @@ export class GameScene extends Phaser.Scene {
           if (!this.hasReached6AM) {
             this.hasReached6AM = true;
             this.audio.play6AMBellChime();
-            this.showAlert('6:00 AM... but the night continues', 0xaa8800);
+            this.showAlert('6:00 AM... but the night continues', 'warning');
           }
           
           // Track hours after 6 AM for difficulty scaling (every 60 game minutes = 1 hour)
@@ -3656,7 +4133,7 @@ export class GameScene extends Phaser.Scene {
           if (this.gameMinutes >= 720) {
             this.gameMinutes = 0;  // Reset to 12:00 AM
             this.endlessDay++;
-            this.showAlert(`DAY ${this.endlessDay}`, 0xff4444);
+            this.showAlert(`DAY ${this.endlessDay}`, 'danger');
             console.log(`🌙 Endless Night 6 - Day ${this.endlessDay} begins!`);
           }
         } else {
@@ -3815,10 +4292,12 @@ export class GameScene extends Phaser.Scene {
             return;
           }
         } else {
-          // Soldier won't attack if sentry exists - he sieges instead
-          // This case shouldn't normally happen because Soldier transitions to SIEGING
-          // But if it does, he just retreats
-          this.soldier.driveAway();
+          // Breach countdown expired but a sentry is up — the player rebuilt
+          // in time. The Soldier doesn't give up: he sieges the new sentry,
+          // and destroying it earns him another breach attempt.
+          console.log('Soldier breach blocked by rebuilt sentry - resuming siege!');
+          this.showAlert('SENTRY REBUILT! SOLDIER RESUMES SIEGE!', 'warning');
+          this.soldier.startSiege();
         }
       }
     }
@@ -3967,6 +4446,10 @@ export class GameScene extends Phaser.Scene {
           this.administrator.triggerFallbackHack(excludedNodes);
           if (this.administrator.getState() === 'TARGETING') {
             this.audio.playAdministratorTargetingSound();
+            // Flash "!" on the map node the moment she picks a target, in sync
+            // with the sound cue — quick players can spot the room right away
+            const targetNode = this.administrator.getCurrentTarget();
+            if (targetNode) this.flashHackStartIndicator(targetNode);
           }
           console.log('📋 Administrator Mode 2 fallback triggered (no teleport for 30s)');
         }
@@ -3979,7 +4462,7 @@ export class GameScene extends Phaser.Scene {
           // Only apply if not already hacked by Mode 1 mid-way through
           hackedState.hacked = true;
           hackedState.repairProgress = 0;
-          this.showAlert(`⚠ ADMINISTRATOR: ${administratorResult.targetNode.replace('_', ' ')} TELEPORTER HACKED`, 0x9944cc);
+          this.showAlert(`⚠ ADMINISTRATOR: ${administratorResult.targetNode.replace('_', ' ')} TELEPORTER HACKED`, 'danger');
           this.updateHackedRoomMapIndicators();
           this.audio.playAdministratorHackSound();
           if (this.isCameraMode) this.teleport.updateTeleportButtonAppearance();
@@ -4003,7 +4486,7 @@ export class GameScene extends Phaser.Scene {
             hackedState.repairProgress = 0;
             this.administratorRepairActive = false;
             if (this.teleportRepairBarFill) this.teleportRepairBarFill.setScale(0, 1);
-            this.showAlert('Teleporter restored!', 0x00ff88);
+            this.showAlert('Teleporter restored!', 'success');
             this.audio.playAdministratorRepairCompleteSound();
             this.updateHackedRoomMapIndicators();
             this.teleport.updateTeleportButtonAppearance();
@@ -4112,7 +4595,7 @@ export class GameScene extends Phaser.Scene {
       if (this.activeLure.playTimeRemaining <= 0) {
         // Lure is consumed (auto-removed after playing)
         console.log('Lure consumed - enemies will return to patrolling');
-        this.showAlert('LURE CONSUMED!', 0xff6600);
+        this.showAlert('LURE CONSUMED!', 'info');
         this.audio.playLureConsumedSound();
         // Clear Heavy's lure target so he resumes patrol
         if (this.heavy && this.heavy.isCurrentlyLured()) {
@@ -4202,8 +4685,7 @@ export class GameScene extends Phaser.Scene {
         } else {
           // Player dodged by teleporting! Sniper destroys sentry and teleports away
           console.log('Sniper headshot missed player but destroyed sentry!');
-          this.sentrySystem.destroySentry();
-          this.showAlert('SNIPER DESTROYED YOUR SENTRY!', 0xff0000);
+          this.sentrySystem.destroySentry('SNIPER DESTROYED YOUR SENTRY!');
           // Sniper teleports to a random room (not halls)
           this.sniper.forceDespawn();
           this.sniper.respawn();
@@ -4274,7 +4756,7 @@ export class GameScene extends Phaser.Scene {
       // Reward = metal lost during 1.5s repel time (11.25) + 10 bonus ≈ 20 metal
       const pyroDrivenAway = this.pyro.updateLightExposure(isLightingPyro, delta);
       if (pyroDrivenAway) {
-        this.showAlert('Pyro fled! +20 metal', 0x00ff00);
+        this.showAlert('Pyro fled! +20 metal', 'success');
         this.metal = Math.min(this.metal + 20, GAME_CONSTANTS.MAX_METAL);
         this.updateHUD();
       }
@@ -4325,7 +4807,7 @@ export class GameScene extends Phaser.Scene {
       // If player teleported away while match was lit, notify Pyro
       if (this.isTeleported && this.pyro.isMatchLit()) {
         this.pyro.onPlayerEscaped();
-        this.showAlert('Escaped Pyro!', 0x00ff00);
+        this.showAlert('Escaped Pyro!', 'success');
         this.showPyroEscapeWarning(false);
         this.audio.stopPyroCracklingAmbient();
       }
@@ -4359,7 +4841,7 @@ export class GameScene extends Phaser.Scene {
     camState.destroyedBy = destroyedBy;
     
     this.audio.playCameraDestroySound();
-    this.showAlert(`${destroyedBy} destroyed ${camera.name} camera!`, 0xff4444);
+    this.showAlert(`${destroyedBy} destroyed ${camera.name} camera!`, 'danger');
     
     console.log(`Camera ${camera.name} destroyed by ${destroyedBy}!`);
   }
@@ -4383,16 +4865,15 @@ export class GameScene extends Phaser.Scene {
     // Update sentry visuals based on damage
     const healthPercent = this.sentry.hp / this.sentry.maxHp;
     if (healthPercent < 0.3) {
-      this.sentryBody.setFillStyle(0xff4444); // Critical
+      this.sentryBody.setFillStyle(0xff3b30); // Critical
     } else if (healthPercent < 0.6) {
-      this.sentryBody.setFillStyle(0xDD6666); // Damaged (lighter red)
+      this.sentryBody.setFillStyle(0xc9574a); // Damaged (lighter red)
     } else {
-      this.sentryBody.setFillStyle(0xBB4444); // Healthy RED
+      this.sentryBody.setFillStyle(0xa63c30); // Healthy RED
     }
     
     if (this.sentry.hp <= 0) {
-      this.sentrySystem.destroySentry();
-      this.showAlert('SPY SAPPED YOUR SENTRY!', 0xff0000);
+      this.sentrySystem.destroySentry('SPY SAPPED YOUR SENTRY!');
       if (this.spy) this.spy.removeSapper();
       this.sapperIndicator.setVisible(false);
       this.audio.stopSapperSound();

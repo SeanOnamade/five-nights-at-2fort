@@ -16,13 +16,13 @@ export class TeleportSystem {
    */
   teleportToRoom(node: NodeId): void {
     if (node === 'INTEL') {
-      this.scene.showAlert('Cannot teleport to Intel room!', 0xff0000);
+      this.scene.showAlert('Cannot teleport to Intel room!', 'warning');
       return;
     }
 
     // Block teleport if Administrator has hacked this room's teleporter
     if (this.scene.isAdministratorEnabled() && this.scene.hackedRooms.get(node)?.hacked) {
-      this.scene.showAlert('TELEPORTER OFFLINE', 0x9944cc);
+      this.scene.showAlert('TELEPORTER OFFLINE', 'danger');
       return;
     }
     
@@ -174,7 +174,7 @@ export class TeleportSystem {
         this.scene.enemyApproachingRoom = true;
         this.scene.approachingEnemyType = approachingEnemy;
         this.scene.teleportEscapeTimer = GAME_CONSTANTS.TELEPORT_ESCAPE_TIME;
-        this.scene.showAlert('A nearby enemy heard you!', 0xff0000);
+        this.scene.showAlert('A nearby enemy heard you!', 'danger');
         this.scene.escapeWarning.setVisible(true);
         this.scene.roomDoorwayEyes.setVisible(true);
         this.scene.audio.playEnemyApproachSound();
@@ -191,8 +191,9 @@ export class TeleportSystem {
       // Move lure bar below metal text when teleported
       this.scene.hud.lureBarContainer.setPosition(100, 105);
       
-      // Update room view header
+      // Update room view header + per-room props
       this.scene.roomViewHeader.setText(`ROOM: ${node.replace('_', ' ')}`);
+      this.scene.drawTeleportedRoomProps(node);
       
       // Update lure button text if lure is active here
       this.scene.lure.updateLureButtonText();
@@ -201,7 +202,7 @@ export class TeleportSystem {
       if (this.scene.isSpyEnabled() && this.scene.spy && this.scene.sentry.exists && !this.scene.spy.isSapping()) {
         const sapPlaced = this.scene.spy.attemptSap();
         if (sapPlaced) {
-          this.scene.showAlert('⚠ SPY SAPPING SENTRY!', 0xff4444);
+          this.scene.showAlert('⚠ SPY SAPPING SENTRY!', 'danger');
           this.scene.sapperIndicator.setVisible(true);
           this.scene.audio.playSapperSound();
           // Flash screen red to make it very noticeable
@@ -314,10 +315,9 @@ export class TeleportSystem {
     
     // "TELEPORTING..." text
     const teleportText = this.scene.add.text(0, 150, 'TELEPORTING...', {
-      fontFamily: 'Courier New, monospace',
-      fontSize: '24px',
+      fontFamily: 'VT323, "Courier New", monospace',
+      fontSize: '28px',
       color: '#ff6666',
-      fontStyle: 'bold',
     }).setOrigin(0.5);
     teleportText.setAlpha(0);
     overlay.add(teleportText);
@@ -453,7 +453,7 @@ export class TeleportSystem {
     this.updateTeleportButtonAppearance();
     
     // Show cancel feedback
-    this.scene.showAlert('Teleport cancelled!', 0xffaa00);
+    this.scene.showAlert('Teleport cancelled!', 'info');
   }
 
   /**
@@ -465,27 +465,26 @@ export class TeleportSystem {
     const hacked = this.scene.isSelectedCameraHacked();
 
     if (hacked) {
-      // Hacked state — grayed out, shows repair bar
-      this.scene.teleportButtonBg.setFillStyle(0x1a1a1a);
-      this.scene.teleportButtonBg.setStrokeStyle(2, 0xbb66ee);
-      this.scene.teleportButtonText.setText('✕ HACKED');
-      this.scene.teleportButtonText.setColor('#bb66ee');
-      this.scene.teleportRepairBarBg?.setVisible(true);
+      // Hacked state — alert red, repair progress fills the button while held
+      this.scene.teleportButtonBg.setFillStyle(0x140e06);
+      this.scene.teleportButtonBg.setStrokeStyle(2, 0xff3b30);
+      this.scene.teleportButtonText.setText('HACKED — HOLD TO REPAIR');
+      this.scene.teleportButtonText.setColor('#ff3b30');
       this.scene.teleportRepairBarFill?.setVisible(true);
     } else if (this.scene.isTeleportAnimating) {
-      // Cancel mode - orange/warning colors
-      this.scene.teleportButtonBg.setFillStyle(0x553311);
-      this.scene.teleportButtonBg.setStrokeStyle(2, 0xffaa44);
+      // Cancel mode - amber/warning colors
+      this.scene.teleportButtonBg.setFillStyle(0x2a1f10);
+      this.scene.teleportButtonBg.setStrokeStyle(2, 0xffb454);
       this.scene.teleportButtonText.setText('✕ CANCEL');
-      this.scene.teleportButtonText.setColor('#ffaa44');
+      this.scene.teleportButtonText.setColor('#ffb454');
       this.scene.teleportRepairBarBg?.setVisible(false);
       this.scene.teleportRepairBarFill?.setVisible(false);
     } else {
-      // Normal mode - red colors (RED team)
-      this.scene.teleportButtonBg.setFillStyle(0x442222);
-      this.scene.teleportButtonBg.setStrokeStyle(2, 0xcc4444);
+      // Normal mode - alert red (risk action)
+      this.scene.teleportButtonBg.setFillStyle(0x1c0a06);
+      this.scene.teleportButtonBg.setStrokeStyle(2, 0x7a2420);
       this.scene.teleportButtonText.setText('TELEPORT HERE');
-      this.scene.teleportButtonText.setColor('#ff8888');
+      this.scene.teleportButtonText.setColor('#ff3b30');
       this.scene.teleportRepairBarBg?.setVisible(false);
       this.scene.teleportRepairBarFill?.setVisible(false);
     }
@@ -540,7 +539,7 @@ export class TeleportSystem {
         this.scene.enemyApproachingRoom = true;
         this.scene.approachingEnemyType = newApproachingEnemy || 'an enemy';
         this.scene.teleportEscapeTimer = GAME_CONSTANTS.TELEPORT_ESCAPE_TIME;
-        this.scene.showAlert('A nearby enemy heard you!', 0xff0000);
+        this.scene.showAlert('A nearby enemy heard you!', 'danger');
         this.scene.escapeWarning.setVisible(true);
         this.scene.roomDoorwayEyes.setVisible(true);
         this.scene.audio.playEnemyApproachSound();
