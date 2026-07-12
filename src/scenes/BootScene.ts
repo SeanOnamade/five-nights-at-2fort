@@ -9,12 +9,12 @@ import {
   calculateTotalDestructions,
 } from '../utils/saveData';
 import { loadCustomNightEnemies } from '../data/customNightStorage';
-import { playGameStartChime, playMenuButtonSound } from '../utils/menuSounds';
+import { playGameStartChime, playMenuButtonSound, playMenuToggleOffSound, playMenuToggleOnSound } from '../utils/menuSounds';
 import { drawCharacterSilhouette } from '../drawing/characterSilhouettes';
 import { PALETTE, titleStyle, headingStyle, osdStyle } from '../ui/kit/theme';
 import { addScanlines, addStatic, addVignette, ensureNoiseTexture, glitchBurst } from '../ui/kit/effects';
 import { createTerminalMenu, TerminalMenu, TerminalMenuItem } from '../ui/kit/widgets';
-import { getMusicVolume, getSettings, onSettingsChange } from '../utils/settings';
+import { getMusicVolume, getSettings, onSettingsChange, updateSettings } from '../utils/settings';
 import { SettingsOverlay } from '../ui/SettingsOverlay';
 import { TutorialOverlay } from './boot/TutorialOverlay';
 import { GalleryOverlay } from './boot/GalleryOverlay';
@@ -55,6 +55,7 @@ export class BootScene extends Phaser.Scene {
   private devPasswordBuffer = '';
   private readonly DEV_PASSWORD = '2FORT';
   private devInputEl: HTMLInputElement | null = null;
+  private muteToggleText: Phaser.GameObjects.Text | null = null;
 
   constructor() {
     super({ key: 'BootScene' });
@@ -102,6 +103,7 @@ export class BootScene extends Phaser.Scene {
     const unsubscribe = onSettingsChange(() => {
       // getMusicVolume() folds in the mute toggle
       (menuMusic as Phaser.Sound.WebAudioSound).setVolume(MENU_MUSIC_BASE_VOLUME * getMusicVolume());
+      this.refreshMuteToggle();
     });
     this.events.once('shutdown', () => {
       menuMusic.stop();
@@ -181,6 +183,31 @@ export class BootScene extends Phaser.Scene {
 
     // Version tag
     this.add.text(width - 26, height - 22, 'v1.1', osdStyle(15, PALETTE.amberFaintCss)).setOrigin(1, 0.5).setDepth(95);
+
+    // ===== QUICK MUSIC MUTE (top-right) =====
+    this.muteToggleText = this.add
+      .text(width - 26, 30, '', osdStyle(17, PALETTE.amberDimCss))
+      .setOrigin(1, 0.5)
+      .setDepth(95)
+      .setInteractive({ useHandCursor: true });
+    this.muteToggleText.on('pointerover', () => this.muteToggleText?.setAlpha(1));
+    this.muteToggleText.on('pointerout', () => this.muteToggleText?.setAlpha(0.85));
+    this.muteToggleText.on('pointerdown', () => {
+      const next = !getSettings().musicMuted;
+      if (next) playMenuToggleOffSound();
+      else playMenuToggleOnSound();
+      updateSettings({ musicMuted: next });
+    });
+    this.muteToggleText.setAlpha(0.85);
+    this.refreshMuteToggle();
+  }
+
+  /** Sync the top-right mute toggle with the current setting. */
+  private refreshMuteToggle(): void {
+    if (!this.muteToggleText || !this.muteToggleText.active) return;
+    const muted = getSettings().musicMuted;
+    this.muteToggleText.setText(muted ? '♪ MUSIC: MUTED' : '♪ MUSIC: ON');
+    this.muteToggleText.setColor(muted ? PALETTE.amberFaintCss : PALETTE.amberDimCss);
   }
 
   // ============================================
